@@ -132,7 +132,9 @@ Aplikacja automatycznie tworzy następujące bazy SQLite przy pierwszym uruchomi
 
 ## 👨‍💻 Autor
 
-**ZuraffPL**
+**Zuraffpl**
+- Email: zuraffpl@gmail.com
+- GitHub: [@ZuraffPL](https://github.com/ZuraffPL)
 
 ## 📄 Licencja
 

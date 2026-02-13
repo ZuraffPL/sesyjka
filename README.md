@@ -77,11 +77,11 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.9-Windows.zip`:
+   - **SHA256 checksum** dla `Sesyjka-v0.3.10-Windows.zip`:
      ```
-     A1A6FDDE05AE707E4702F1A79BA7997D86C793D02C1D237BB91FD60A9E0D5C3B
+     DB477CCA6F8FDD262EC88AC96D641E72EE0A1FFE6DB83BC74346F1A5FA50645B
      ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.9-Windows.zip -Algorithm SHA256`
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.10-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 

@@ -292,8 +292,13 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         else:
             row.append("")
         data.append(row)
+    
+    # Zmienna do przechowywania aktualnie wyświetlanych danych (pełne lub przefiltrowane)
+    displayed_data: list[list[str]] = list(data)
+    displayed_records: list[tuple[int, str, Optional[str], Optional[str], Optional[str], int, int]] = list(records)
+    
     sheet = tksheet.Sheet(tab,
-        data=data,  # type: ignore
+        data=displayed_data,  # type: ignore
         headers=headers,
         show_x_scrollbar=True,
         show_y_scrollbar=True,
@@ -333,7 +338,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     def do_sort(reverse: bool = False) -> None:
         col = headers.index(sort_var.get())
         if col == 0:
-            data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
+            displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
         elif col == 5:  # Status
             # Sortuj: gwiazdka, korona, puste
             def status_key(row: list[str]) -> tuple[int, str]:
@@ -344,20 +349,20 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
                     return (1, status)
                 else:
                     return (2, status)
-            data.sort(key=status_key, reverse=reverse)
+            displayed_data.sort(key=status_key, reverse=reverse)
         else:
-            data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)
-        sheet.set_sheet_data(list(data)) # type: ignore
+            displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)
+        sheet.set_sheet_data(list(displayed_data)) # type: ignore
         for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in data] + [len(headers[c])])
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=c, width=width_px)
         # Ponowne zastosowanie kolorowania po sortowaniu
-        apply_gender_colors(sheet, data, dark_mode)
-        apply_status_colors(sheet, data, records, dark_mode)
+        apply_gender_colors(sheet, displayed_data, dark_mode)
+        apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
         # Ponowne zastosowanie stylowania linków
         link_col = 4
-        for r, row in enumerate(data):
+        for r, row in enumerate(displayed_data):
             if row[link_col]:
                 sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
         sheet.refresh()
@@ -435,6 +440,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         
         def apply_filters() -> None:
             """Aplikuje filtry"""
+            nonlocal displayed_data, displayed_records
             active_filters_gracze['plec'] = plec_var.get()
             active_filters_gracze['imie'] = imie_var.get()
             active_filters_gracze['social'] = social_var.get()
@@ -479,19 +485,24 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
                 filtered_data.append(row)
                 filtered_records.append(records[i])
             
-            sheet.set_sheet_data(filtered_data)  # type: ignore
+            displayed_data.clear()
+            displayed_data.extend(filtered_data)
+            displayed_records.clear()
+            displayed_records.extend(filtered_records)
+            
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in filtered_data] + [len(headers[c])]) if filtered_data else len(headers[c])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             
             # Ponowne zastosowanie kolorowania po filtrowaniu
-            apply_gender_colors(sheet, filtered_data, dark_mode)
-            apply_status_colors(sheet, filtered_data, filtered_records, dark_mode)
+            apply_gender_colors(sheet, displayed_data, dark_mode)
+            apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
             
             # Ponowne zastosowanie stylowania linków
             link_col = 4
-            for r, row in enumerate(filtered_data):
+            for r, row in enumerate(displayed_data):
                 if row[link_col]:
                     sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
             
@@ -517,15 +528,20 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         
         def reset_filters() -> None:
             """Resetuje wszystkie filtry"""
+            nonlocal displayed_data, displayed_records
             active_filters_gracze.clear()
-            sheet.set_sheet_data(list(data))  # type: ignore
+            displayed_data.clear()
+            displayed_data.extend(data)
+            displayed_records.clear()
+            displayed_records.extend(records)
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in data] + [len(headers[c])])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             
             # Ponowne zastosowanie kolorowania
-            apply_gender_colors(sheet, data, dark_mode)
+            apply_gender_colors(sheet, displayed_data, dark_mode)
             
             # Ponowne zastosowanie stylowania linków
             link_col = 4
@@ -550,33 +566,100 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     tab.columnconfigure(0, weight=1)
     # Stylowanie kolumny Social media jako link (kolor)
     link_col = 4
-    for r, row in enumerate(data):
+    for r, row in enumerate(displayed_data):
         if row[link_col]:
             sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
     
     # Kolorowanie wierszy wg płci
-    apply_gender_colors(sheet, data, dark_mode)
+    apply_gender_colors(sheet, displayed_data, dark_mode)
     # Kolorowanie wierszy dla głównego użytkownika i ważnych osób (nadpisuje kolory płci)
-    apply_status_colors(sheet, data, records, dark_mode)
+    apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
+    
+    # Automatycznie aplikuj filtry jeśli są aktywne
+    if active_filters_gracze:
+        # Filtruj dane i rekordy równolegle
+        filtered_data: List[Any] = []
+        filtered_records: List[Any] = []
+        for i, row in enumerate(data):
+            # Filtr płci
+            if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
+                if row[3] != active_filters_gracze['plec']:
+                    continue
+            
+            # Filtr Imię i nazwisko (kolumna 2)
+            if active_filters_gracze.get('imie', 'Wszystkie') == 'Wpisane':
+                if not row[2] or row[2].strip() == '':
+                    continue
+            elif active_filters_gracze.get('imie', 'Wszystkie') == 'Puste':
+                if row[2] and row[2].strip() != '':
+                    continue
+            
+            # Filtr Social media (kolumna 4)
+            if active_filters_gracze.get('social', 'Wszystkie') == 'Wpisane':
+                if not row[4] or row[4].strip() == '':
+                    continue
+            elif active_filters_gracze.get('social', 'Wszystkie') == 'Puste':
+                if row[4] and row[4].strip() != '':
+                    continue
+            
+            # Filtr Status (kolumna 5)
+            if active_filters_gracze.get('status', 'Wszystkie') == 'Główny użytkownik':
+                if row[5] != '⭐':
+                    continue
+            elif active_filters_gracze.get('status', 'Wszystkie') == 'Ważna osoba':
+                if row[5] != '👑':
+                    continue
+            elif active_filters_gracze.get('status', 'Wszystkie') == 'Zwykła osoba':
+                if row[5] in ['⭐', '👑']:
+                    continue
+            
+            filtered_data.append(row)
+            filtered_records.append(records[i])
+        
+        displayed_data.clear()
+        displayed_data.extend(filtered_data)
+        displayed_records.clear()
+        displayed_records.extend(filtered_records)
+        sheet.set_sheet_data(displayed_data)  # type: ignore
+        for c in range(len(headers)):
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
+            width_px = max(80, min(400, int(max_content * 9 + 24)))
+            sheet.column_width(column=c, width=width_px)
+        sheet.refresh()
+        
+        # Ponownie aplikuj kolorowanie po filtracji
+        for r, row in enumerate(displayed_data):
+            if row[link_col]:
+                sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
+        apply_gender_colors(sheet, displayed_data, dark_mode)
+        apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
+        
+        # Aktualizuj tekst przycisku
+        count = sum(1 for v in active_filters_gracze.values() if v != 'Wszystkie')
+        if count > 0:
+            filter_btn.configure(text=f"Filtruj ({count})")
+    
     # --- MENU KONTEKSTOWE ---
     menu = tk.Menu(tab, tearoff=0)
     def context_edit() -> None:
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2] # type: ignore
-            values = data[r] # type: ignore
-            open_edit_gracz_dialog(tab, values, refresh_callback=lambda **kwargs: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
+            if r < len(displayed_data):
+                values = displayed_data[r] # type: ignore
+                open_edit_gracz_dialog(tab, values, refresh_callback=lambda **kwargs: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
     def context_delete() -> None:
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2] # type: ignore
-            values = data[r] # type: ignore
-            if messagebox.askyesno("Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {values[1]}?", parent=tab): # type: ignore
-                with sqlite3.connect(DB_FILE) as conn:
-                    c = conn.cursor()
-                    c.execute("DELETE FROM gracze WHERE id=?", (values[0],)) # type: ignore
-                    conn.commit()
-                fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+            if r < len(displayed_data):
+                values = displayed_data[r] # type: ignore
+                if messagebox.askyesno("Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {values[1]}?", parent=tab): # type: ignore
+                    with sqlite3.connect(DB_FILE) as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM gracze WHERE id=?", (values[0],)) # type: ignore
+                        conn.commit()
+                    fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
     menu.add_command(label="Edytuj", command=context_edit)
     menu.add_command(label="Usuń", command=context_delete)
     def on_right_click(event: tk.Event) -> None:
@@ -590,7 +673,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     def on_mouse_motion(event: tk.Event) -> None:
         r = sheet.identify_row(event)
         c = sheet.identify_column(event)
-        if r is not None and c is not None and c == link_col and r < len(data) and data[r][link_col]:
+        if r is not None and c is not None and c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
             sheet.config(cursor="hand2")
         else:
             sheet.config(cursor="arrow")
@@ -599,9 +682,9 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, c = sel[:2] # type: ignore
-            if c == link_col and data[r][link_col]:
+            if c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
                 import webbrowser
-                webbrowser.open(data[r][link_col]) # type: ignore
+                webbrowser.open(displayed_data[r][link_col]) # type: ignore
     sheet.extra_bindings("cell_select", on_cell_click) # type: ignore
     
     # Tryb ciemny

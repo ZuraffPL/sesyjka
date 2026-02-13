@@ -231,8 +231,11 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     headers = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
     data = get_all_sessions()
     
+    # Zmienna do przechowywania aktualnie wyświetlanych danych (pełne lub przefiltrowane)
+    displayed_data: List[Any] = list(data)
+    
     sheet = tksheet.Sheet(tab,
-        data=data,  # type: ignore
+        data=displayed_data,  # type: ignore
         headers=headers,
         show_x_scrollbar=True,
         show_y_scrollbar=True,
@@ -260,12 +263,12 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     def do_sort(reverse: bool = False) -> None:
         col = headers.index(sort_var.get())
         if col == 0:
-            data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)  # type: ignore
+            displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)  # type: ignore
         else:
-            data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)  # type: ignore
-        sheet.set_sheet_data(list(data))  # type: ignore
+            displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)  # type: ignore
+        sheet.set_sheet_data(list(displayed_data))  # type: ignore
         for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in data] + [len(headers[c])]) if data else len(headers[c])
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=c, width=width_px)
         sheet.refresh()
@@ -358,6 +361,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         
         def apply_filters() -> None:
             """Aplikuje filtry"""
+            nonlocal displayed_data
             active_filters_sesje['year'] = year_var.get()
             active_filters_sesje['system'] = system_var.get()
             active_filters_sesje['typ'] = typ_var.get()
@@ -388,9 +392,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
                 
                 filtered_data.append(row)
             
-            sheet.set_sheet_data(filtered_data)  # type: ignore
+            displayed_data = filtered_data
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in filtered_data] + [len(headers[c])]) if filtered_data else len(headers[c])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             sheet.refresh()
@@ -406,10 +411,12 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         
         def reset_filters() -> None:
             """Resetuje wszystkie filtry"""
+            nonlocal displayed_data
             active_filters_sesje.clear()
-            sheet.set_sheet_data(list(data))  # type: ignore
+            displayed_data = list(data)
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in data] + [len(headers[c])]) if data else len(headers[c])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             sheet.refresh()
@@ -436,8 +443,8 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         sel = sheet.get_currently_selected()  # type: ignore
         if sel and len(sel) >= 2:  # type: ignore
             r, _ = sel[:2]  # type: ignore
-            if r < len(data):
-                values = data[r]  # type: ignore
+            if r < len(displayed_data):
+                values = displayed_data[r]  # type: ignore
                 sesja_id = values[0]  # type: ignore
                 sesja_data = values[1]  # type: ignore
                 
@@ -466,8 +473,8 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2]  # type: ignore
-            if r < len(data):
-                values = data[r]  # type: ignore
+            if r < len(displayed_data):
+                values = displayed_data[r]  # type: ignore
                 open_edit_session_dialog(tab, values, refresh_callback=lambda **kwargs: fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
     
     menu.add_command(label="Edytuj", command=context_edit)
@@ -514,10 +521,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
                 sort_state['col'] = col
                 sort_state['reverse'] = False
             if col == 0:
-                data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=sort_state['reverse'])  # type: ignore
+                displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=sort_state['reverse'])  # type: ignore
             else:
-                data.sort(key=lambda x: (x[col] or '').lower(), reverse=sort_state['reverse'])  # type: ignore
-            sheet.set_sheet_data(data)  # type: ignore
+                displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=sort_state['reverse'])  # type: ignore
+            sheet.set_sheet_data(displayed_data)  # type: ignore
     
     sheet.extra_bindings("header_select", on_header_click)  # type: ignore
     
@@ -557,7 +564,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         
         colors = month_colors_dark if dark_mode else month_colors_light
         
-        for r, row in enumerate(data):
+        for r, row in enumerate(displayed_data):
             if len(row) > 1 and row[1]:  # Sprawdź czy istnieje data
                 try:
                     # Parsuj datę w formacie YYYY-MM-DD
@@ -601,6 +608,50 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     # Tryb ciemny
     if dark_mode:
         sheet.set_options(theme="dark")  # type: ignore
+    
+    # Automatycznie aplikuj filtry jeśli są aktywne
+    if active_filters_sesje:
+        # Filtruj dane
+        filtered_data: List[Any] = []
+        for row in data:
+            # Filtr roku
+            if active_filters_sesje.get('year', 'Wszystkie') != 'Wszystkie':
+                if not row[1] or not row[1].startswith(active_filters_sesje['year']):
+                    continue
+            
+            # Filtr systemu
+            if active_filters_sesje.get('system', 'Wszystkie') != 'Wszystkie':
+                if row[2] != active_filters_sesje['system']:
+                    continue
+            
+            # Filtr typu sesji
+            if active_filters_sesje.get('typ', 'Wszystkie') != 'Wszystkie':
+                if not row[3] or not row[3].startswith(active_filters_sesje['typ']):
+                    continue
+            
+            # Filtr MG
+            if active_filters_sesje.get('mg', 'Wszystkie') != 'Wszystkie':
+                if row[4] != active_filters_sesje['mg']:
+                    continue
+            
+            filtered_data.append(row)
+        
+        displayed_data.clear()
+        displayed_data.extend(filtered_data)
+        sheet.set_sheet_data(displayed_data)  # type: ignore
+        for c in range(len(headers)):
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
+            width_px = max(80, min(400, int(max_content * 9 + 24)))
+            sheet.column_width(column=c, width=width_px)
+        sheet.refresh()
+        
+        # Ponownie aplikuj kolorowanie po filtracji
+        apply_month_colors()
+        
+        # Aktualizuj tekst przycisku
+        count = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
+        if count > 0:
+            filter_btn.configure(text=f"Filtruj ({count})")
 
 def usun_zaznaczona_sesja(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
     """Usuwa zaznaczoną sesję z bazy danych"""

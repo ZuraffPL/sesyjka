@@ -179,8 +179,12 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
     records = get_all_publishers()
     headers = ["ID", "Nazwa", "Strona", "Kraj"]
     data = [[v if v is not None else "" for v in rec] for rec in records]
+    
+    # Zmienna do przechowywania aktualnie wyświetlanych danych (pełne lub przefiltrowane)
+    displayed_data: List[List[Any]] = list(data)
+    
     sheet = tksheet.Sheet(tab,
-        data=data,
+        data=displayed_data,
         headers=headers,
         show_x_scrollbar=True,
         show_y_scrollbar=True,
@@ -220,17 +224,17 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
     def do_sort(reverse=False): # type: ignore
         col = headers.index(sort_var.get())
         if col == 0:
-            data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
+            displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
         else:
-            data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)
-        sheet.set_sheet_data(list(data)) # type: ignore
+            displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)
+        sheet.set_sheet_data(list(displayed_data)) # type: ignore
         # Automatyczne dopasowanie szerokości kolumn po sortowaniu
         for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in data] + [len(headers[c])])
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=c, width=width_px)
         sheet.refresh()
-        for r, row in enumerate(data):
+        for r, row in enumerate(displayed_data):
             if row[link_col]:
                 sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
     sort_asc_btn = ttk.Button(sort_frame, text="Rosnąco", command=lambda: do_sort(False))
@@ -287,6 +291,7 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         
         def apply_filters() -> None:
             """Aplikuje filtry"""
+            nonlocal displayed_data
             active_filters_wydawcy['kraj'] = kraj_var.get()
             active_filters_wydawcy['strona'] = strona_var.get()
             
@@ -308,15 +313,17 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
                 
                 filtered_data.append(row)
             
-            sheet.set_sheet_data(filtered_data)  # type: ignore
+            displayed_data.clear()
+            displayed_data.extend(filtered_data)
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in filtered_data] + [len(headers[c])]) if filtered_data else len(headers[c])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             
             # Ponowne zastosowanie stylowania linków
             link_col = 2
-            for r, row in enumerate(filtered_data):
+            for r, row in enumerate(displayed_data):
                 if row[link_col]:
                     sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
             
@@ -338,16 +345,19 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         
         def reset_filters() -> None:
             """Resetuje wszystkie filtry"""
+            nonlocal displayed_data
             active_filters_wydawcy.clear()
-            sheet.set_sheet_data(list(data))  # type: ignore
+            displayed_data.clear()
+            displayed_data.extend(data)
+            sheet.set_sheet_data(displayed_data)  # type: ignore
             for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in data] + [len(headers[c])])
+                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             
             # Ponowne zastosowanie stylowania linków
             link_col = 2
-            for r, row in enumerate(data):
+            for r, row in enumerate(displayed_data):
                 if row[link_col]:
                     sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
             
@@ -375,14 +385,54 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
 
     # Stylowanie kolumny "Strona" jako link (kolor)
     link_col = 2
-    for r, row in enumerate(data):
+    for r, row in enumerate(displayed_data):
         if row[link_col]:
             sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
+    
+    # Automatycznie aplikuj filtry jeśli są aktywne
+    if active_filters_wydawcy:
+        # Filtruj dane
+        filtered_data: List[Any] = []
+        for row in data:
+            # Filtr Kraju (kolumna 3)
+            if active_filters_wydawcy.get('kraj', 'Wszystkie') != 'Wszystkie':
+                if row[3] != active_filters_wydawcy['kraj']:
+                    continue
+            
+            # Filtr Strony (kolumna 2)
+            if active_filters_wydawcy.get('strona', 'Wszystkie') == 'Wpisane':
+                if not row[2] or row[2].strip() == '':
+                    continue
+            elif active_filters_wydawcy.get('strona', 'Wszystkie') == 'Puste':
+                if row[2] and row[2].strip() != '':
+                    continue
+            
+            filtered_data.append(row)
+        
+        displayed_data.clear()
+        displayed_data.extend(filtered_data)
+        sheet.set_sheet_data(displayed_data)  # type: ignore
+        for c in range(len(headers)):
+            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
+            width_px = max(80, min(400, int(max_content * 9 + 24)))
+            sheet.column_width(column=c, width=width_px)
+        sheet.refresh()
+        
+        # Ponownie aplikuj stylowanie linków po filtracji
+        for r, row in enumerate(displayed_data):
+            if row[link_col]:
+                sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
+        
+        # Aktualizuj tekst przycisku
+        count = sum(1 for v in active_filters_wydawcy.values() if v != 'Wszystkie')
+        if count > 0:
+            filter_btn.configure(text=f"Filtruj ({count})")
+    
     # Kursor "ręka" tylko nad komórką linku
     def on_mouse_motion(event): # type: ignore
         r = sheet.identify_row(event)
         c = sheet.identify_column(event)
-        if r is not None and c is not None and c == link_col and r < len(data) and data[r][link_col]:
+        if r is not None and c is not None and c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
             sheet.config(cursor="hand2")
         else:
             sheet.config(cursor="arrow")
@@ -392,9 +442,9 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, c = sel[:2] # type: ignore
-            if c == link_col and data[r][link_col]:
+            if c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
                 import webbrowser
-                webbrowser.open(data[r][link_col])
+                webbrowser.open(displayed_data[r][link_col]) # type: ignore
     sheet.extra_bindings("cell_select", on_cell_click) # type: ignore
 
     # Menu kontekstowe
@@ -403,19 +453,21 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2] # type: ignore
-            values = data[r]
-            open_edit_dialog(tab, values, refresh_callback=lambda **kwargs: fill_wydawcy_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
+            if r < len(displayed_data):
+                values = displayed_data[r]
+                open_edit_dialog(tab, values, refresh_callback=lambda **kwargs: fill_wydawcy_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
     def context_delete():
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2] # type: ignore
-            values = data[r]
-            if messagebox.askyesno("Usuń wydawcę", f"Czy na pewno chcesz usunąć wydawcę: {values[1]}?"): # type: ignore
-                with sqlite3.connect(DB_FILE) as conn:
-                    c = conn.cursor()
-                    c.execute("DELETE FROM wydawcy WHERE id=?", (values[0],))
-                    conn.commit()
-                fill_wydawcy_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+            if r < len(displayed_data):
+                values = displayed_data[r]
+                if messagebox.askyesno("Usuń wydawcę", f"Czy na pewno chcesz usunąć wydawcę: {values[1]}?"): # type: ignore
+                    with sqlite3.connect(DB_FILE) as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM wydawcy WHERE id=?", (values[0],))
+                        conn.commit()
+                    fill_wydawcy_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
     menu.add_command(label="Edytuj", command=context_edit)
     menu.add_command(label="Usuń", command=context_delete)
     def on_right_click(event): # type: ignore

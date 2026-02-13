@@ -78,6 +78,12 @@ def init_db() -> None:
             # Kolumna już istnieje
             pass
         
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN vtt TEXT")
+        except sqlite3.OperationalError:
+            # Kolumna już istnieje
+            pass
+        
         conn.commit()
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
@@ -152,7 +158,7 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         # Pobierz systemy z LEFT JOIN do wydawców z innej bazy
         c.execute("""
             SELECT s.id, s.nazwa, s.typ, s.system_glowny_id, s.typ_suplementu, 
-                   s.wydawca_id, s.fizyczny, s.pdf, s.jezyk, s.status_gra, s.status_kolekcja,
+                   s.wydawca_id, s.fizyczny, s.pdf, s.vtt, s.jezyk, s.status_gra, s.status_kolekcja,
                    s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy
             FROM systemy_rpg s
             ORDER BY s.id ASC
@@ -175,23 +181,26 @@ def get_all_systems() -> list[tuple[Any, ...]]:
             wydawca_nazwa = ""
         
         # Sformuj status jako string: "Grane/Nie grane, W kolekcji/Na sprzedaż"
-        status_gra = system[9] if system[9] else "Nie grane"
-        status_kolekcja = system[10] if system[10] else "W kolekcji"
+        status_gra = system[10] if system[10] else "Nie grane"
+        status_kolekcja = system[11] if system[11] else "W kolekcji"
         # Jeśli status to "Na sprzedaż", pokaż jako "W kolekcji, Na sprzedaż"
         status_kolekcja_display = "W kolekcji, Na sprzedaż" if status_kolekcja == "Na sprzedaż" else status_kolekcja
         status_combined = f"{status_gra}, {status_kolekcja_display}"
         
         # Formatuj cenę w zależności od statusu kolekcji
         cena_str = ""
-        if status_kolekcja in ["W kolekcji", "Na sprzedaż"] and system[11]:  # cena_zakupu
-            waluta = system[12] if system[12] else "PLN"
-            cena_str = f"{system[11]:.2f} {waluta}"
-        elif status_kolekcja == "Sprzedane" and system[13]:  # cena_sprzedazy
-            waluta = system[14] if system[14] else "PLN"
-            cena_str = f"{system[13]:.2f} {waluta}"
+        if status_kolekcja in ["W kolekcji", "Na sprzedaż"] and system[12]:  # cena_zakupu
+            waluta = system[13] if system[13] else "PLN"
+            cena_str = f"{system[12]:.2f} {waluta}"
+        elif status_kolekcja == "Sprzedane" and system[14]:  # cena_sprzedazy
+            waluta = system[15] if system[15] else "PLN"
+            cena_str = f"{system[14]:.2f} {waluta}"
         
-        # Dodaj nazwę wydawcy, status i cenę do systemu
-        # Format: id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_nazwa, fizyczny, pdf, jezyk, status, cena
+        # Formatuj VTT - nazwy VTT oddzielone przecinkami
+        vtt_str = system[8] if system[8] else ""
+        
+        # Dodaj nazwę wydawcy, status, VTT i cenę do systemu
+        # Format: id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_nazwa, fizyczny, pdf, vtt, jezyk, status, cena
         result.append((  # type: ignore
             system[0],  # id
             system[1],  # nazwa  
@@ -201,7 +210,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
             wydawca_nazwa,  # wydawca (nazwa)
             system[6],  # fizyczny
             system[7],  # pdf
-            system[8],  # jezyk
+            vtt_str,  # vtt
+            system[9],  # jezyk
             status_combined,  # status
             cena_str  # cena (zakupu lub sprzedaży w zależności od statusu)
         )) # type: ignore
@@ -240,8 +250,8 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 220
-    dialog.geometry(f"700x440+{x}+{y}")
+    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 260
+    dialog.geometry(f"700x520+{x}+{y}")
     
     # Główna ramka z padding
     main_frame = ctk.CTkFrame(dialog)
@@ -302,13 +312,91 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     # Posiadanie
     ctk.CTkLabel(main_frame, text="Posiadanie").grid(row=6, column=0, pady=8, padx=(0,10), sticky="nw")
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w")
+    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=2)
+    posiadanie_frame.columnconfigure(1, weight=1)
+    
     fizyczny_var = tk.BooleanVar()
     pdf_var = tk.BooleanVar()
+    vtt_var = tk.BooleanVar()
+    
+    # Checkboxy w lewej kolumnie
     fizyczny_check = ctk.CTkCheckBox(posiadanie_frame, text="Fizyczny", variable=fizyczny_var)
     fizyczny_check.grid(row=0, column=0, sticky="w", pady=2)
     pdf_check = ctk.CTkCheckBox(posiadanie_frame, text="PDF", variable=pdf_var)
     pdf_check.grid(row=1, column=0, sticky="w", pady=2)
+    vtt_check = ctk.CTkCheckBox(posiadanie_frame, text="VTT", variable=vtt_var)
+    vtt_check.grid(row=2, column=0, sticky="w", pady=2)
+    
+    # Lista platform VTT (alfabetycznie)
+    vtt_platforms = [
+        "AboveVTT",
+        "Alchemy VTT",
+        "D&D Beyond",
+        "Demiplane",
+        "Fantasy Grounds",
+        "Foundry VTT",
+        "Roll20",
+        "Tabletop Simulator",
+        "Telespire"
+    ]
+    
+    # Frame dla wyboru platform VTT w prawej kolumnie (początkowo ukryty)
+    vtt_selection_frame = ctk.CTkFrame(posiadanie_frame, fg_color="transparent")
+    vtt_selection_frame.grid(row=0, column=1, rowspan=3, sticky="nsw", padx=(20, 0))
+    
+    # Label dla platform VTT
+    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", 10))
+    vtt_label.pack(anchor="w", pady=(0, 5))
+    
+    # Scrollable frame dla checkboxów VTT
+    vtt_scroll_frame = ctk.CTkScrollableFrame(vtt_selection_frame, width=200, height=120)
+    vtt_scroll_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    # Słownik do przechowywania zmiennych checkboxów VTT
+    vtt_platform_vars = {}
+    for platform in vtt_platforms:
+        var = tk.BooleanVar()
+        vtt_platform_vars[platform] = var
+        checkbox = ctk.CTkCheckBox(vtt_scroll_frame, text=platform, variable=var)
+        checkbox.pack(anchor="w", pady=1)
+    
+    # Początkowo ukryj frame wyboru VTT
+    vtt_selection_frame.grid_remove()
+    
+    def update_dialog_size() -> None:
+        """Aktualizuje rozmiar okna na podstawie stanu VTT i typu"""
+        dialog.update_idletasks()
+        parent.update_idletasks()
+        
+        is_vtt = vtt_var.get()
+        is_suplement = typ_var.get() == "Suplement"
+        
+        if is_vtt and is_suplement:
+            # VTT + Suplement - największe okno
+            width, height = 850, 850
+        elif is_vtt:
+            # VTT bez suplementu
+            width, height = 850, 680
+        elif is_suplement:
+            # Suplement bez VTT
+            width, height = 700, 720
+        else:
+            # Podstawowe okno
+            width, height = 700, 520
+        
+        new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
+        new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{new_x}+{new_y}")
+    
+    def on_vtt_change(*args: Any) -> None:
+        """Obsługuje zmianę checkboxa VTT - pokazuje/ukrywa listę platform"""
+        if vtt_var.get():
+            vtt_selection_frame.grid()
+        else:
+            vtt_selection_frame.grid_remove()
+        update_dialog_size()
+    
+    vtt_var.trace_add('write', on_vtt_change)
 
     # Język
     ctk.CTkLabel(main_frame, text="Język").grid(row=7, column=0, pady=8, padx=(0,10), sticky="w")
@@ -411,18 +499,13 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             if main_systems:
                 system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems]
                 system_glowny_combo.configure(values=system_values)
-            # Zwiększ wysokość okna dla dodatkowych pól
-            dialog.update_idletasks()
-            dialog.geometry(f"700x700+{x}+{y-110}")
         else:
             # Ukryj pola dla suplementu
             system_glowny_label.grid_remove()
             system_glowny_combo.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
-            # Zmniejsz wysokość okna
-            dialog.update_idletasks()
-            dialog.geometry(f"700x480+{x}+{y}")
+        update_dialog_size()
 
     typ_var.trace_add('write', on_typ_change)
     on_typ_change()  # Ustaw początkowy stan
@@ -484,15 +567,22 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
                     messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog) # type: ignore
                     return
         
+        # Zbierz wybrane platformy VTT
+        vtt_str = None
+        if vtt_var.get():
+            wybrane_vtt = [platform for platform, var in vtt_platform_vars.items() if var.get()]  # type: ignore
+            if wybrane_vtt:
+                vtt_str = ", ".join(wybrane_vtt)  # type: ignore
+        
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
             c.execute("""
                 INSERT INTO systemy_rpg (id, nazwa, typ, system_glowny_id, typ_suplementu, 
-                                       wydawca_id, fizyczny, pdf, jezyk, status_gra, status_kolekcja,
+                                       wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
                                        cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (reserved_id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_id,
-                  int(fizyczny_var.get()), int(pdf_var.get()), jezyk if jezyk else None,
+                  int(fizyczny_var.get()), int(pdf_var.get()), vtt_str, jezyk if jezyk else None,
                   status_gra_var.get(), status_kolekcja_var.get(),
                   cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy))
             conn.commit()
@@ -528,7 +618,7 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     
     init_db()
     records = get_all_systems()
-    headers = ["", "ID", "Nazwa systemu", "Typ", "System główny", "Typ suplementu", "Wydawca", "Fizyczny", "PDF", "Język", "Status", "Cena"]
+    headers = ["", "ID", "Nazwa systemu", "Typ", "System główny", "Typ suplementu", "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena"]
     
     # Przygotuj hierarchiczne dane do wyświetlenia
     from collections import OrderedDict
@@ -584,9 +674,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                 rec[5] or "",  # Wydawca (nazwa)
                 "Tak" if rec[6] else "Nie",  # Fizyczny
                 "Tak" if rec[7] else "Nie",  # PDF
-                rec[8] or "",  # Język
-                rec[9] or "",  # Status (sformowany w get_all_systems)
-                rec[10] or ""  # Cena (zakupu lub sprzedaży)
+                rec[8] or "",  # VTT
+                rec[9] or "",  # Język
+                rec[10] or "",  # Status (sformowany w get_all_systems)
+                rec[11] or ""  # Cena (zakupu lub sprzedaży)
             ]
             data.append(row)
             
@@ -606,9 +697,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                         supp_rec[5] or "",  # Wydawca (nazwa)
                         "Tak" if supp_rec[6] else "Nie",  # Fizyczny
                         "Tak" if supp_rec[7] else "Nie",  # PDF
-                        supp_rec[8] or "",  # Język
-                        supp_rec[9] or "",  # Status
-                        supp_rec[10] or ""  # Cena
+                        supp_rec[8] or "",  # VTT
+                        supp_rec[9] or "",  # Język
+                        supp_rec[10] or "",  # Status
+                        supp_rec[11] or ""  # Cena
                     ]
                     data.append(supp_row)
         
@@ -634,9 +726,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                 rec[5] or "",  # Wydawca (nazwa)
                 "Tak" if rec[6] else "Nie",  # Fizyczny
                 "Tak" if rec[7] else "Nie",  # PDF
-                rec[8] or "",  # Język
-                rec[9] or "",  # Status
-                rec[10] or ""  # Cena
+                rec[8] or "",  # VTT
+                rec[9] or "",  # Język
+                rec[10] or "",  # Status
+                rec[11] or ""  # Cena
             ]
             data.append(row)
         
@@ -669,7 +762,7 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         for r, row in enumerate(data):
             typ = row[3] if len(row) > 3 else ""  # Kolumna "Typ"
             expand_symbol = row[0] if len(row) > 0 else ""
-            status = row[10] if len(row) > 10 else ""  # Kolumna "Status"
+            status = row[11] if len(row) > 11 else ""  # Kolumna "Status"
             
             # Sprawdź czy status kolekcji zawiera "Na sprzedaż"
             na_sprzedaz = "Na sprzedaż" in status
@@ -1340,6 +1433,107 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     # Tryb ciemny
     if dark_mode:
         sheet.set_options(theme="dark")  # type: ignore
+    
+    # Automatycznie aplikuj filtry jeśli są aktywne
+    if active_filters_systemy:
+        # Pobierz oryginalne rekordy z bazy dla filtrowania
+        all_records = get_all_systems()
+        
+        # Filtruj rekordy na poziomie bazy danych
+        filtered_main_systems: OrderedDict[Any, Any] = OrderedDict()  # type: ignore
+        filtered_supplements: Dict[Any, List[Any]] = {}
+        filtered_orphaned_supplements: List[Any] = []
+        
+        for rec in all_records:
+            # Filtr Typu
+            if active_filters_systemy.get('typ', 'Wszystkie') != 'Wszystkie':
+                if rec[2] != active_filters_systemy['typ']:
+                    continue
+            
+            # Filtr Wydawcy
+            if active_filters_systemy.get('wydawca', 'Wszystkie') != 'Wszystkie':
+                if rec[5] != active_filters_systemy['wydawca']:
+                    continue
+            
+            # Filtr Posiadania (rec[6] to fizyczny, rec[7] to pdf)
+            posiadanie_filter = active_filters_systemy.get('posiadanie', 'Wszystkie')
+            if posiadanie_filter == 'Fizyczny':
+                if not rec[6]:
+                    continue
+            elif posiadanie_filter == 'PDF':
+                if not rec[7]:
+                    continue
+            elif posiadanie_filter == 'Fizyczny i PDF':
+                if not (rec[6] and rec[7]):
+                    continue
+            elif posiadanie_filter == 'Żadne':
+                if rec[6] or rec[7]:
+                    continue
+            
+            # Filtr Języka
+            if active_filters_systemy.get('jezyk', 'Wszystkie') != 'Wszystkie':
+                if rec[9] != active_filters_systemy['jezyk']:
+                    continue
+            
+            # Filtr Statusu (rec[10] to sformowany status)
+            if active_filters_systemy.get('status', 'Wszystkie') != 'Wszystkie':
+                if active_filters_systemy['status'] not in (rec[10] or ''):
+                    continue
+            
+            # Filtr Waluty (rec[11] to sformatowana cena np. "123.45 PLN")
+            if active_filters_systemy.get('waluta', 'Wszystkie') != 'Wszystkie':
+                cena_str = rec[11] if rec[11] else ""
+                if active_filters_systemy['waluta'] not in cena_str:
+                    continue
+            
+            # Dodaj do odpowiednich grup
+            if rec[2] == "Podręcznik Główny":
+                filtered_main_systems[rec[0]] = rec
+            elif rec[2] == "Suplement":
+                if rec[3]:  # system_glowny_id
+                    if rec[3] not in filtered_supplements:
+                        filtered_supplements[rec[3]] = []
+                    filtered_supplements[rec[3]].append(rec)
+                else:
+                    filtered_orphaned_supplements.append(rec)
+        
+        # Zaktualizuj globalne zmienne
+        main_systems = filtered_main_systems
+        supplements = filtered_supplements
+        orphaned_supplements = filtered_orphaned_supplements
+        
+        # Przebuduj hierarchiczne dane
+        data = build_hierarchical_data()
+        sheet.set_sheet_data(data)  # type: ignore
+        apply_row_colors()
+        
+        # Ponownie ustaw szerokości kolumn
+        for col in range(len(headers)):
+            if col == 0:
+                sheet.column_width(column=col, width=40)
+            else:
+                max_content = max([len(str(row[col])) for row in data] + [len(headers[col])]) if data else len(headers[col])
+                width_px = max(80, min(400, int(max_content * 9 + 24)))
+                sheet.column_width(column=col, width=width_px)
+        
+        sheet.refresh()
+        
+        # Aktualizuj tekst przycisku
+        count = 0
+        if active_filters_systemy.get('typ') != 'Wszystkie':
+            count += 1
+        if active_filters_systemy.get('wydawca') != 'Wszystkie':
+            count += 1
+        if active_filters_systemy.get('posiadanie') != 'Wszystkie':
+            count += 1
+        if active_filters_systemy.get('jezyk') != 'Wszystkie':
+            count += 1
+        if active_filters_systemy.get('status') != 'Wszystkie':
+            count += 1
+        if active_filters_systemy.get('waluta') != 'Wszystkie':
+            count += 1
+        if count > 0:
+            filter_btn.configure(text=f"Filtruj ({count})")
 
 def usun_zaznaczony_system(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
     """Usuwa zaznaczony system RPG z tabeli i bazy danych"""
@@ -1371,38 +1565,57 @@ def usun_zaznaczony_system(tab: tk.Frame, refresh_callback: Optional[Callable[..
 
 def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_callback: Optional[Callable[..., None]] = None) -> None:
     """Otwiera okno edycji systemu RPG"""
-    dialog = ctk.CTkToplevel(parent)  # type: ignore
-    dialog.title("Edytuj system RPG")
-    dialog.transient(parent)  # type: ignore
-    dialog.grab_set()
-    dialog.resizable(True, False)
     
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 270
-    dialog.geometry(f"700x540+{x}+{y}")
-    
-    # Główny frame z paddingiem
-    main_frame = ctk.CTkFrame(dialog)
-    main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    main_frame.columnconfigure(1, weight=1)
-
-    # Pobierz pełne dane systemu z bazy
+    # Najpierw pobierz dane z bazy, aby sprawdzić czy VTT jest zaznaczone
     system_id = values[0]
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         c.execute("""
             SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
-                   wydawca_id, fizyczny, pdf, jezyk, status_gra, status_kolekcja,
+                   wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
                    cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy
             FROM systemy_rpg WHERE id = ?
         """, (system_id,))
         system_data = c.fetchone()
     
     if not system_data:
-        messagebox.showerror("Błąd", "Nie znaleziono systemu w bazie danych.", parent=dialog)
-        dialog.destroy()
+        messagebox.showerror("Błąd", "Nie znaleziono systemu w bazie danych.", parent=parent)
         return
+    
+    # Sprawdź czy VTT jest zaznaczone
+    has_vtt = bool(system_data[8])  # vtt
+    is_suplement = system_data[2] == "Suplement"  # typ
+    
+    dialog = ctk.CTkToplevel(parent)  # type: ignore
+    dialog.title("Edytuj system RPG")
+    dialog.transient(parent)  # type: ignore
+    dialog.grab_set()
+    dialog.resizable(True, False)
+    
+    # Ustaw geometrię na podstawie tego czy VTT jest zaznaczone i czy to suplement
+    parent.update_idletasks()
+    
+    if has_vtt and is_suplement:
+        # VTT + Suplement - największe okno
+        width, height = 850, 850
+    elif has_vtt:
+        # VTT bez suplementu
+        width, height = 850, 680
+    elif is_suplement:
+        # Suplement bez VTT
+        width, height = 700, 720
+    else:
+        # Podstawowe okno
+        width, height = 700, 560
+    
+    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
+    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
+    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    
+    # Główny frame z paddingiem
+    main_frame = ctk.CTkFrame(dialog)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    main_frame.columnconfigure(1, weight=1)
 
     publishers = get_all_publishers()
 
@@ -1469,19 +1682,111 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie
-    ctk.CTkLabel(main_frame, text="Posiadanie").grid(row=6, column=0, pady=8, padx=(0,10), sticky="w")
+    ctk.CTkLabel(main_frame, text="Posiadanie").grid(row=6, column=0, pady=8, padx=(0,10), sticky="nw")
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w")
+    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=2)
+    posiadanie_frame.columnconfigure(1, weight=1)
+    
     fizyczny_var = tk.BooleanVar(value=bool(system_data[6]))
     pdf_var = tk.BooleanVar(value=bool(system_data[7]))
+    
+    # Parsuj istniejące VTT z bazy (oddzielone przecinkami)
+    istniejace_vtt = []
+    if system_data[8]:  # vtt
+        istniejace_vtt = [vtt.strip() for vtt in system_data[8].split(",")]
+    vtt_var = tk.BooleanVar(value=len(istniejace_vtt) > 0)
+    
+    # Checkboxy w lewej kolumnie
     fizyczny_check = ctk.CTkCheckBox(posiadanie_frame, text="Fizyczny", variable=fizyczny_var)
     fizyczny_check.grid(row=0, column=0, sticky="w", pady=2)
     pdf_check = ctk.CTkCheckBox(posiadanie_frame, text="PDF", variable=pdf_var)
     pdf_check.grid(row=1, column=0, sticky="w", pady=2)
+    vtt_check = ctk.CTkCheckBox(posiadanie_frame, text="VTT", variable=vtt_var)
+    vtt_check.grid(row=2, column=0, sticky="w", pady=2)
+    
+    # Lista platform VTT (alfabetycznie)
+    vtt_platforms = [
+        "AboveVTT",
+        "Alchemy VTT",
+        "D&D Beyond",
+        "Demiplane",
+        "Fantasy Grounds",
+        "Foundry VTT",
+        "Roll20",
+        "Tabletop Simulator",
+        "Telespire"
+    ]
+    
+    # Frame dla wyboru platform VTT w prawej kolumnie (początkowo ukryty)
+    vtt_selection_frame = ctk.CTkFrame(posiadanie_frame, fg_color="transparent")
+    vtt_selection_frame.grid(row=0, column=1, rowspan=3, sticky="nsw", padx=(20, 0))
+    
+    # Label dla platform VTT
+    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", 10))
+    vtt_label.pack(anchor="w", pady=(0, 5))
+    
+    # Scrollable frame dla checkboxów VTT
+    vtt_scroll_frame = ctk.CTkScrollableFrame(vtt_selection_frame, width=200, height=120)
+    vtt_scroll_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    
+    # Słownik do przechowywania zmiennych checkboxów VTT
+    vtt_platform_vars = {}
+    for platform in vtt_platforms:
+        var = tk.BooleanVar(value=(platform in istniejace_vtt))
+        vtt_platform_vars[platform] = var
+        checkbox = ctk.CTkCheckBox(vtt_scroll_frame, text=platform, variable=var)
+        checkbox.pack(anchor="w", pady=1)
+    
+    # Aktualizuj dialog przed sprawdzeniem stanu VTT
+    dialog.update_idletasks()
+    
+    # Początkowo ukryj frame wyboru VTT jeśli VTT nie jest zaznaczone
+    # lub pokaż go jeśli jest zaznaczone
+    if vtt_var.get():
+        # VTT jest zaznaczone - upewnij się że frame jest widoczny
+        vtt_selection_frame.grid()
+    else:
+        # VTT nie jest zaznaczone - ukryj frame
+        vtt_selection_frame.grid_remove()
+    
+    def update_dialog_size() -> None:
+        """Aktualizuje rozmiar okna na podstawie stanu VTT i typu"""
+        dialog.update_idletasks()
+        parent.update_idletasks()
+        
+        is_vtt = vtt_var.get()
+        is_suplement = typ_var.get() == "Suplement"
+        
+        if is_vtt and is_suplement:
+            # VTT + Suplement - największe okno
+            width, height = 850, 850
+        elif is_vtt:
+            # VTT bez suplementu
+            width, height = 850, 680
+        elif is_suplement:
+            # Suplement bez VTT
+            width, height = 700, 720
+        else:
+            # Podstawowe okno
+            width, height = 700, 560
+        
+        new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
+        new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
+        dialog.geometry(f"{width}x{height}+{new_x}+{new_y}")
+    
+    def on_vtt_change(*args: Any) -> None:
+        """Obsługuje zmianę checkboxa VTT - pokazuje/ukrywa listę platform"""
+        if vtt_var.get():
+            vtt_selection_frame.grid()
+        else:
+            vtt_selection_frame.grid_remove()
+        update_dialog_size()
+    
+    vtt_var.trace_add('write', on_vtt_change)
 
     # Język
     ctk.CTkLabel(main_frame, text="Język").grid(row=7, column=0, pady=8, padx=(0,10), sticky="w")
-    jezyk_var = tk.StringVar(value=system_data[8] or "PL")
+    jezyk_var = tk.StringVar(value=system_data[9] or "PL")
     jezyk_combo = ctk.CTkComboBox(main_frame, variable=jezyk_var, 
                               values=["PL", "ENG", "DE", "FR", "ES", "IT"], 
                               state="readonly", width=100)
@@ -1489,7 +1794,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
 
     # Status gry
     ctk.CTkLabel(main_frame, text="Status gry").grid(row=8, column=0, pady=8, padx=(0,10), sticky="w")
-    status_gra_var = tk.StringVar(value=system_data[9] or "Nie grane")
+    status_gra_var = tk.StringVar(value=system_data[10] or "Nie grane")
     status_gra_combo = ctk.CTkComboBox(main_frame, variable=status_gra_var,
                                    values=["Grane", "Nie grane"],
                                    state="readonly", width=150)
@@ -1497,7 +1802,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
 
     # Status kolekcji
     ctk.CTkLabel(main_frame, text="Status kolekcji").grid(row=9, column=0, pady=8, padx=(0,10), sticky="w")
-    status_kolekcja_var = tk.StringVar(value=system_data[10] or "W kolekcji")
+    status_kolekcja_var = tk.StringVar(value=system_data[11] or "W kolekcji")
     status_kolekcja_combo = ctk.CTkComboBox(main_frame, variable=status_kolekcja_var,
                                         values=["W kolekcji", "Na sprzedaż", "Sprzedane", "Nieposiadane", "Do kupienia"],
                                         state="readonly", width=150)
@@ -1512,10 +1817,10 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     
     cena_zakupu_entry = ctk.CTkEntry(cena_zakupu_frame, width=100)
     cena_zakupu_entry.pack(side=tk.LEFT, padx=(0, 5))
-    if system_data[11]:  # cena_zakupu
-        cena_zakupu_entry.insert(0, f"{system_data[11]:.2f}")
+    if system_data[12]:  # cena_zakupu
+        cena_zakupu_entry.insert(0, f"{system_data[12]:.2f}")
     
-    waluta_zakupu_var = tk.StringVar(value=system_data[12] if system_data[12] else "PLN")
+    waluta_zakupu_var = tk.StringVar(value=system_data[13] if system_data[13] else "PLN")
     waluta_zakupu_combo = ctk.CTkComboBox(cena_zakupu_frame, variable=waluta_zakupu_var,
                                        values=["PLN", "USD", "EUR", "GBP"],
                                        state="readonly", width=70)
@@ -1530,10 +1835,10 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     
     cena_sprzedazy_entry = ctk.CTkEntry(cena_sprzedazy_frame, width=100)
     cena_sprzedazy_entry.pack(side=tk.LEFT, padx=(0, 5))
-    if system_data[13]:  # cena_sprzedazy
-        cena_sprzedazy_entry.insert(0, f"{system_data[13]:.2f}")
+    if system_data[14]:  # cena_sprzedazy
+        cena_sprzedazy_entry.insert(0, f"{system_data[14]:.2f}")
     
-    waluta_sprzedazy_var = tk.StringVar(value=system_data[14] if system_data[14] else "PLN")
+    waluta_sprzedazy_var = tk.StringVar(value=system_data[15] if system_data[15] else "PLN")
     waluta_sprzedazy_combo = ctk.CTkComboBox(cena_sprzedazy_frame, variable=waluta_sprzedazy_var,
                                           values=["PLN", "USD", "EUR", "GBP"],
                                           state="readonly", width=70)
@@ -1590,18 +1895,13 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
                         if sys[0] == system_data[3]:
                             system_glowny_var.set(f"{sys[0]} - {sys[1]}")
                             break
-            # Zwiększ wysokość okna dla dodatkowych pól
-            dialog.update_idletasks()
-            dialog.geometry(f"700x700+{x}+{y-80}")
         else:
             # Ukryj pola dla suplementu
             system_glowny_label.grid_remove()
             system_glowny_combo.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
-            # Zmniejsz wysokość okna
-            dialog.update_idletasks()
-            dialog.geometry(f"700x540+{x}+{y}")
+        update_dialog_size()
 
     typ_var.trace_add('write', on_typ_change)
     on_typ_change()  # Ustaw początkowy stan
@@ -1663,16 +1963,23 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
                     messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog)
                     return
         
+        # Zbierz wybrane platformy VTT
+        vtt_str = None
+        if vtt_var.get():
+            wybrane_vtt = [platform for platform, var in vtt_platform_vars.items() if var.get()]  # type: ignore
+            if wybrane_vtt:
+                vtt_str = ", ".join(wybrane_vtt)  # type: ignore
+        
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
             c.execute("""
                 UPDATE systemy_rpg 
                 SET nazwa=?, typ=?, system_glowny_id=?, typ_suplementu=?, 
-                    wydawca_id=?, fizyczny=?, pdf=?, jezyk=?, status_gra=?, status_kolekcja=?,
+                    wydawca_id=?, fizyczny=?, pdf=?, vtt=?, jezyk=?, status_gra=?, status_kolekcja=?,
                     cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?, waluta_sprzedazy=? 
                 WHERE id=?
             """, (nazwa, typ, system_glowny_id, typ_suplementu, wydawca_id,
-                  int(fizyczny_var.get()), int(pdf_var.get()), jezyk if jezyk else None,
+                  int(fizyczny_var.get()), int(pdf_var.get()), vtt_str, jezyk if jezyk else None,
                   status_gra_var.get(), status_kolekcja_var.get(),
                   cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
                   system_data[0]))

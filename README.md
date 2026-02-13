@@ -44,6 +44,17 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 
 ## 🚀 Instalacja
 
+### 📦 Opcja 1: Pobierz gotową wersję binarną (ZALECANE dla Windows)
+
+**Najłatwiejszy sposób - nie wymaga instalacji Python!**
+
+1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
+2. Pobierz `Sesyjka-v0.3.7-Windows.zip`
+3. Rozpakuj archiwum
+4. Uruchom `Sesyjka-v0.3.7.exe`
+
+### 🔧 Opcja 2: Instalacja ze źródeł
+
 ### Wymagania
 - Windows 10 lub nowszy
 - Python 3.9 lub nowszy

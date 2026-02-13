@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.8-blue)
+![Version](https://img.shields.io/badge/version-0.3.9-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.8-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.9-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.8.exe`
+4. Uruchom `Sesyjka-v0.3.9.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -163,6 +163,15 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.9 (13.02.2026)
+- 🖥️ **Automatyczne skalowanie DPI** - interfejs dostosowuje się do wysokich rozdzielczości
+- 📐 **Inteligentne wykrywanie ekranu** - automatyczny pomiar rozdzielczości przy starcie
+- 🔍 **Skalowanie proporcjonalne** - od 100% (Full HD) do 200% (4K) i więcej
+- 📊 **Informacje o skalowaniu** - okno "O programie" pokazuje wykrytą rozdzielczość i współczynnik
+- ✨ **Poprawa czytelności** - elementy pozostają czytelne na ekranach 2K, 4K i wyższych
+- 🎯 **Rozwiązanie problemu** - brak mikroskopijnych elementów na dużych ekranach
+
 ### v0.3.8 (13.02.2026)
 - 🗄️ **System zarządzania bazami danych** - pełna kompatybilność wsteczna
 - 📁 **Nowa lokalizacja baz** - `AppData\Local\Sesyjka` (Windows) lub `~/.sesyjka` (Linux/Mac)

@@ -18,9 +18,59 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.8"
+APP_VERSION = "0.3.9"
 START_WIDTH = 1800
 START_HEIGHT = 1000
+
+# Globalna zmienna do przechowywania współczynnika skalowania DPI
+current_dpi_scale = 1.0
+
+def setup_dpi_scaling():
+    """
+    Automatyczne skalowanie interfejsu dla wyższych rozdzielczości.
+    Bazowa rozdzielczość: 1920x1080 (100% scaling)
+    """
+    global current_dpi_scale
+    
+    try:
+        # Tymczasowe okno do wykrycia rozdzielczości ekranu
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+        
+        # Pobranie rzeczywistej rozdzielczości ekranu
+        screen_width = temp_root.winfo_screenwidth()
+        screen_height = temp_root.winfo_screenheight()
+        
+        temp_root.destroy()
+        
+        # Bazowa rozdzielczość (1920x1080)
+        BASE_HEIGHT = 1080
+        
+        # Obliczenie współczynnika skalowania na podstawie wysokości ekranu
+        # (wysokość jest bardziej istotna dla czytelności)
+        scale_factor = screen_height / BASE_HEIGHT
+        
+        # Ograniczenie zakresu skalowania (min 1.0, max 2.5)
+        scale_factor = max(1.0, min(scale_factor, 2.5))
+        
+        # Zaokrąglenie do 0.1 dla lepszej wydajności
+        scale_factor = round(scale_factor, 1)
+        
+        # Zapisz aktualny współczynnik skalowania
+        current_dpi_scale = scale_factor
+        
+        # Zastosowanie skalowania tylko jeśli wykryto wyższą rozdzielczość
+        if scale_factor > 1.0:
+            ctk.set_widget_scaling(scale_factor)
+            ctk.set_window_scaling(scale_factor)
+            print(f"[DPI Scaling] Wykryto rozdzielczość: {screen_width}x{screen_height}")
+            print(f"[DPI Scaling] Zastosowano skalowanie: {scale_factor}x ({int(scale_factor * 100)}%)")
+        else:
+            print(f"[DPI Scaling] Rozdzielczość: {screen_width}x{screen_height} (bez skalowania)")
+            
+    except Exception as e:
+        print(f"[DPI Scaling] Błąd wykrywania rozdzielczości: {e}")
+        print("[DPI Scaling] Kontynuacja z domyślnym skalowaniem")
 
 class SesyjkaApp(ctk.CTk):
     def __init__(self):
@@ -254,6 +304,9 @@ class SesyjkaApp(ctk.CTk):
 if __name__ == "__main__":
     # Inicjalizuj i zmigruj bazy danych
     database_manager.initialize_app_databases()
+    
+    # Skonfiguruj automatyczne skalowanie DPI dla wyższych rozdzielczości
+    setup_dpi_scaling()
     
     app = SesyjkaApp()
     try:

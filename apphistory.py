@@ -48,6 +48,42 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.9",
+            "date": "13.02.2026",
+            "changes": [
+                "🖥️ AUTOMATYCZNE SKALOWANIE DPI DLA WYSOKICH ROZDZIELCZOŚCI:\n",
+                "",
+                "✅ INTELIGENTNE WYKRYWANIE ROZDZIELCZOŚCI:",
+                "  • Automatyczne wykrywanie rozdzielczości ekranu przy starcie",
+                "  • Dynamiczne obliczanie współczynnika skalowania",
+                "  • Bazowa rozdzielczość: 1920x1080 (Full HD)",
+                "  • Maksymalne skalowanie: 250% dla ekranów 5K+",
+                "",
+                "✅ SKALOWANIE PROPORCJONALNE:",
+                "  • 1920x1080 (Full HD) → 100% (bez skalowania)",
+                "  • 2560x1440 (QHD) → 133% skalowania",
+                "  • 2800x1800 → 167% skalowania",
+                "  • 3840x2160 (4K) → 200% skalowania",
+                "",
+                "✅ INFORMACJE W APLIKACJI:",
+                "  • Okno 'O programie' pokazuje wykrytą rozdzielczość",
+                "  • Wyświetlany współczynnik skalowania w procentach",
+                "  • Komunikaty w konsoli przy starcie (debug)",
+                "",
+                "📊 ZALETY SKALOWANIA:",
+                "  • Elementy interfejsu pozostają czytelne na dużych ekranach",
+                "  • Czcionki skalują się proporcjonalnie",
+                "  • Przyciski i kontrolki zachowują odpowiedni rozmiar",
+                "  • Brak mikroskopijnych elementów na ekranach 4K",
+                "",
+                "🔧 TECHNICZNE:",
+                "  • Wykorzystanie CustomTkinter set_widget_scaling()",
+                "  • Wykorzystanie CustomTkinter set_window_scaling()",
+                "  • Zaokrąglanie do 0.1 dla lepszej wydajności",
+                "  • Zabezpieczenia przed błędami wykrywania"
+            ]
+        },
+        {
             "version": "0.3.8",
             "date": "13.02.2026",
             "changes": [

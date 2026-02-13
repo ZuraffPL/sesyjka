@@ -48,6 +48,36 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.10",
+            "date": "13.02.2026",
+            "changes": [
+                "🔧 POPRAWKA WYKRYWANIA ROZDZIELCZOŚCI (KRYTYCZNA):\n",
+                "",
+                "✅ FIZYCZNA ROZDZIELCZOŚĆ EKRANU:",
+                "  • Naprawiono wykrywanie rozdzielczości na Windows",
+                "  • Aplikacja ignoruje teraz skalowanie DPI Windows",
+                "  • Użycie EnumDisplaySettings dla fizycznej rozdzielczości",
+                "  • SetProcessDpiAwareness przed wykrywaniem",
+                "",
+                "🐛 ROZWIĄZANY PROBLEM:",
+                "  • Windows z 2880x1800 i skalowaniem 300%",
+                "  • Aplikacja wykrywała 1920x1200 (logiczną) zamiast 2880x1800 (fizyczną)",
+                "  • Teraz poprawnie wykrywa 2880x1800 i stosuje 167% skalowania",
+                "",
+                "🔧 SZCZEGÓŁY TECHNICZNE:",
+                "  • Użycie ctypes.windll.shcore.SetProcessDpiAwareness(2)",
+                "  • Użycie ctypes.windll.user32.EnumDisplaySettingsW",
+                "  • Struktura DEVMODE do odczytu dmPelsWidth/Height",
+                "  • Fallback do GetSystemMetrics jeśli EnumDisplaySettings zawiedzie",
+                "  • Fallback do tkinter dla Linux/Mac",
+                "",
+                "📊 WYNIK:",
+                "  • Poprawne wykrywanie rozdzielczości niezależnie od skalowania Windows",
+                "  • Okno 'O programie' pokazuje teraz fizyczną rozdzielczość",
+                "  • Odpowiednie skalowanie interfejsu dla monitorów 2K/4K"
+            ]
+        },
+        {
             "version": "0.3.9",
             "date": "13.02.2026",
             "changes": [

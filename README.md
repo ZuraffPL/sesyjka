@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.9-blue)
+![Version](https://img.shields.io/badge/version-0.3.10-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.9-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.10-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.9.exe`
+4. Uruchom `Sesyjka-v0.3.10.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -163,6 +163,13 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.10 (13.02.2026)
+- 🔧 **POPRAWKA KRYTYCZNA**: Naprawiono wykrywanie fizycznej rozdzielczości ekranu
+- 🐛 **Rozwiązany problem**: Windows z wysoką rozdzielczością i skalowaniem DPI (np. 2880x1800 @ 300%)
+- 🖥️ **Wykrywanie fizyczne**: Użycie `EnumDisplaySettings` i `SetProcessDpiAwareness` na Windows
+- 📊 **Wynik**: Poprawne skalowanie interfejsu niezależnie od ustawień skalowania Windows
+- ✅ **Tester potwierdził**: Działa poprawnie na 2880x1800 z 300% skalowaniem Windows
 
 ### v0.3.9 (13.02.2026)
 - 🖥️ **Automatyczne skalowanie DPI** - interfejs dostosowuje się do wysokich rozdzielczości

@@ -4,7 +4,7 @@ from tkinter import ttk
 import webbrowser
 import customtkinter as ctk  # type: ignore
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.9"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     
@@ -13,12 +13,16 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.9"): # type: 
         app_name: Nazwa aplikacji
         app_version: Wersja aplikacji
     """
-    # Importuj współczynnik skalowania z main
+    # Importuj współczynnik skalowania i rozdzielczość z main
     try:
-        from main import current_dpi_scale
+        from main import current_dpi_scale, detected_screen_width, detected_screen_height
         dpi_scale = current_dpi_scale
+        screen_w = detected_screen_width
+        screen_h = detected_screen_height
     except:
         dpi_scale = 1.0
+        screen_w = 1920
+        screen_h = 1080
     
     # Utwórz okno modalnie
     dialog = ctk.CTkToplevel(parent) # type: ignore
@@ -87,7 +91,7 @@ TECHNOLOGIE:
 • Baza danych: SQLite
 
 SKALOWANIE INTERFEJSU:
-• Wykryta rozdzielczość: {dialog.winfo_screenwidth()}x{dialog.winfo_screenheight()} pikseli
+• Wykryta rozdzielczość: {screen_w}x{screen_h} pikseli
 • Współczynnik skalowania: {dpi_scale:.1f}x ({int(dpi_scale * 100)}%)
 • Bazowa rozdzielczość: 1920x1080 (Full HD)
 ℹ️ Interfejs automatycznie dostosowuje się do rozdzielczości ekranu

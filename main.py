@@ -3,6 +3,7 @@ import customtkinter as ctk  # type: ignore
 import tkinter as tk
 from tkinter import ttk
 import os
+import sys
 import systemy_rpg
 import sesje_rpg
 from sesje_rpg_dialogs import dodaj_sesje_rpg
@@ -18,30 +19,105 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.9"
+APP_VERSION = "0.3.10"
 START_WIDTH = 1800
 START_HEIGHT = 1000
 
 # Globalna zmienna do przechowywania współczynnika skalowania DPI
 current_dpi_scale = 1.0
+detected_screen_width = 1920
+detected_screen_height = 1080
 
 def setup_dpi_scaling():
     """
     Automatyczne skalowanie interfejsu dla wyższych rozdzielczości.
+    Wykrywa FIZYCZNĄ rozdzielczość ekranu (ignorując skalowanie DPI Windows).
     Bazowa rozdzielczość: 1920x1080 (100% scaling)
     """
-    global current_dpi_scale
+    global current_dpi_scale, detected_screen_width, detected_screen_height
     
     try:
-        # Tymczasowe okno do wykrycia rozdzielczości ekranu
-        temp_root = tk.Tk()
-        temp_root.withdraw()
+        screen_width = 1920
+        screen_height = 1080
         
-        # Pobranie rzeczywistej rozdzielczości ekranu
-        screen_width = temp_root.winfo_screenwidth()
-        screen_height = temp_root.winfo_screenheight()
+        # Windows: użyj ctypes do pobrania fizycznej rozdzielczości
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                from ctypes import windll, Structure, c_long, byref
+                
+                # Ustaw proces jako DPI-aware aby móc wykryć fizyczną rozdzielczość
+                try:
+                    # Próba użycia nowszej funkcji (Windows 10+)
+                    windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+                except:
+                    try:
+                        # Fallback do starszej funkcji
+                        windll.user32.SetProcessDPIAware()
+                    except:
+                        pass
+                
+                # Struktura DEVMODE do przechowywania informacji o trybie wyświetlania
+                class DEVMODE(Structure):
+                    _fields_ = [
+                        ('dmDeviceName', ctypes.c_wchar * 32),
+                        ('dmSpecVersion', ctypes.c_ushort),
+                        ('dmDriverVersion', ctypes.c_ushort),
+                        ('dmSize', ctypes.c_ushort),
+                        ('dmDriverExtra', ctypes.c_ushort),
+                        ('dmFields', ctypes.c_ulong),
+                        ('dmPositionX', c_long),
+                        ('dmPositionY', c_long),
+                        ('dmDisplayOrientation', ctypes.c_ulong),
+                        ('dmDisplayFixedOutput', ctypes.c_ulong),
+                        ('dmColor', ctypes.c_short),
+                        ('dmDuplex', ctypes.c_short),
+                        ('dmYResolution', ctypes.c_short),
+                        ('dmTTOption', ctypes.c_short),
+                        ('dmCollate', ctypes.c_short),
+                        ('dmFormName', ctypes.c_wchar * 32),
+                        ('dmLogPixels', ctypes.c_ushort),
+                        ('dmBitsPerPel', ctypes.c_ulong),
+                        ('dmPelsWidth', ctypes.c_ulong),
+                        ('dmPelsHeight', ctypes.c_ulong),
+                        ('dmDisplayFlags', ctypes.c_ulong),
+                        ('dmDisplayFrequency', ctypes.c_ulong),
+                    ]
+                
+                # Pobierz informacje o aktualnym trybie wyświetlania
+                devmode = DEVMODE()
+                devmode.dmSize = ctypes.sizeof(DEVMODE)
+                
+                # ENUM_CURRENT_SETTINGS = -1 (aktualny tryb)
+                if windll.user32.EnumDisplaySettingsW(None, -1, byref(devmode)):
+                    screen_width = int(devmode.dmPelsWidth)
+                    screen_height = int(devmode.dmPelsHeight)
+                    print(f"[DPI Scaling] Fizyczna rozdzielczość (EnumDisplaySettings): {screen_width}x{screen_height}")
+                else:
+                    # Fallback: użyj GetSystemMetrics z fizycznymi wartościami
+                    screen_width = windll.user32.GetSystemMetrics(0)  # SM_CXSCREEN
+                    screen_height = windll.user32.GetSystemMetrics(1)  # SM_CYSCREEN
+                    print(f"[DPI Scaling] Rozdzielczość (GetSystemMetrics): {screen_width}x{screen_height}")
+                    
+            except Exception as e:
+                print(f"[DPI Scaling] Błąd ctypes: {e}, używam fallback tkinter")
+                # Fallback do tkinter
+                temp_root = tk.Tk()
+                temp_root.withdraw()
+                screen_width = temp_root.winfo_screenwidth()
+                screen_height = temp_root.winfo_screenheight()
+                temp_root.destroy()
+        else:
+            # Linux/Mac: użyj tkinter (zazwyczaj działa poprawnie)
+            temp_root = tk.Tk()
+            temp_root.withdraw()
+            screen_width = temp_root.winfo_screenwidth()
+            screen_height = temp_root.winfo_screenheight()
+            temp_root.destroy()
         
-        temp_root.destroy()
+        # Zapisz wykrytą rozdzielczość
+        detected_screen_width = screen_width
+        detected_screen_height = screen_height
         
         # Bazowa rozdzielczość (1920x1080)
         BASE_HEIGHT = 1080
@@ -71,6 +147,8 @@ def setup_dpi_scaling():
     except Exception as e:
         print(f"[DPI Scaling] Błąd wykrywania rozdzielczości: {e}")
         print("[DPI Scaling] Kontynuacja z domyślnym skalowaniem")
+        import traceback
+        traceback.print_exc()
 
 class SesyjkaApp(ctk.CTk):
     def __init__(self):

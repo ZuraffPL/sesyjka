@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.7-blue)
+![Version](https://img.shields.io/badge/version-0.3.8-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.7-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.8-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.7.exe`
+4. Uruchom `Sesyjka-v0.3.8.exe`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -92,6 +92,7 @@ python main.py
 ```
 sesyjka/
 ├── main.py                 # Punkt wejścia aplikacji
+├── database_manager.py     # Zarządzanie bazami i migracjami
 ├── systemy_rpg.py         # Moduł systemów RPG
 ├── sesje_rpg.py           # Moduł sesji RPG
 ├── sesje_rpg_dialogs.py   # Dialogi dla sesji
@@ -132,7 +133,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
-
+### v0.3.8 (13.02.2026)
+- 🗄️ **System zarządzania bazami danych** - pełna kompatybilność wsteczna
+- 📁 **Nowa lokalizacja baz** - `AppData\Local\Sesyjka` (Windows) lub `~/.sesyjka` (Linux/Mac)
+- 🔄 **Automatyczna migracja** - stare bazy są automatycznie przenoszone
+- 🛡️ **System backupów** - automatyczne kopie zapasowe przed każdą migracją
+- 📊 **Wersjonowanie schematu** - bezpieczne aktualizacje struktury baz
+- 📖 **Dokumentacja** - nowy przewodnik [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
+- ✅ **Bezpieczeństwo danych** - Twoje dane są chronione przy każdej aktualizacji
 ### v0.3.7 (13.02.2026)
 - 🔄 Status "Na sprzedaż" wyświetla się jako "W kolekcji, Na sprzedaż"
 - 💰 Obsługa ceny zakupu dla statusu "Na sprzedaż"

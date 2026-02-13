@@ -6,9 +6,10 @@ from tkinter import ttk, messagebox, simpledialog
 from datetime import datetime
 from typing import Optional, Callable, Sequence, Any, Dict, List, Tuple
 import customtkinter as ctk
+from database_manager import get_db_path
 
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
-DB_FILE = "sesje_rpg.db"
+DB_FILE = get_db_path("sesje_rpg.db")
 
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""

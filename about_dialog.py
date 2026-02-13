@@ -4,7 +4,7 @@ from tkinter import ttk
 import webbrowser
 import customtkinter as ctk  # type: ignore
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.7"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.8"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     

@@ -5,8 +5,9 @@ import sqlite3
 from typing import Optional, Union, List, Dict, Any
 import tksheet  # type: ignore # <- przywrócono wymagany import
 import customtkinter as ctk  # type: ignore
+from database_manager import get_db_path
 
-DB_FILE = "wydawcy.db"
+DB_FILE = get_db_path("wydawcy.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_wydawcy: Dict[str, Any] = {}

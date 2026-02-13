@@ -4,11 +4,12 @@ from tkinter import ttk, messagebox
 import sqlite3
 from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
+from database_manager import get_db_path
 
 # Import funkcji dialogowych z oddzielnego modułu
 from sesje_rpg_dialogs import open_edit_session_dialog
 
-DB_FILE = "sesje_rpg.db"
+DB_FILE = get_db_path("sesje_rpg.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_sesje: Dict[str, Any] = {}

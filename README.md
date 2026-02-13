@@ -106,11 +106,23 @@ sesyjka/
 
 ## 🗄️ Bazy danych
 
-Aplikacja automatycznie tworzy następujące bazy SQLite przy pierwszym uruchomieniu:
+Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - `systemy_rpg.db` - Systemy RPG
 - `sesje_rpg.db` - Sesje RPG
 - `gracze.db` - Gracze
 - `wydawcy.db` - Wydawcy
+
+### 📁 Lokalizacja baz danych
+**Windows:** `C:\Users\{username}\AppData\Local\Sesyjka\`  
+**Linux/Mac:** `~/.sesyjka/`
+
+### 🔄 Migracja i Kompatybilność
+- ✅ **Automatyczna migracja** starych baz przy pierwszym uruchomieniu
+- ✅ **Backupy** - automatyczne kopie zapasowe podczas aktualizacji
+- ✅ **Wersjonowanie schematu** - bezpieczne aktualizacje struktury bazy
+- ✅ **Kompatybilność wsteczna** - Twoje dane są bezpieczne przy aktualizacjach
+
+📖 Szczegóły: [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
 
 ## 🎨 Interfejs
 

@@ -11,28 +11,16 @@ import wydawcy
 import statystyki # type: ignore
 import about_dialog
 import apphistory
+import database_manager
 
 # Konfiguracja CustomTkinter
 ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.7"
+APP_VERSION = "0.3.8"
 START_WIDTH = 1800
 START_HEIGHT = 1000
-DB_FILES = [
-    "systemy_rpg.db",
-    "sesje_rpg.db",
-    "gracze.db",
-    "wydawcy.db"
-]
-
-# Utwórz puste pliki baz danych, jeśli nie istnieją
-def create_empty_db_files():
-    for db_file in DB_FILES:
-        if not os.path.exists(db_file):
-            with open(db_file, 'w'):
-                pass
 
 class SesyjkaApp(ctk.CTk):
     def __init__(self):
@@ -264,7 +252,9 @@ class SesyjkaApp(ctk.CTk):
         statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=self.dark_mode)
 
 if __name__ == "__main__":
-    create_empty_db_files()
+    # Inicjalizuj i zmigruj bazy danych
+    database_manager.initialize_app_databases()
+    
     app = SesyjkaApp()
     try:
         app.mainloop()

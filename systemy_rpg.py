@@ -8,8 +8,9 @@ from tkinter import ttk, messagebox
 import sqlite3
 from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
+from database_manager import get_db_path
 
-DB_FILE = "systemy_rpg.db"
+DB_FILE = get_db_path("systemy_rpg.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_systemy: Dict[str, Any] = {}

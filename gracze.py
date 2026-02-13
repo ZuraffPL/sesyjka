@@ -5,8 +5,9 @@ from tkinter import ttk, messagebox
 import sqlite3
 from typing import Optional, Callable, Sequence, Any, Union, List, Dict
 import customtkinter as ctk  # type: ignore
+from database_manager import get_db_path
 
-DB_FILE = "gracze.db"
+DB_FILE = get_db_path("gracze.db")
 
 # Moduł: Gracze
 # Tutaj będą funkcje i klasy związane z obsługą graczy

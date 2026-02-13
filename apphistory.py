@@ -48,6 +48,41 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.12",
+            "date": "13.02.2026",
+            "changes": [
+                "🐛 NAPRAWIONO KRYTYCZNY BUG LISTY WYDAWCÓW:\n",
+                "",
+                "✅ PROBLEM: NOWI WYDAWCY NIE WIDOCZNI W SYSTEMACH RPG:",
+                "  • Wydawcy dodani po wersji 0.3.7 nie pojawiali się",
+                "    na liście wydawców w formularzach systemów RPG",
+                "  • Przyczyna: hardcoded ścieżka 'wydawcy.db' zamiast",
+                "    get_db_path('wydawcy.db') w module systemy_rpg.py",
+                "  • Moduł systemów RPG czytał starą bazę z katalogu",
+                "    aplikacji zamiast aktualnej z AppData",
+                "",
+                "✅ ROZWIĄZANIE:",
+                "  • Naprawiono 3 miejsca w systemy_rpg.py z błędną ścieżką:",
+                "    - get_all_publishers() - lista wydawców w comboboxach",
+                "    - fill_systemy_rpg_tab() - nazwy wydawców w tabeli głównej",
+                "    - Sekcja suplementów - nazwy wydawców w tabeli suplementów",
+                "  • Wszystkie odwołania do wydawcy.db używają teraz get_db_path()",
+                "",
+                "✅ ULEPSZENIE ODŚWIEŻANIA LISTY WYDAWCÓW:",
+                "  • Kliknięcie w combobox wydawcy automatycznie odświeża listę",
+                "  • Pobieranie aktualnych danych bezpośrednio z bazy przy kliknięciu",
+                "  • Działa we wszystkich 3 formularzach:",
+                "    - Dodawanie systemu RPG",
+                "    - Edycja systemu RPG",
+                "    - Dodawanie suplementu",
+                "",
+                "🔧 CZYSZCZENIE KODU:",
+                "  • Usunięto niedziałający system callbacków odświeżania",
+                "  • Usunięto zbędne przyciski odświeżania (🔄)",
+                "  • Uproszczony, niezawodny mechanizm refresh-on-click"
+            ]
+        },
+        {
             "version": "0.3.11",
             "date": "13.02.2026",
             "changes": [

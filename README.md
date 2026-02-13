@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.11-blue)
+![Version](https://img.shields.io/badge/version-0.3.12-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.10-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.12-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.10.exe`
+4. Uruchom `Sesyjka-v0.3.12.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -77,11 +77,11 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.10-Windows.zip`:
+   - **SHA256 checksum** dla `Sesyjka-v0.3.12-Windows.zip`:
      ```
-     DB477CCA6F8FDD262EC88AC96D641E72EE0A1FFE6DB83BC74346F1A5FA50645B
+     (zostanie zaktualizowany po buildzie)
      ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.10-Windows.zip -Algorithm SHA256`
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.12-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -163,6 +163,20 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.12 (13.02.2026)
+- 🐛 **NAPRAWIONO**: Nowi wydawcy dodani po v0.3.7 nie pojawiali się w formularzach systemów RPG
+- 🔧 **Przyczyna**: Hardcoded ścieżka `wydawcy.db` zamiast `get_db_path()` w module systemy_rpg
+- ✅ **Naprawiono** 3 odwołania do bazy wydawców - teraz wszystkie używają poprawnej ścieżki AppData
+- 🔄 **Ulepszenie**: Combobox wydawcy automatycznie odświeża listę przy każdym kliknięciu
+- 🧹 **Czyszczenie kodu**: Usunięto niedziałający system callbacków i zbędne przyciski odświeżania
+
+### v0.3.11 (13.02.2026)
+- 🎮 **NOWE**: Wsparcie dla platform VTT (Virtual Tabletop) w systemach RPG
+- ✅ **9 platform VTT**: AboveVTT, Alchemy VTT, D&D Beyond, Demiplane, Fantasy Grounds, Foundry VTT, Roll20, Tabletop Simulator, Telespire
+- 🔧 **NAPRAWIONO**: Krytyczne błędy filtrowania - resetowanie filtrów po edycji/usunięciu rekordów
+- 🛡️ **NAPRAWIONO**: Błędne indeksowanie w filtrach - operacje na złych wierszach
+- 📊 **Wprowadzono `displayed_data`** we wszystkich 4 tabelach dla poprawnego indeksowania
 
 ### v0.3.10 (13.02.2026)
 - 🔧 **POPRAWKA KRYTYCZNA**: Naprawiono wykrywanie fizycznej rozdzielczości ekranu

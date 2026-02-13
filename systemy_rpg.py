@@ -169,7 +169,7 @@ def get_all_systems() -> list[tuple[Any, ...]]:
     result = []
     for system in systems:
         try:
-            with sqlite3.connect("wydawcy.db") as wydawcy_conn:
+            with sqlite3.connect(get_db_path("wydawcy.db")) as wydawcy_conn:
                 w_cursor = wydawcy_conn.cursor()
                 if system[5]:  # wydawca_id
                     w_cursor.execute("SELECT nazwa FROM wydawcy WHERE id = ?", (system[5],))
@@ -228,7 +228,7 @@ def get_main_systems() -> list[tuple[int, str]]:
 def get_all_publishers() -> list[tuple[int, str]]:
     """Pobiera wszystkich wydawców z bazy wydawców"""
     try:
-        with sqlite3.connect("wydawcy.db") as conn:
+        with sqlite3.connect(get_db_path("wydawcy.db")) as conn:
             c = conn.cursor()
             c.execute("SELECT id, nazwa FROM wydawcy ORDER BY nazwa")
             return c.fetchall()
@@ -304,9 +304,27 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     ctk.CTkLabel(main_frame, text="Wydawca").grid(row=5, column=0, pady=8, padx=(0,10), sticky="w")
     wydawca_var = tk.StringVar()
     wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    
+    def refresh_publishers_on_click(event: Any = None) -> None:
+        """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
+        nonlocal publishers
+        current_value = wydawca_var.get()
+        publishers = get_all_publishers()
+        if publishers:
+            wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
+            wydawca_combo.configure(values=wydawca_values)
+            if current_value and current_value in wydawca_values:
+                wydawca_var.set(current_value)
+        else:
+            wydawca_combo.configure(values=[])
+    
+    # Inicjalne załadowanie listy
     if publishers:
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
+    
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie
@@ -1670,6 +1688,21 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     ctk.CTkLabel(main_frame, text="Wydawca").grid(row=5, column=0, pady=8, padx=(0,10), sticky="w")
     wydawca_var = tk.StringVar()
     wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    
+    def refresh_publishers_on_click(event: Any = None) -> None:
+        """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
+        nonlocal publishers
+        current_value = wydawca_var.get()
+        publishers = get_all_publishers()
+        if publishers:
+            wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
+            wydawca_combo.configure(values=wydawca_values)
+            if current_value and current_value in wydawca_values:
+                wydawca_var.set(current_value)
+        else:
+            wydawca_combo.configure(values=[])
+    
+    # Inicjalne załadowanie listy i ustawienie obecnego wydawcy
     if publishers:
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
@@ -1679,6 +1712,9 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
                 if pub[0] == system_data[5]:
                     wydawca_var.set(f"{pub[0]} - {pub[1]}")
                     break
+    
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie
@@ -2044,7 +2080,7 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
     supplements = []
     for supp in supplements_base:
         try:
-            with sqlite3.connect("wydawcy.db") as wydawcy_conn:
+            with sqlite3.connect(get_db_path("wydawcy.db")) as wydawcy_conn:
                 w_cursor = wydawcy_conn.cursor()
                 wydawca_id = supp[3]  # wydawca_id z zapytania
                 
@@ -2180,9 +2216,27 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     ctk.CTkLabel(main_frame, text="Wydawca").grid(row=5, column=0, pady=8, padx=(0,10), sticky="w")
     wydawca_var = tk.StringVar()
     wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    
+    def refresh_publishers_on_click(event: Any = None) -> None:
+        """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
+        nonlocal publishers
+        current_value = wydawca_var.get()
+        publishers = get_all_publishers()
+        if publishers:
+            wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
+            wydawca_combo.configure(values=wydawca_values)
+            if current_value and current_value in wydawca_values:
+                wydawca_var.set(current_value)
+        else:
+            wydawca_combo.configure(values=[])
+    
+    # Inicjalne załadowanie listy
     if publishers:
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
+    
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie

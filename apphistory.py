@@ -48,6 +48,28 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.13",
+            "date": "14.02.2026",
+            "changes": [
+                "🐛 NAPRAWIONO KRYTYCZNY BUG DIALOGU SESJI RPG:\n",
+                "",
+                "✅ PROBLEM: PUSTE OKNO DODAWANIA SESJI RPG:",
+                "  • Dialog 'Dodaj sesję RPG do bazy' otwierał się pusty",
+                "  • Brak list systemów RPG i graczy w formularzu",
+                "  • Przyczyna: hardcoded ścieżki 'systemy_rpg.db' i 'gracze.db'",
+                "    w module sesje_rpg_dialogs.py",
+                "  • Moduł dialogów szukał baz w katalogu aplikacji",
+                "    zamiast w AppData/Local/Sesyjka/",
+                "",
+                "✅ ROZWIĄZANIE:",
+                "  • Naprawiono 2 funkcje w sesje_rpg_dialogs.py:",
+                "    - get_all_systems() - lista systemów RPG w formularzu",
+                "    - get_all_players() - lista graczy w formularzu",
+                "  • Zastąpiono hardcoded ścieżki wywołaniami get_db_path()",
+                "  • Analogiczny bug do naprawionego w v0.3.12 (wydawcy.db)"
+            ]
+        },
+        {
             "version": "0.3.12",
             "date": "13.02.2026",
             "changes": [

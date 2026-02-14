@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.12-blue)
+![Version](https://img.shields.io/badge/version-0.3.13-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.12-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.13-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.12.exe`
+4. Uruchom `Sesyjka-v0.3.13.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -77,11 +77,11 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.12-Windows.zip`:
+   - **SHA256 checksum** dla `Sesyjka-v0.3.13-Windows.zip`:
      ```
-     BDC8CAA25A6A5104C24367E84D9D5854F627902730B42FF0EBCBF2FB60EF4E4D
+     F8A4CDFBF7C959642AE3CB59989B366D93A9D162CE10B300E4B96975411F18E6
      ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.12-Windows.zip -Algorithm SHA256`
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.13-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -163,6 +163,11 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.13 (14.02.2026)
+- 🐛 **NAPRAWIONO**: Puste okno dialogu "Dodaj sesję RPG" - brak list systemów i graczy
+- 🔧 **Przyczyna**: Hardcoded ścieżki `systemy_rpg.db` i `gracze.db` w sesje_rpg_dialogs.py
+- ✅ **Naprawiono** 2 funkcje: `get_all_systems()` i `get_all_players()` - używają teraz `get_db_path()`
 
 ### v0.3.12 (13.02.2026)
 - 🐛 **NAPRAWIONO**: Nowi wydawcy dodani po v0.3.7 nie pojawiali się w formularzach systemów RPG

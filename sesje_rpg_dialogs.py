@@ -57,7 +57,7 @@ def get_first_free_id() -> int:
 def get_all_systems() -> List[Tuple[int, str]]:
     """Pobiera tylko podręczniki główne systemów RPG z bazy danych (bez suplementów)"""
     try:
-        with sqlite3.connect("systemy_rpg.db") as conn:
+        with sqlite3.connect(get_db_path("systemy_rpg.db")) as conn:
             c = conn.cursor()
             c.execute("SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa")
             return c.fetchall()
@@ -66,7 +66,7 @@ def get_all_systems() -> List[Tuple[int, str]]:
 
 def get_all_players() -> List[Tuple[int, str]]:
     """Pobiera wszystkich graczy z bazy danych"""
-    with sqlite3.connect("gracze.db") as conn:
+    with sqlite3.connect(get_db_path("gracze.db")) as conn:
         c = conn.cursor()
         c.execute("SELECT id, nick FROM gracze ORDER BY nick")
         return c.fetchall()

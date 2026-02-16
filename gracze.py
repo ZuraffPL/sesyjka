@@ -310,6 +310,13 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
         width_px = max(80, min(400, int(max_content * 9 + 24)))
         sheet.column_width(column=col, width=width_px)
+    
+    # Skalowanie fontów
+    sheet.set_options(
+        font=("Segoe UI", scale_font_size(10), "normal"),
+        header_font=("Segoe UI", scale_font_size(10), "bold")
+    )  # type: ignore
+    
     # Wycentrowanie kolumny ID i Status
     sheet.align_columns(columns=[0, 5], align="center")
     # Włącz obsługę zaznaczania i interakcji jak u wydawców

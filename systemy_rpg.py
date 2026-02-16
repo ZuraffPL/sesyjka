@@ -85,6 +85,12 @@ def init_db() -> None:
             # Kolumna już istnieje
             pass
         
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN system_glowny_nazwa_custom TEXT")
+        except sqlite3.OperationalError:
+            # Kolumna już istnieje
+            pass
+        
         conn.commit()
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
@@ -160,7 +166,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         c.execute("""
             SELECT s.id, s.nazwa, s.typ, s.system_glowny_id, s.typ_suplementu, 
                    s.wydawca_id, s.fizyczny, s.pdf, s.vtt, s.jezyk, s.status_gra, s.status_kolekcja,
-                   s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy
+                   s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy,
+                   s.system_glowny_nazwa_custom
             FROM systemy_rpg s
             ORDER BY s.id ASC
         """)
@@ -201,7 +208,7 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         vtt_str = system[8] if system[8] else ""
         
         # Dodaj nazwę wydawcy, status, VTT i cenę do systemu
-        # Format: id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_nazwa, fizyczny, pdf, vtt, jezyk, status, cena
+        # Format: id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_nazwa, fizyczny, pdf, vtt, jezyk, status, cena, system_glowny_nazwa_custom
         result.append((  # type: ignore
             system[0],  # id
             system[1],  # nazwa  
@@ -214,7 +221,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
             vtt_str,  # vtt
             system[9],  # jezyk
             status_combined,  # status
-            cena_str  # cena (zakupu lub sprzedaży w zależności od statusu)
+            cena_str,  # cena (zakupu lub sprzedaży w zależności od statusu)
+            system[16] if len(system) > 16 else None  # system_glowny_nazwa_custom
         )) # type: ignore
     
     return result # type: ignore
@@ -250,14 +258,15 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     dialog.resizable(True, False)
     
     parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
+    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 475
     y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 275
-    dialog.geometry(f"700x550+{x}+{y}")
+    dialog.geometry(f"950x550+{x}+{y}")
     
     # Główna ramka z padding
     main_frame = ctk.CTkFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     main_frame.columnconfigure(1, weight=1)
+    main_frame.columnconfigure(3, weight=1)
 
     # ID systemu
     ctk.CTkLabel(main_frame, text=f"ID systemu: {reserved_id}", font=("Segoe UI", scale_font_size(12))).grid(
@@ -282,6 +291,12 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     system_glowny_var = tk.StringVar()
     system_glowny_combo = ctk.CTkComboBox(main_frame, variable=system_glowny_var, state="readonly")
     system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
+    
+    # Niestandardowa nazwa systemu głównego (dla suplementów bez systemu w kolekcji) - w tym samym rzędzie
+    system_glowny_custom_label = ctk.CTkLabel(main_frame, text="lub wpisz nazwę:")
+    system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
+    system_glowny_custom_entry = ctk.CTkEntry(main_frame, placeholder_text="Nazwa systemu spoza kolekcji", width=200)
+    system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
 
     # Typ suplementu - początkowo ukryte, obowiązkowe dla suplementów (wielokrotny wybór)
     typ_suplementu_label = ctk.CTkLabel(main_frame, text="Typ suplementu *")
@@ -331,7 +346,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     # Posiadanie
     ctk.CTkLabel(main_frame, text="Posiadanie").grid(row=6, column=0, pady=8, padx=(0,10), sticky="nw")
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=2)
+    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=3)
     posiadanie_frame.columnconfigure(1, weight=1)
     
     fizyczny_var = tk.BooleanVar()
@@ -392,16 +407,16 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         
         if is_vtt and is_suplement:
             # VTT + Suplement - największe okno
-            width, height = 850, 880
+            width, height = 1100, 850
         elif is_vtt:
             # VTT bez suplementu
-            width, height = 850, 680
+            width, height = 1100, 680
         elif is_suplement:
             # Suplement bez VTT
-            width, height = 700, 750
+            width, height = 950, 720
         else:
             # Podstawowe okno
-            width, height = 700, 550
+            width, height = 950, 560
         
         new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
         new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
@@ -511,6 +526,8 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             # Pokaż pola dla suplementu z oryginalnymi parametrami grid
             system_glowny_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
             system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
+            system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
+            system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
             typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
             typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
             # Załaduj systemy główne
@@ -522,6 +539,8 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             # Ukryj pola dla suplementu
             system_glowny_label.grid_remove()
             system_glowny_combo.grid_remove()
+            system_glowny_custom_label.grid_remove()
+            system_glowny_custom_entry.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
         update_dialog_size()
@@ -541,6 +560,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         
         system_glowny_id = None
         typ_suplementu = None
+        system_glowny_custom = None
         
         if typ == "Suplement":
             # Zbierz wybrane typy suplementu
@@ -556,6 +576,9 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             # System główny jest opcjonalny - może być pusty dla osieroconych suplementów
             if system_glowny_var.get():
                 system_glowny_id = int(system_glowny_var.get().split(' - ')[0])
+            elif system_glowny_custom_entry.get().strip():
+                # Jeśli nie wybrano z listy, ale wpisano niestandardową nazwę
+                system_glowny_custom = system_glowny_custom_entry.get().strip()
         
         wydawca_id = None
         if wydawca_var.get():
@@ -598,12 +621,14 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             c.execute("""
                 INSERT INTO systemy_rpg (id, nazwa, typ, system_glowny_id, typ_suplementu, 
                                        wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
-                                       cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
+                                       system_glowny_nazwa_custom) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (reserved_id, nazwa, typ, system_glowny_id, typ_suplementu, wydawca_id,
                   int(fizyczny_var.get()), int(pdf_var.get()), vtt_str, jezyk if jezyk else None,
                   status_gra_var.get(), status_kolekcja_var.get(),
-                  cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy))
+                  cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
+                  system_glowny_custom))
             conn.commit()
         
         if refresh_callback:
@@ -616,7 +641,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=10, column=0, columnspan=2, pady=15, sticky="ew")
+    button_frame.grid(row=10, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
     
@@ -734,6 +759,8 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                     result = c.fetchone()
                     if result:
                         main_system_name = result[0]
+            elif rec[12]:  # system_glowny_nazwa_custom - jeśli nie ma ID, użyj custom nazwy
+                main_system_name = rec[12]
             
             row: List[Any] = [
                 "   !",  # Symbol problemowego suplementu
@@ -772,6 +799,12 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
             max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=col, width=width_px)
+    
+    # Skalowanie fontów
+    sheet.set_options(
+        font=("Segoe UI", scale_font_size(10), "normal"),
+        header_font=("Segoe UI", scale_font_size(10), "bold")
+    )  # type: ignore
     
     # Wycentrowanie kolumn ID, Fizyczny, PDF
     sheet.align_columns(columns=[1, 7, 8], align="center")
@@ -1592,7 +1625,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         c.execute("""
             SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
                    wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
-                   cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy
+                   cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy, system_glowny_nazwa_custom
             FROM systemy_rpg WHERE id = ?
         """, (system_id,))
         system_data = c.fetchone()
@@ -1616,16 +1649,16 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     
     if has_vtt and is_suplement:
         # VTT + Suplement - największe okno
-        width, height = 850, 850
+        width, height = 1100, 850
     elif has_vtt:
         # VTT bez suplementu
-        width, height = 850, 680
+        width, height = 1100, 680
     elif is_suplement:
         # Suplement bez VTT
-        width, height = 700, 720
+        width, height = 950, 720
     else:
         # Podstawowe okno
-        width, height = 700, 560
+        width, height = 950, 560
     
     x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
     y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
@@ -1635,6 +1668,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     main_frame = ctk.CTkFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     main_frame.columnconfigure(1, weight=1)
+    main_frame.columnconfigure(3, weight=1)
 
     publishers = get_all_publishers()
 
@@ -1661,6 +1695,14 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     system_glowny_var = tk.StringVar()
     system_glowny_combo = ctk.CTkComboBox(main_frame, variable=system_glowny_var, state="readonly")
     system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
+    
+    # Niestandardowa nazwa systemu głównego (dla suplementów bez systemu w kolekcji)
+    system_glowny_custom_label = ctk.CTkLabel(main_frame, text="lub wpisz nazwę:")
+    system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
+    system_glowny_custom_entry = ctk.CTkEntry(main_frame, placeholder_text="Nazwa systemu spoza kolekcji", width=200)
+    system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
+    if system_data[16]:  # system_glowny_nazwa_custom
+        system_glowny_custom_entry.insert(0, system_data[16] or "")
 
     # Typ suplementu - obowiązkowe dla suplementów (wielokrotny wybór)
     typ_suplementu_label = ctk.CTkLabel(main_frame, text="Typ suplementu *")
@@ -1721,7 +1763,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     # Posiadanie
     ctk.CTkLabel(main_frame, text="Posiadanie").grid(row=6, column=0, pady=8, padx=(0,10), sticky="nw")
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=2)
+    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=3)
     posiadanie_frame.columnconfigure(1, weight=1)
     
     fizyczny_var = tk.BooleanVar(value=bool(system_data[6]))
@@ -1796,16 +1838,16 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         
         if is_vtt and is_suplement:
             # VTT + Suplement - największe okno
-            width, height = 850, 880
+            width, height = 1100, 880
         elif is_vtt:
             # VTT bez suplementu
-            width, height = 850, 680
+            width, height = 1100, 680
         elif is_suplement:
             # Suplement bez VTT
-            width, height = 700, 750
+            width, height = 950, 750
         else:
             # Podstawowe okno
-            width, height = 700, 590
+            width, height = 950, 590
         
         new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
         new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
@@ -1919,8 +1961,10 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
             # Pokaż pola dla suplementu
             system_glowny_label.grid()
             system_glowny_combo.grid()
-            typ_suplementu_label.grid()
-            typ_suplementu_frame.grid()
+            system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
+            system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
+            typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0,10), sticky="nw")
+            typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
             # Załaduj systemy główne
             main_systems = get_main_systems()
             if main_systems:
@@ -1936,6 +1980,8 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
             # Ukryj pola dla suplementu
             system_glowny_label.grid_remove()
             system_glowny_combo.grid_remove()
+            system_glowny_custom_label.grid_remove()
+            system_glowny_custom_entry.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
         update_dialog_size()
@@ -1955,6 +2001,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         
         system_glowny_id = None
         typ_suplementu = None
+        system_glowny_custom = None
         
         if typ == "Suplement":
             # Zbierz wybrane typy suplementu
@@ -1970,6 +2017,9 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
             # System główny jest opcjonalny - może być pusty dla osieroconych suplementów
             if system_glowny_var.get():
                 system_glowny_id = int(system_glowny_var.get().split(' - ')[0])
+            
+            # Pobierz niestandardową nazwę systemu głównego
+            system_glowny_custom = system_glowny_custom_entry.get().strip() or None
         
         wydawca_id = None
         if wydawca_var.get():
@@ -2013,12 +2063,12 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
                 UPDATE systemy_rpg 
                 SET nazwa=?, typ=?, system_glowny_id=?, typ_suplementu=?, 
                     wydawca_id=?, fizyczny=?, pdf=?, vtt=?, jezyk=?, status_gra=?, status_kolekcja=?,
-                    cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?, waluta_sprzedazy=? 
+                    cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?, waluta_sprzedazy=?, system_glowny_nazwa_custom=? 
                 WHERE id=?
             """, (nazwa, typ, system_glowny_id, typ_suplementu, wydawca_id,
                   int(fizyczny_var.get()), int(pdf_var.get()), vtt_str, jezyk if jezyk else None,
                   status_gra_var.get(), status_kolekcja_var.get(),
-                  cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
+                  cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy, system_glowny_custom,
                   system_data[0]))
             conn.commit()
         
@@ -2032,7 +2082,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
 
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=10, column=0, columnspan=2, pady=15, sticky="ew")
+    button_frame.grid(row=10, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
     

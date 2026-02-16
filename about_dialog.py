@@ -5,7 +5,7 @@ import webbrowser
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.16"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     
@@ -83,6 +83,10 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type:
 Autor: Marcin "Żuraff" Żurawicz
 Kontakt: https://linktr.ee/zuraffpl
 Wesprzyj mnie na Patronite: https://patronite.pl/zuraff
+
+PODZIĘKOWANIA DLA TESTERÓW:
+• Narmo
+• GingerR13
 
 TECHNOLOGIE:
 • Język: Python 3.9+

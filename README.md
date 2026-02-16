@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.15-blue)
+![Version](https://img.shields.io/badge/version-0.3.16-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -11,6 +11,7 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 ### 🎲 Systemy RPG
 - Zarządzanie kolekcją systemów RPG
 - Hierarchiczna struktura: podręczniki główne i suplementy
+- **Elastyczne systemy główne**: wybór z kolekcji lub wpisanie niestandardowej nazwy
 - Statusy: W kolekcji, Na sprzedaż, Sprzedane, Nieposiadane, Do kupienia
 - Obsługa wersji fizycznych i PDF
 - Wielojęzyczna kolekcja

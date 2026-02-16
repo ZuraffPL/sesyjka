@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 # Import funkcji dialogowych z oddzielnego modułu
 from sesje_rpg_dialogs import open_edit_session_dialog
@@ -247,6 +248,12 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         max_content = max([len(str(row[col])) for row in data] + [len(headers[col])]) if data else len(headers[col])
         width_px = max(80, min(400, int(max_content * 9 + 24)))
         sheet.column_width(column=col, width=width_px)
+    
+    # Skalowanie fontów
+    sheet.set_options(
+        font=("Segoe UI", scale_font_size(10), "normal"),
+        header_font=("Segoe UI", scale_font_size(10), "bold")
+    )  # type: ignore
     
     # Wycentrowanie kolumny ID
     sheet.align_columns(columns=[0], align="center")

@@ -21,9 +21,9 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.15"
+APP_VERSION = "0.3.16"
 START_WIDTH = 1800
-START_HEIGHT = 1000
+START_HEIGHT = 920
 
 # Globalna zmienna do przechowywania współczynnika skalowania DPI
 current_dpi_scale = 1.0
@@ -210,9 +210,9 @@ class SesyjkaApp(ctk.CTk):
 
     def create_ribbon(self):
         # Ribbon jako CTkFrame
-        ribbon = ctk.CTkFrame(self, height=100, corner_radius=0)
-        ribbon.pack(side=tk.TOP, fill=tk.X)
-        ribbon.pack_propagate(False)
+        self.ribbon = ctk.CTkFrame(self, height=100, corner_radius=0)
+        self.ribbon.pack(side=tk.TOP, fill=tk.X)
+        self.ribbon.pack_propagate(False)
         
         self.ribbon_groups = {}
         self.ribbon_add_buttons = {}
@@ -226,7 +226,7 @@ class SesyjkaApp(ctk.CTk):
         
         for _idx, (name, _tooltip, add_func, del_label, del_func) in enumerate(sections):
             # Grupa w ribbonie
-            group = ctk.CTkFrame(ribbon, corner_radius=8)
+            group = ctk.CTkFrame(self.ribbon, corner_radius=8)
             group.pack(side=tk.LEFT, padx=12, pady=8, ipadx=8, ipady=4)
             
             # Nagłówek grupy
@@ -268,7 +268,7 @@ class SesyjkaApp(ctk.CTk):
             self.ribbon_add_buttons[name] = add_btn
         
         # Kontener dla przycisków po prawej stronie
-        right_buttons_frame = ctk.CTkFrame(ribbon, fg_color="transparent")
+        right_buttons_frame = ctk.CTkFrame(self.ribbon, fg_color="transparent")
         right_buttons_frame.pack(side=tk.RIGHT, padx=15, pady=8)
         
         # Górny rząd - przyciski O programie i Historia wersji
@@ -409,14 +409,18 @@ class SesyjkaApp(ctk.CTk):
         # Zapisz wartość slidera przed odbudową
         slider_value = scale_percent
         
-        # Zniszcz obecny ribbon (pierwszy CTkFrame)
-        for widget in self.winfo_children():
-            if isinstance(widget, ctk.CTkFrame):
-                widget.destroy()
-                break
+        # Zniszcz obecny ribbon
+        if hasattr(self, 'ribbon'):
+            self.ribbon.destroy()
         
-        # Odbuduj ribbon
+        # Odpakuj notebook aby zwolnić przestrzeń
+        self.notebook.pack_forget()
+        
+        # Odbuduj ribbon (zostanie dodany na górze dzięki pack(side=tk.TOP))
         self.create_ribbon()
+        
+        # Przepakuj notebook poniżej ribbona
+        self.notebook.pack(fill=tk.BOTH, expand=True)
         
         # Przywróć wartość slidera i etykiety
         self.font_scale_slider.set(slider_value)

@@ -196,6 +196,13 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])
         width_px = max(80, min(400, int(max_content * 9 + 24)))
         sheet.column_width(column=col, width=width_px)
+    
+    # Skalowanie fontów
+    sheet.set_options(
+        font=("Segoe UI", scale_font_size(10), "normal"),
+        header_font=("Segoe UI", scale_font_size(10), "bold")
+    )  # type: ignore
+    
     # Wycentrowanie kolumn ID i Kraj
     sheet.align_columns(columns=[0, 3], align="center")
     # Aktywujemy event column_header_click w enable_bindings (można zostawić, nie przeszkadza)

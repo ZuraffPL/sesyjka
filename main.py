@@ -13,13 +13,15 @@ import statystyki # type: ignore
 import about_dialog
 import apphistory
 import database_manager
+import font_scaling
+from font_scaling import scale_font_size
 
 # Konfiguracja CustomTkinter
 ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.14"
+APP_VERSION = "0.3.15"
 START_WIDTH = 1800
 START_HEIGHT = 1000
 
@@ -228,7 +230,7 @@ class SesyjkaApp(ctk.CTk):
             group.pack(side=tk.LEFT, padx=12, pady=8, ipadx=8, ipady=4)
             
             # Nagłówek grupy
-            label = ctk.CTkLabel(group, text=name, font=ctk.CTkFont(family='Segoe UI', size=13, weight='bold'))
+            label = ctk.CTkLabel(group, text=name, font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(13), weight='bold'))
             label.pack(side=tk.TOP, pady=(4, 6))
             
             # Kontener na przyciski
@@ -242,7 +244,7 @@ class SesyjkaApp(ctk.CTk):
                 command=add_func, 
                 width=90,
                 height=32,
-                font=ctk.CTkFont(family='Segoe UI', size=11, weight='bold'),
+                font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
                 fg_color="#2E7D32",
                 hover_color="#1B5E20"
             )
@@ -256,7 +258,7 @@ class SesyjkaApp(ctk.CTk):
                     command=del_func, 
                     width=90,
                     height=32,
-                    font=ctk.CTkFont(family='Segoe UI', size=11, weight='bold'),
+                    font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
                     fg_color="#C62828",
                     hover_color="#B71C1C"
                 )
@@ -271,7 +273,7 @@ class SesyjkaApp(ctk.CTk):
         
         # Górny rząd - przyciski O programie i Historia wersji
         top_row = ctk.CTkFrame(right_buttons_frame, fg_color="transparent")
-        top_row.pack(side=tk.TOP, pady=(0, 8))
+        top_row.pack(side=tk.TOP, pady=(0, 4))
         
         # Przycisk "O programie"
         about_btn = ctk.CTkButton(
@@ -280,7 +282,7 @@ class SesyjkaApp(ctk.CTk):
             command=self.show_about,
             width=120,
             height=28,
-            font=ctk.CTkFont(family='Segoe UI', size=11)
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11))
         )
         about_btn.pack(side=tk.LEFT, padx=(0, 6))
         
@@ -291,9 +293,39 @@ class SesyjkaApp(ctk.CTk):
             command=self.show_version_history,
             width=120,
             height=28,
-            font=ctk.CTkFont(family='Segoe UI', size=11)
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11))
         )
         history_btn.pack(side=tk.LEFT)
+        
+        # Środkowy rząd - Skalowanie fontów
+        font_scale_frame = ctk.CTkFrame(right_buttons_frame, fg_color="transparent")
+        font_scale_frame.pack(side=tk.TOP, pady=(0, 4))
+        
+        font_label = ctk.CTkLabel(
+            font_scale_frame, 
+            text="🔤 Czcionka:", 
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(10))
+        )
+        font_label.pack(side=tk.LEFT, padx=(0, 4))
+        
+        self.font_scale_value_label = ctk.CTkLabel(
+            font_scale_frame, 
+            text="100%", 
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(10), weight='bold'),
+            width=45
+        )
+        self.font_scale_value_label.pack(side=tk.LEFT, padx=(0, 4))
+        
+        self.font_scale_slider = ctk.CTkSlider(
+            font_scale_frame,
+            from_=80,
+            to=120,
+            number_of_steps=8,
+            command=self.on_font_scale_change,
+            width=150
+        )
+        self.font_scale_slider.set(100)
+        self.font_scale_slider.pack(side=tk.LEFT)
         
         # Dolny rząd - Przełącznik trybu jasny/ciemny
         mode_frame = ctk.CTkFrame(right_buttons_frame, fg_color="transparent")
@@ -302,7 +334,7 @@ class SesyjkaApp(ctk.CTk):
         self.mode_label = ctk.CTkLabel(
             mode_frame, 
             text="☀️ Jasny", 
-            font=ctk.CTkFont(family='Segoe UI', size=11)
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11))
         )
         self.mode_label.pack(side=tk.LEFT, padx=(0, 8))
         
@@ -360,6 +392,37 @@ class SesyjkaApp(ctk.CTk):
         self.mode_label.configure(text="🌙 Ciemny" if self.dark_mode else "☀️ Jasny")
         
         # Odśwież wszystkie zakładki
+        import systemy_rpg, sesje_rpg, gracze, wydawcy, statystyki
+        systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode)
+        sesje_rpg.fill_sesje_rpg_tab(self.tabs["Sesje RPG"], dark_mode=self.dark_mode)
+        gracze.fill_gracze_tab(self.tabs["Gracze"], dark_mode=self.dark_mode)
+        wydawcy.fill_wydawcy_tab(self.tabs["Wydawcy"], dark_mode=self.dark_mode)
+        statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=self.dark_mode)
+    
+    def on_font_scale_change(self, value: float) -> None:
+        """Zmienia globalną skalę fontów w aplikacji"""
+        scale_percent = int(value)
+        
+        # Zapisz skalę do modułu font_scaling
+        font_scaling.set_font_scale_factor(scale_percent / 100.0)
+        
+        # Zapisz wartość slidera przed odbudową
+        slider_value = scale_percent
+        
+        # Zniszcz obecny ribbon (pierwszy CTkFrame)
+        for widget in self.winfo_children():
+            if isinstance(widget, ctk.CTkFrame):
+                widget.destroy()
+                break
+        
+        # Odbuduj ribbon
+        self.create_ribbon()
+        
+        # Przywróć wartość slidera i etykiety
+        self.font_scale_slider.set(slider_value)
+        self.font_scale_value_label.configure(text=f"{scale_percent}%")
+        
+        # Odśwież wszystkie zakładki z nową skalą fontów
         import systemy_rpg, sesje_rpg, gracze, wydawcy, statystyki
         systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode)
         sesje_rpg.fill_sesje_rpg_tab(self.tabs["Sesje RPG"], dark_mode=self.dark_mode)

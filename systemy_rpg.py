@@ -9,6 +9,7 @@ import sqlite3
 from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 DB_FILE = get_db_path("systemy_rpg.db")
 
@@ -259,7 +260,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     main_frame.columnconfigure(1, weight=1)
 
     # ID systemu
-    ctk.CTkLabel(main_frame, text=f"ID systemu: {reserved_id}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID systemu: {reserved_id}", font=("Segoe UI", scale_font_size(12))).grid(
         row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
 
     # Nazwa systemu (obowiązkowe)
@@ -363,7 +364,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     vtt_selection_frame.grid(row=0, column=1, rowspan=3, sticky="nsw", padx=(20, 0))
     
     # Label dla platform VTT
-    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", 10))
+    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", scale_font_size(10)))
     vtt_label.pack(anchor="w", pady=(0, 5))
     
     # Scrollable frame dla checkboxów VTT
@@ -1758,7 +1759,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     vtt_selection_frame.grid(row=0, column=1, rowspan=3, sticky="nsw", padx=(20, 0))
     
     # Label dla platform VTT
-    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", 10))
+    vtt_label = ctk.CTkLabel(vtt_selection_frame, text="Platformy VTT:", font=("Segoe UI", scale_font_size(10)))
     vtt_label.pack(anchor="w", pady=(0, 5))
     
     # Scrollable frame dla checkboxów VTT
@@ -2098,13 +2099,13 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
     
     if not supplements:
         tk.Label(dialog, text=f"Brak suplementów dla systemu: {system_name}", 
-                font=('Segoe UI', 12), pady=20).pack()
+                font=('Segoe UI', scale_font_size(12)), pady=20).pack()
     else:
         # Nagłówek
         header_frame = tk.Frame(dialog)
         header_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
         tk.Label(header_frame, text=f"Znaleziono {len(supplements)} suplementów:",  # type: ignore 
-                font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT)
+                font=('Segoe UI', scale_font_size(12), 'bold')).pack(side=tk.LEFT)
         
         # Tabela z suplementami
         headers = ["ID", "Nazwa suplementu", "Typ suplementu", "Wydawca", "Fizyczny", "PDF", "Język"]
@@ -2172,7 +2173,7 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     main_frame.columnconfigure(1, weight=1)
 
     # ID systemu
-    ctk.CTkLabel(main_frame, text=f"ID systemu: {reserved_id}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID systemu: {reserved_id}", font=("Segoe UI", scale_font_size(12))).grid(
         row=0, column=0, columnspan=2, pady=(0, 8), sticky="w"
     )
 

@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.14-blue)
+![Version](https://img.shields.io/badge/version-0.3.15-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.14-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.15-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.14.exe`
+4. Uruchom `Sesyjka-v0.3.15.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -77,11 +77,11 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.14-Windows.zip`:
+   - **SHA256 checksum** dla `Sesyjka-v0.3.15-Windows.zip`:
      ```
-     A4D0CE6CD71626C75AB246D7C96D0CE1CCDEB233EB771512A2DDBA4AF8C70F14
+     82A776A92BA97B7DCD23AE33A2993EE6F2E7094A7308B0F678687861B7BB73E2
      ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.14-Windows.zip -Algorithm SHA256`
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.15-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -163,6 +163,16 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.15 (16.02.2026)
+- ✨ **NOWE**: Globalne skalowanie fontów - suwak w ribbon (80%-120%, 8 kroków)
+- 🎯 **Rozwiązanie**: Użytkownicy zgłaszali różne potrzeby - dla niektórych domyślne fonty były za małe, dla innych za duże
+- 📐 **Zaktualizowano 96 specyfikacji fontów** w 9 plikach (main.py, about_dialog.py, gracze.py, wydawcy.py, systemy_rpg.py, sesje_rpg_dialogs.py, statystyki.py, apphistory.py, font_scaling.py)
+- 🔧 **Działanie**: Font 12 → 80%=10 (min 8), 100%=12 (domyślnie), 120%=14
+- 📊 **Matplotlib też skaluje** - również wykresy statystyk dostosowują się
+- 💾 **Nowy moduł**: font_scaling.py z funkcją scale_font_size() i globalną zmienną font_scale_factor
+- ⚡ **Natychmiastowa zmiana** - ribbon rebuild po każdej zmianie suwakiem
+- ✅ **Wszystkie elementy UI**: dialogi, przyciski, labele, tabele zachowują proporcje
 
 ### v0.3.14 (16.02.2026)
 - 🐛 **NAPRAWIONO**: Wszystkie pozostałe hardcodowane ścieżki do baz danych (11 miejsc)

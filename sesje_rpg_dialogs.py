@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Optional, Callable, Sequence, Any, Dict, List, Tuple
 import customtkinter as ctk
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
 DB_FILE = get_db_path("sesje_rpg.db")
@@ -154,7 +155,7 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
     row = 0
     
     # ID Sesji
-    ctk.CTkLabel(main_frame, text=f"ID Sesji: {get_first_free_id()}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID Sesji: {get_first_free_id()}", font=("Segoe UI", scale_font_size(12))).grid(
         row=row, column=0, columnspan=2, pady=(0, 10), sticky="w")
     row += 1
     
@@ -691,7 +692,7 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
     row = 0
     
     # ID Sesji (tylko do odczytu)
-    ctk.CTkLabel(main_frame, text=f"ID Sesji: {session_data[0]}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID Sesji: {session_data[0]}", font=("Segoe UI", scale_font_size(12))).grid(
         row=row, column=0, columnspan=2, pady=(0, 10), sticky="w")
     row += 1
     

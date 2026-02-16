@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import webbrowser
 import customtkinter as ctk  # type: ignore
+from font_scaling import scale_font_size
 
 def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type: ignore
     """
@@ -46,7 +47,7 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type:
     title_label = ctk.CTkLabel(
         main_frame,
         text=app_name,
-        font=('Segoe UI', 28, 'bold')
+        font=('Segoe UI', scale_font_size(28), 'bold')
     )
     title_label.pack(pady=(10, 5))
     
@@ -54,7 +55,7 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type:
     version_label = ctk.CTkLabel(
         main_frame,
         text=f"Wersja {app_version}",
-        font=('Segoe UI', 14)
+        font=('Segoe UI', scale_font_size(14))
     )
     version_label.pack(pady=(0, 15))
     
@@ -74,7 +75,7 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.10"): # type:
     text_widget = ctk.CTkTextbox(
         text_frame,
         wrap=tk.WORD,
-        font=('Segoe UI', 11)
+        font=('Segoe UI', scale_font_size(11))
     )
     
     # Treść z opisem funkcjonalności
@@ -182,7 +183,7 @@ DODATKOWE FUNKCJE:
     author_button = ctk.CTkButton(
         button_frame,
         text="Strona autora",
-        font=('Segoe UI', 11),
+        font=('Segoe UI', scale_font_size(11)),
         width=120,
         fg_color="#1976D2",
         hover_color="#1565C0",
@@ -197,7 +198,7 @@ DODATKOWE FUNKCJE:
     support_button = ctk.CTkButton(
         button_frame,
         text="💖 Wesprzyj mnie",
-        font=('Segoe UI', 11),
+        font=('Segoe UI', scale_font_size(11)),
         width=140,
         fg_color="#C62828",
         hover_color="#B71C1C",
@@ -209,7 +210,7 @@ DODATKOWE FUNKCJE:
     close_button = ctk.CTkButton(
         button_frame,
         text="Zamknij",
-        font=('Segoe UI', 11),
+        font=('Segoe UI', scale_font_size(11)),
         width=100,
         fg_color="#666666",
         hover_color="#555555",

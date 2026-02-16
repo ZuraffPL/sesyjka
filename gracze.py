@@ -6,6 +6,7 @@ import sqlite3
 from typing import Optional, Callable, Sequence, Any, Union, List, Dict
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 DB_FILE = get_db_path("gracze.db")
 
@@ -137,7 +138,7 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
     # ID gracza
-    ctk.CTkLabel(main_frame, text="ID gracza:", font=ctk.CTkFont(size=12)).grid(row=0, column=0, pady=(0, 10), padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="ID gracza:", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=0, column=0, pady=(0, 10), padx=(0, 10), sticky="w")  # type: ignore
     id_entry = ctk.CTkEntry(main_frame, width=250, state="disabled")  # type: ignore
     id_entry.grid(row=0, column=1, pady=(0, 10), sticky="ew")
     id_entry.configure(state="normal")
@@ -145,24 +146,24 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
     id_entry.configure(state="disabled")
 
     # Nick gracza
-    ctk.CTkLabel(main_frame, text="Nick gracza *", font=ctk.CTkFont(size=12)).grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Nick gracza *", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     nick_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Wpisz nick...")  # type: ignore
     nick_entry.grid(row=1, column=1, pady=8, sticky="ew")
     nick_entry.focus_set()
 
     # Imię i nazwisko
-    ctk.CTkLabel(main_frame, text="Imię i nazwisko", font=ctk.CTkFont(size=12)).grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Imię i nazwisko", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     name_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Opcjonalnie...")  # type: ignore
     name_entry.grid(row=2, column=1, pady=8, sticky="ew")
 
     # Płeć
-    ctk.CTkLabel(main_frame, text="Płeć", font=ctk.CTkFont(size=12)).grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Płeć", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     gender_var = tk.StringVar(value="Kobieta")
     gender_combo = ctk.CTkComboBox(main_frame, width=250, values=["Kobieta", "Mężczyzna", "Niebinarna", "Inne"], variable=gender_var, state="readonly")  # type: ignore
     gender_combo.grid(row=3, column=1, pady=8, sticky="ew")
 
     # Social media
-    ctk.CTkLabel(main_frame, text="Social media / strona", font=ctk.CTkFont(size=12)).grid(row=4, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Social media / strona", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=4, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     social_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Link lub @nick...")  # type: ignore
     social_entry.grid(row=4, column=1, pady=8, sticky="ew")
     
@@ -180,11 +181,11 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
             glowny_var.set(False)
             glowny_check.deselect()  # type: ignore
     
-    glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=11))  # type: ignore
+    glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
     glowny_check.grid(row=5, column=0, columnspan=2, pady=8, sticky="w")
     
     # Checkbox ważna osoba
-    wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=11))  # type: ignore
+    wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
     wazna_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
 
     def on_ok() -> None:
@@ -231,9 +232,9 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
     btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")  # type: ignore
     btn_frame.grid(row=7, column=0, columnspan=2, pady=(15, 0))
     
-    btn_ok = ctk.CTkButton(btn_frame, text="✚ Dodaj", command=on_ok, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=12, weight="bold"))  # type: ignore
+    btn_ok = ctk.CTkButton(btn_frame, text="✚ Dodaj", command=on_ok, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=scale_font_size(12), weight="bold"))  # type: ignore
     btn_ok.pack(side=tk.LEFT, padx=(0, 10))
-    btn_cancel = ctk.CTkButton(btn_frame, text="Anuluj", command=on_cancel, width=100, fg_color="#666666", hover_color="#555555", font=ctk.CTkFont(size=12))  # type: ignore
+    btn_cancel = ctk.CTkButton(btn_frame, text="Anuluj", command=on_cancel, width=100, fg_color="#666666", hover_color="#555555", font=ctk.CTkFont(size=scale_font_size(12)))  # type: ignore
     btn_cancel.pack(side=tk.LEFT)
     
     dialog.protocol("WM_DELETE_WINDOW", on_cancel)
@@ -714,28 +715,28 @@ def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_cal
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     
     # ID gracza
-    ctk.CTkLabel(main_frame, text=f"ID gracza: {values[0]}", font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text=f"ID gracza: {values[0]}", font=ctk.CTkFont(size=scale_font_size(12), weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")  # type: ignore
     
     # Nick gracza
-    ctk.CTkLabel(main_frame, text="Nick gracza *", font=ctk.CTkFont(size=12)).grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Nick gracza *", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     nick_entry = ctk.CTkEntry(main_frame, width=250)  # type: ignore
     nick_entry.grid(row=1, column=1, pady=8, sticky="ew")
     nick_entry.insert(0, values[1] if values[1] is not None else "")
     
     # Imię i nazwisko
-    ctk.CTkLabel(main_frame, text="Imię i nazwisko", font=ctk.CTkFont(size=12)).grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Imię i nazwisko", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     name_entry = ctk.CTkEntry(main_frame, width=250)  # type: ignore
     name_entry.grid(row=2, column=1, pady=8, sticky="ew")
     name_entry.insert(0, values[2] if values[2] is not None else "")
     
     # Płeć
-    ctk.CTkLabel(main_frame, text="Płeć", font=ctk.CTkFont(size=12)).grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Płeć", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     gender_var = tk.StringVar(value=values[3] if values[3] else "Kobieta")
     gender_combo = ctk.CTkComboBox(main_frame, width=250, values=["Kobieta", "Mężczyzna", "Niebinarna", "Inne"], variable=gender_var, state="readonly")  # type: ignore
     gender_combo.grid(row=3, column=1, pady=8, sticky="ew")
     
     # Social media
-    ctk.CTkLabel(main_frame, text="Social media / strona", font=ctk.CTkFont(size=12)).grid(row=4, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    ctk.CTkLabel(main_frame, text="Social media / strona", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=4, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     social_entry = ctk.CTkEntry(main_frame, width=250)  # type: ignore
     social_entry.grid(row=4, column=1, pady=8, sticky="ew")
     social_entry.insert(0, values[4] if values[4] is not None else "")
@@ -754,13 +755,13 @@ def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_cal
             glowny_var.set(False)
             glowny_check.deselect()  # type: ignore
     
-    glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=11))  # type: ignore
+    glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
     glowny_check.grid(row=5, column=0, columnspan=2, pady=8, sticky="w")
     if glowny_var.get():
         glowny_check.select()  # type: ignore
     
     # Checkbox ważna osoba
-    wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=11))  # type: ignore
+    wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
     wazna_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
     if wazna_var.get():
         wazna_check.select()  # type: ignore
@@ -797,9 +798,9 @@ def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_cal
     btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")  # type: ignore
     btn_frame.grid(row=7, column=0, columnspan=2, pady=(15, 0))
     
-    btn_save = ctk.CTkButton(btn_frame, text="💾 Zapisz", command=on_save, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=12, weight="bold"))  # type: ignore
+    btn_save = ctk.CTkButton(btn_frame, text="💾 Zapisz", command=on_save, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=scale_font_size(12), weight="bold"))  # type: ignore
     btn_save.pack(side=tk.LEFT, padx=(0, 10))
-    btn_cancel = ctk.CTkButton(btn_frame, text="Anuluj", command=on_cancel, width=100, fg_color="#666666", hover_color="#555555", font=ctk.CTkFont(size=12))  # type: ignore
+    btn_cancel = ctk.CTkButton(btn_frame, text="Anuluj", command=on_cancel, width=100, fg_color="#666666", hover_color="#555555", font=ctk.CTkFont(size=scale_font_size(12)))  # type: ignore
     btn_cancel.pack(side=tk.LEFT)
     
     dialog.protocol("WM_DELETE_WINDOW", on_cancel)

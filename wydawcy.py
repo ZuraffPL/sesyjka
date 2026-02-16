@@ -6,6 +6,7 @@ from typing import Optional, Union, List, Dict, Any
 import tksheet  # type: ignore # <- przywrócono wymagany import
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 DB_FILE = get_db_path("wydawcy.db")
 
@@ -122,7 +123,7 @@ def dodaj_wydawce(parent: tk.Tk, refresh_callback=None): # type: ignore
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
     # ID wydawcy (tylko do odczytu)
-    ctk.CTkLabel(main_frame, text=f"ID wydawcy: {reserved_id}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID wydawcy: {reserved_id}", font=("Segoe UI", scale_font_size(12))).grid(
         row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
 
     # Nazwa wydawcy
@@ -500,7 +501,7 @@ def open_edit_dialog(parent, values, refresh_callback=None): # type: ignore
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
     # ID wydawcy (tylko do odczytu)
-    ctk.CTkLabel(main_frame, text=f"ID wydawcy: {values[0]}", font=("Segoe UI", 12)).grid(
+    ctk.CTkLabel(main_frame, text=f"ID wydawcy: {values[0]}", font=("Segoe UI", scale_font_size(12))).grid(
         row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
 
     # Nazwa wydawcy
@@ -576,13 +577,13 @@ def usun_wydawce_dialog(parent, refresh_callback=None): # type: ignore
     main_frame = ctk.CTkFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
-    ctk.CTkLabel(main_frame, text="Wybierz wydawcę do usunięcia:", font=("Segoe UI", 12)).pack(pady=(0, 10))
+    ctk.CTkLabel(main_frame, text="Wybierz wydawcę do usunięcia:", font=("Segoe UI", scale_font_size(12))).pack(pady=(0, 10))
     
     # Ramka dla listbox ze scrollem
     list_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
     list_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
     
-    listbox = tk.Listbox(list_frame, width=44, height=8, font=("Segoe UI", 10))
+    listbox = tk.Listbox(list_frame, width=44, height=8, font=("Segoe UI", scale_font_size(10)))
     for rec in records:
         listbox.insert(tk.END, f"{rec[0]}. {rec[1]}")
     listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)

@@ -2,6 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk  # type: ignore
+from font_scaling import scale_font_size
 
 def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     """
@@ -33,7 +34,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     title_label = ctk.CTkLabel(
         main_frame,
         text=f"{app_name} - Historia wersji",
-        font=('Segoe UI', 20, 'bold')
+        font=('Segoe UI', scale_font_size(20), 'bold')
     )
     title_label.pack(pady=(10, 15))
     
@@ -47,6 +48,47 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     
     # Historia wersji
     version_history = [ # type: ignore
+        {
+            "version": "0.3.15",
+            "date": "16.02.2026",
+            "changes": [
+                "✨ GLOBALNE SKALOWANIE FONTÓW (80%-120%):\n",
+                "",
+                "🎯 PROBLEM: PREFERENCJE UŻYTKOWNIKÓW:",
+                "  • Testerzy zgłaszali różne potrzeby:",
+                "    - Niektórzy: domyślne fonty za małe",
+                "    - Inni: domyślne fonty za duże",
+                "  • Rozdzielczości ekranów 1080p, 2K, 4K różnią się",
+                "  • Brak uniwersalnej wielkości dla wszystkich",
+                "",
+                "✅ ROZWIĄZANIE - SUWAK W RIBBON:",
+                "  • Nowy moduł: font_scaling.py z funkcją scale_font_size()",
+                "  • Suwak w sekcji ribbon (80%-120%, 8 kroków)",
+                "  • Zaktualizowano 96 specyfikacji fontów w 9 plikach:",
+                "    - main.py (10), about_dialog.py (6)",
+                "    - gracze.py (18), wydawcy.py (4)",
+                "    - systemy_rpg.py (6), sesje_rpg_dialogs.py (2)",
+                "    - sesje_rpg.py (0), statystyki.py (33)",
+                "    - apphistory.py (5), font_scaling.py (12)",
+                "",
+                "🔧 DZIAŁANIE:",
+                "  • Font 12 → scale_font_size(12):",
+                "    - 80%  = 10 (min 8)",
+                "    - 100% = 12 (domyślnie)",
+                "    - 120% = 14",
+                "  • Matplotlib również skaluje (wykresy statystyk)",
+                "  • Zmiana natychmiastowa - ribbon się odbudowuje",
+                "  • Wszystkie elementy UI: dialogi, przyciski,",
+                "    labele, tabele zachowują proporcje",
+                "",
+                "💾 SZCZEGÓŁY TECHNICZNE:",
+                "  • Slider: 0.8-1.2 z krokiem 0.05",
+                "  • Zmienna globalna font_scale_factor",
+                "  • Funkcje: set/get_font_scale_factor()",
+                "  • Minimum: 8px (ochrona czytelności)",
+                "  • Ribbon rebuild po każdej zmianie"
+            ]
+        },
         {
             "version": "0.3.14",
             "date": "16.02.2026",
@@ -651,7 +693,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         version_label = ctk.CTkLabel(
             header_frame,
             text=f"Wersja {version_info['version']}",
-            font=('Segoe UI', 14, 'bold'),
+            font=('Segoe UI', scale_font_size(14), 'bold'),
             text_color="#1976D2"
         )
         version_label.pack(side=tk.LEFT)
@@ -659,7 +701,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         date_label = ctk.CTkLabel(
             header_frame,
             text=version_info['date'], # type: ignore
-            font=('Segoe UI', 12)
+            font=('Segoe UI', scale_font_size(12))
         )
         date_label.pack(side=tk.RIGHT)
         
@@ -668,7 +710,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         changes_label = ctk.CTkLabel(
             version_frame,
             text=changes_text,
-            font=('Segoe UI', 11),
+            font=('Segoe UI', scale_font_size(11)),
             justify=tk.LEFT,
             anchor='w'
         )
@@ -682,7 +724,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     close_button = ctk.CTkButton(
         button_frame,
         text="Zamknij",
-        font=('Segoe UI', 11),
+        font=('Segoe UI', scale_font_size(11)),
         width=120,
         fg_color="#666666",
         hover_color="#555555",

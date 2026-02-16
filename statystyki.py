@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt  # type: ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # type: ignore
 from matplotlib.figure import Figure  # type: ignore
 from database_manager import get_db_path
+from font_scaling import scale_font_size
 
 def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     """
@@ -43,7 +44,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     title_label = tk.Label(
         header_frame,
         text="Statystyki i Raporty",
-        font=('Segoe UI', 24, 'bold'),
+        font=('Segoe UI', scale_font_size(24), 'bold'),
         bg=bg_color,
         fg=fg_color
     )
@@ -53,7 +54,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     refresh_button = tk.Button(
         header_frame,
         text="🔄 Odśwież statystyki",
-        font=('Segoe UI', 11, 'bold'),
+        font=('Segoe UI', scale_font_size(11), 'bold'),
         bg='#2E7D32' if not dark_mode else '#1B5E20',
         fg='white',
         activebackground='#1B5E20' if not dark_mode else '#2E7D32',
@@ -104,7 +105,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     stats_title = tk.Label(
         stats_frame,
         text="📊 Liczba sesji RPG przeprowadzonych w poszczególnych latach",
-        font=('Segoe UI', 14, 'bold'),
+        font=('Segoe UI', scale_font_size(14), 'bold'),
         bg=frame_bg,
         fg=fg_color
     )
@@ -178,7 +179,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 legend_text = tk.Label(
                     legend_item,
                     text=f"{year}: {count} sesji ({percentage:.1f}%)",
-                    font=('Segoe UI', 12),
+                    font=('Segoe UI', scale_font_size(12)),
                     bg=frame_bg,
                     fg=fg_color,
                     anchor='w'
@@ -200,7 +201,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 startangle=90,
                 explode=[0.02] * len(years_data),
                 shadow=True,
-                textprops={'fontsize': 11, 'color': fg_color}
+                textprops={'fontsize': scale_font_size(11), 'color': fg_color}
             )
             
             # Styl etykiet procentowych
@@ -208,7 +209,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 autotext.set_color('white')
                 autotext.set_fontweight('bold')
             
-            ax.set_title('Sesje RPG według roku', fontsize=11, fontweight='bold', color=fg_color, pad=5)
+            ax.set_title('Sesje RPG według roku', fontsize=scale_font_size(11), fontweight='bold', color=fg_color, pad=5)
             
             # Osadzenie wykresu w tkinter
             canvas_widget = FigureCanvasTkAgg(fig, chart_frame)
@@ -219,7 +220,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
             summary_label = tk.Label(
                 stats_frame,
                 text=f"Łącznie: {total_sessions} sesji w {len(sorted_years)} latach", # type: ignore
-                font=('Segoe UI', 12, 'bold'),
+                font=('Segoe UI', scale_font_size(12), 'bold'),
                 bg=frame_bg,
                 fg=fg_color
             )
@@ -228,7 +229,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
             no_data_label = tk.Label(
                 stats_frame,
                 text="Brak danych do wyświetlenia",
-                font=('Segoe UI', 12),
+                font=('Segoe UI', scale_font_size(12)),
                 bg=frame_bg,
                 fg=fg_color
             )
@@ -238,7 +239,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
         error_label = tk.Label(
             stats_frame,
             text=f"Błąd podczas pobierania danych:\n{str(e)}",
-            font=('Segoe UI', 12),
+            font=('Segoe UI', scale_font_size(12)),
             bg=frame_bg,
             fg='#CC0000'
         )
@@ -252,7 +253,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     user_stats_title = tk.Label(
         user_stats_frame,
         text="👤 Główny użytkownik: Mistrz Gry vs Gracz",
-        font=('Segoe UI', 14, 'bold'),
+        font=('Segoe UI', scale_font_size(14), 'bold'),
         bg=frame_bg,
         fg=fg_color
     )
@@ -327,7 +328,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 nick_label = tk.Label(
                     user_stats_frame,
                     text=f"Nick: {main_user_nick}",
-                    font=('Segoe UI', 12, 'italic'),
+                    font=('Segoe UI', scale_font_size(12), 'italic'),
                     bg=frame_bg,
                     fg=fg_color
                 )
@@ -340,7 +341,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 year_label_select = tk.Label(
                     year_selector_frame,
                     text="Wybierz rok:",
-                    font=('Segoe UI', 11),
+                    font=('Segoe UI', scale_font_size(11)),
                     bg=frame_bg,
                     fg=fg_color
                 )
@@ -354,7 +355,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                     values=sorted_years_user, # type: ignore
                     state='readonly',
                     width=10,
-                    font=('Segoe UI', 10)
+                    font=('Segoe UI', scale_font_size(10))
                 )
                 year_combo_user.pack(side=tk.LEFT)
                 
@@ -398,14 +399,14 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                             startangle=90,
                             explode=explode,
                             shadow=True,
-                            textprops={'fontsize': 10, 'color': fg_color}
+                            textprops={'fontsize': scale_font_size(10), 'color': fg_color}
                         )
                         
                         for autotext in autotexts:
                             autotext.set_color('white')
                             autotext.set_fontweight('bold')
                         
-                        ax2.set_title(f'MG vs Gracz', fontsize=11, fontweight='bold', color=fg_color, pad=5)
+                        ax2.set_title(f'MG vs Gracz', fontsize=scale_font_size(11), fontweight='bold', color=fg_color, pad=5)
                         
                         # Osadzenie wykresu w tkinter
                         canvas_widget2 = FigureCanvasTkAgg(fig2, content_frame)
@@ -415,7 +416,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                         no_data_label = tk.Label(
                             content_frame,
                             text=f"Brak sesji w roku {selected_year}",
-                            font=('Segoe UI', 11),
+                            font=('Segoe UI', scale_font_size(11)),
                             bg=frame_bg,
                             fg=fg_color
                         )
@@ -459,7 +460,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                     year_label = tk.Label(
                         year_frame,
                         text=f"{year}:",
-                        font=('Segoe UI', 11, 'bold'),
+                        font=('Segoe UI', scale_font_size(11), 'bold'),
                         bg=frame_bg,
                         fg=fg_color,
                         width=6,
@@ -471,7 +472,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                     mg_label = tk.Label(
                         year_frame,
                         text=f"🎲 MG: {mg_count} ({mg_pct:.1f}%)",
-                        font=('Segoe UI', 10),
+                        font=('Segoe UI', scale_font_size(10)),
                         bg=frame_bg,
                         fg='#2196F3' if not dark_mode else '#64B5F6',
                         width=16,
@@ -483,7 +484,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                     player_label = tk.Label(
                         year_frame,
                         text=f"👥 Gracz: {player_count} ({player_pct:.1f}%)",
-                        font=('Segoe UI', 10),
+                        font=('Segoe UI', scale_font_size(10)),
                         bg=frame_bg,
                         fg='#4CAF50' if not dark_mode else '#81C784',
                         width=18,
@@ -497,7 +498,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 summary_user_label = tk.Label(
                     user_stats_frame,
                     text=f"Łącznie: {total_mg_all} sesji jako MG, {total_player_all} sesji jako Gracz",
-                    font=('Segoe UI', 12, 'bold'),
+                    font=('Segoe UI', scale_font_size(12), 'bold'),
                     bg=frame_bg,
                     fg=fg_color
                 )
@@ -506,7 +507,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 no_sessions_label = tk.Label(
                     user_stats_frame,
                     text=f"Główny użytkownik '{main_user_nick}' nie ma jeszcze żadnych sesji",
-                    font=('Segoe UI', 12),
+                    font=('Segoe UI', scale_font_size(12)),
                     bg=frame_bg,
                     fg=fg_color
                 )
@@ -515,7 +516,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
             no_user_label = tk.Label(
                 user_stats_frame,
                 text="Nie znaleziono głównego użytkownika",
-                font=('Segoe UI', 12),
+                font=('Segoe UI', scale_font_size(12)),
                 bg=frame_bg,
                 fg=fg_color
             )
@@ -525,7 +526,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
         user_error_label = tk.Label(
             user_stats_frame,
             text=f"Błąd podczas pobierania danych:\n{str(e)}",
-            font=('Segoe UI', 12),
+            font=('Segoe UI', scale_font_size(12)),
             bg=frame_bg,
             fg='#CC0000'
         )
@@ -539,7 +540,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     system_sessions_title = tk.Label(
         system_sessions_frame,
         text="🎮 Systemy RPG: Ilość sesji",
-        font=('Segoe UI', 14, 'bold'),
+        font=('Segoe UI', scale_font_size(14), 'bold'),
         bg=frame_bg,
         fg=fg_color
     )
@@ -552,7 +553,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     year_label = tk.Label(
         year_selector_frame,
         text="Wybierz rok:",
-        font=('Segoe UI', 11),
+        font=('Segoe UI', scale_font_size(11)),
         bg=frame_bg,
         fg=fg_color
     )
@@ -588,7 +589,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 values=sorted_years_list,
                 state="readonly",
                 width=10,
-                font=('Segoe UI', 10)
+                font=('Segoe UI', scale_font_size(10))
             )
             year_combo.pack(side=tk.LEFT)
             
@@ -663,9 +664,9 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                         
                         # Etykiety
                         ax3.set_yticks(y_pos)
-                        ax3.set_yticklabels(systems, fontsize=9, color=fg_color)
-                        ax3.set_xlabel('Ilość sesji', fontsize=10, color=fg_color, fontweight='bold')
-                        ax3.set_title(f'Sesje według systemów w {selected_year}', fontsize=11, fontweight='bold', color=fg_color, pad=10)
+                        ax3.set_yticklabels(systems, fontsize=scale_font_size(9), color=fg_color)
+                        ax3.set_xlabel('Ilość sesji', fontsize=scale_font_size(10), color=fg_color, fontweight='bold')
+                        ax3.set_title(f'Sesje według systemów w {selected_year}', fontsize=scale_font_size(11), fontweight='bold', color=fg_color, pad=10)
                         
                         # Styl osi
                         ax3.tick_params(axis='x', colors=fg_color)
@@ -681,7 +682,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                             ax3.text(width + 0.1, bar.get_y() + bar.get_height()/2, 
                                     str(count), 
                                     ha='left', va='center',
-                                    fontweight='bold', fontsize=9, color=fg_color)
+                                    fontweight='bold', fontsize=scale_font_size(9), color=fg_color)
                         
                         # Dopasuj layout
                         fig3.tight_layout()
@@ -696,7 +697,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                         summary_system_label = tk.Label(
                             chart_system_frame,
                             text=f"Łącznie: {total_system_sessions} sesji w {len(systems)} systemach",
-                            font=('Segoe UI', 11, 'bold'),
+                            font=('Segoe UI', scale_font_size(11), 'bold'),
                             bg=frame_bg,
                             fg=fg_color
                         )
@@ -705,7 +706,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                         no_data_system_label = tk.Label(
                             chart_system_frame,
                             text=f"Brak sesji w roku {selected_year}",
-                            font=('Segoe UI', 11),
+                            font=('Segoe UI', scale_font_size(11)),
                             bg=frame_bg,
                             fg=fg_color
                         )
@@ -715,7 +716,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                     error_system_label = tk.Label(
                         chart_system_frame,
                         text=f"Błąd: {str(e)}",
-                        font=('Segoe UI', 10),
+                        font=('Segoe UI', scale_font_size(10)),
                         bg=frame_bg,
                         fg='#CC0000'
                     )
@@ -728,7 +729,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
             no_years_label = tk.Label(
                 system_sessions_frame,
                 text="Brak danych o sesjach",
-                font=('Segoe UI', 11),
+                font=('Segoe UI', scale_font_size(11)),
                 bg=frame_bg,
                 fg=fg_color
             )
@@ -738,7 +739,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
         system_error_label = tk.Label(
             system_sessions_frame,
             text=f"Błąd podczas pobierania danych:\n{str(e)}",
-            font=('Segoe UI', 11),
+            font=('Segoe UI', scale_font_size(11)),
             bg=frame_bg,
             fg='#CC0000'
         )

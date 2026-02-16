@@ -192,39 +192,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - 🛡️ **NAPRAWIONO**: Błędne indeksowanie w filtrach - operacje na złych wierszach
 - 📊 **Wprowadzono `displayed_data`** we wszystkich 4 tabelach dla poprawnego indeksowania
 
-### v0.3.10 (13.02.2026)
-- 🔧 **POPRAWKA KRYTYCZNA**: Naprawiono wykrywanie fizycznej rozdzielczości ekranu
-- 🐛 **Rozwiązany problem**: Windows z wysoką rozdzielczością i skalowaniem DPI (np. 2880x1800 @ 300%)
-- 🖥️ **Wykrywanie fizyczne**: Użycie `EnumDisplaySettings` i `SetProcessDpiAwareness` na Windows
-- 📊 **Wynik**: Poprawne skalowanie interfejsu niezależnie od ustawień skalowania Windows
-- ✅ **Tester potwierdził**: Działa poprawnie na 2880x1800 z 300% skalowaniem Windows
-
-### v0.3.9 (13.02.2026)
-- 🖥️ **Automatyczne skalowanie DPI** - interfejs dostosowuje się do wysokich rozdzielczości
-- 📐 **Inteligentne wykrywanie ekranu** - automatyczny pomiar rozdzielczości przy starcie
-- 🔍 **Skalowanie proporcjonalne** - od 100% (Full HD) do 200% (4K) i więcej
-- 📊 **Informacje o skalowaniu** - okno "O programie" pokazuje wykrytą rozdzielczość i współczynnik
-- ✨ **Poprawa czytelności** - elementy pozostają czytelne na ekranach 2K, 4K i wyższych
-- 🎯 **Rozwiązanie problemu** - brak mikroskopijnych elementów na dużych ekranach
-
-### v0.3.8 (13.02.2026)
-- 🗄️ **System zarządzania bazami danych** - pełna kompatybilność wsteczna
-- 📁 **Nowa lokalizacja baz** - `AppData\Local\Sesyjka` (Windows) lub `~/.sesyjka` (Linux/Mac)
-- 🔄 **Automatyczna migracja** - stare bazy są automatycznie przenoszone
-- 🛡️ **System backupów** - automatyczne kopie zapasowe przed każdą migracją
-- 📊 **Wersjonowanie schematu** - bezpieczne aktualizacje struktury baz
-- 📖 **Dokumentacja** - nowy przewodnik [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
-- ✅ **Bezpieczeństwo danych** - Twoje dane są chronione przy każdej aktualizacji
-### v0.3.7 (13.02.2026)
-- 🔄 Status "Na sprzedaż" wyświetla się jako "W kolekcji, Na sprzedaż"
-- 💰 Obsługa ceny zakupu dla statusu "Na sprzedaż"
-- 🎨 Zachowanie czerwonego podświetlenia dla przedmiotów na sprzedaż
-
-### v0.3.6 (13.02.2026)
-- 🔄 Zachowanie filtrów po dodaniu nowych rekordów
-- 📊 Automatyczne odświeżanie statystyk po operacjach CRUD
-- 🔄 Przycisk ręcznego odświeżania statystyk
-- 🐛 Poprawki błędów typowania
+### v0.3.6 - v0.3.10 (13.02.2026)
+**Seria ulepszeń interfejsu i zarządzania danymi**
+- 🖥️ **Automatyczne skalowanie DPI** - interfejs dostosowuje się do rozdzielczości 2K/4K/wyższych
+- 🔧 **Poprawiono wykrywanie fizycznej rozdzielczości** - działa z wysokim skalowaniem Windows (np. 2880x1800 @ 300%)
+- 🗄️ **System zarządzania bazami** - nowa lokalizacja `AppData\Local\Sesyjka` z automatyczną migracją
+- 🛡️ **Automatyczne backupy** - kopie zapasowe przed każdą aktualizacją struktury baz
+- 🔄 **Zachowanie filtrów** po dodaniu rekordów + automatyczne odświeżanie statystyk
+- 💰 **Status "Na sprzedaż"** - obsługa ceny zakupu i wyświetlanie jako "W kolekcji, Na sprzedaż"
 
 ## 🛠️ Technologie
 

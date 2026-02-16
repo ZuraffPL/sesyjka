@@ -250,8 +250,8 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 260
-    dialog.geometry(f"700x520+{x}+{y}")
+    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 275
+    dialog.geometry(f"700x550+{x}+{y}")
     
     # Główna ramka z padding
     main_frame = ctk.CTkFrame(dialog)
@@ -391,16 +391,16 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         
         if is_vtt and is_suplement:
             # VTT + Suplement - największe okno
-            width, height = 850, 850
+            width, height = 850, 880
         elif is_vtt:
             # VTT bez suplementu
             width, height = 850, 680
         elif is_suplement:
             # Suplement bez VTT
-            width, height = 700, 720
+            width, height = 700, 750
         else:
             # Podstawowe okno
-            width, height = 700, 520
+            width, height = 700, 550
         
         new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
         new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
@@ -1670,7 +1670,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     # Słownik do przechowywania zmiennych checkboxów
     typ_suplementu_vars = {}
     typ_suplementu_checkboxes = {}
-    typy_suplementow = ["Scenariusz/kampania", "Rozwinięcie zasad", "Moduł", "Lorebook/Sourcebook", "Bestiariusz"]
+    typy_suplementow = ["Scenariusz/kampania", "Rozwinięcie zasad", "Moduł", "Lorebook/Sourcebook", "Bestiariusz", "Starter/Zestaw Startowy"]
     
     # Parsuj istniejące typy suplementu z bazy (oddzielone " | ")
     istniejace_typy = []
@@ -1795,16 +1795,16 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         
         if is_vtt and is_suplement:
             # VTT + Suplement - największe okno
-            width, height = 850, 850
+            width, height = 850, 880
         elif is_vtt:
             # VTT bez suplementu
             width, height = 850, 680
         elif is_suplement:
             # Suplement bez VTT
-            width, height = 700, 720
+            width, height = 700, 750
         else:
             # Podstawowe okno
-            width, height = 700, 560
+            width, height = 700, 590
         
         new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
         new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
@@ -2163,8 +2163,8 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     
     parent.update_idletasks()
     x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 325
-    dialog.geometry(f"700x650+{x}+{y}")
+    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 340
+    dialog.geometry(f"700x680+{x}+{y}")
     
     # Główny frame z paddingiem
     main_frame = ctk.CTkFrame(dialog)
@@ -2203,7 +2203,7 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     # Słownik do przechowywania zmiennych checkboxów
     typ_suplementu_vars = {}
     typ_suplementu_checkboxes = {}
-    typy_suplementow = ["Scenariusz/kampania", "Rozwinięcie zasad", "Moduł", "Lorebook/Sourcebook", "Bestiariusz"]
+    typy_suplementow = ["Scenariusz/kampania", "Rozwinięcie zasad", "Moduł", "Lorebook/Sourcebook", "Bestiariusz", "Starter/Zestaw Startowy"]
     
     for i, typ in enumerate(typy_suplementow):
         var = tk.BooleanVar()

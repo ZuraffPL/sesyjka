@@ -48,6 +48,39 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.14",
+            "date": "16.02.2026",
+            "changes": [
+                "🐛 NAPRAWIONO WSZYSTKIE POZOSTAŁE HARDCODED ŚCIEŻKI:\n",
+                "",
+                "✅ PROBLEM: HARDCODED ŚCIEŻKI W STATYSTYKACH I SESJACH:",
+                "  • 11 miejsc w kodzie używało hardcoded ścieżek do baz",
+                "  • statystyki.py (6 odwołań):",
+                "    - sesje_rpg.db, gracze.db, systemy_rpg.db",
+                "  • sesje_rpg.py (5 odwołań):",
+                "    - systemy_rpg.db (3x), gracze.db (2x)",
+                "  • Aplikacja szukała baz w katalogu aplikacji",
+                "    zamiast w AppData/Local/Sesyjka/",
+                "",
+                "✅ ROZWIĄZANIE:",
+                "  • Dodano import get_db_path do statystyki.py",
+                "  • Zamieniono wszystkie 11 hardcoded ścieżek na get_db_path()",
+                "  • Wszystkie 56 wywołań sqlite3.connect() w projekcie",
+                "    używają teraz poprawnych ścieżek",
+                "",
+                "🆕 NOWY TYP SUPLEMENTU:",
+                "  • Dodano 'Starter/Zestaw Startowy' do typów suplementów",
+                "  • Dostępny w formularzach dodawania i edycji systemów RPG",
+                "  • 6 typów suplementów zamiast 5",
+                "",
+                "📐 DOSTOSOWANIE OKIEN DIALOGOWYCH:",
+                "  • Zwiększono wysokość okien o +30px (6 checkboxów)",
+                "  • Dodawanie systemu: 520→550px, 720→750px, 850→880px",
+                "  • Edycja systemu: 560→590px, 720→750px, 850→880px",
+                "  • Dodawanie suplementu: 650→680px"
+            ]
+        },
+        {
             "version": "0.3.13",
             "date": "14.02.2026",
             "changes": [

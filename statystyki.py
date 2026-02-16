@@ -8,6 +8,7 @@ matplotlib.use('TkAgg')  # Backend dla tkinter
 import matplotlib.pyplot as plt  # type: ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # type: ignore
 from matplotlib.figure import Figure  # type: ignore
+from database_manager import get_db_path
 
 def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     """
@@ -111,7 +112,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     
     # Pobierz dane z bazy
     try:
-        conn = sqlite3.connect("sesje_rpg.db")
+        conn = sqlite3.connect(get_db_path("sesje_rpg.db"))
         c = conn.cursor()
         c.execute("SELECT data_sesji FROM sesje_rpg")
         rows = c.fetchall()
@@ -259,7 +260,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     
     # Pobierz głównego użytkownika
     try:
-        conn_gracze = sqlite3.connect("gracze.db")
+        conn_gracze = sqlite3.connect(get_db_path("gracze.db"))
         c_gracze = conn_gracze.cursor()
         c_gracze.execute("SELECT id, nick FROM gracze WHERE glowny_uzytkownik = 1")
         main_user = c_gracze.fetchone()
@@ -270,7 +271,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
             main_user_nick = main_user[1]
             
             # Pobierz dane z sesji
-            conn_sesje = sqlite3.connect("sesje_rpg.db")
+            conn_sesje = sqlite3.connect(get_db_path("sesje_rpg.db"))
             c_sesje = conn_sesje.cursor()
             
             # Zlicz sesje jako MG po roku
@@ -559,7 +560,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
     
     # Pobierz wszystkie dostępne lata z bazy
     try:
-        conn_years = sqlite3.connect("sesje_rpg.db")
+        conn_years = sqlite3.connect(get_db_path("sesje_rpg.db"))
         c_years = conn_years.cursor()
         c_years.execute("SELECT DISTINCT data_sesji FROM sesje_rpg ORDER BY data_sesji DESC")
         all_dates = c_years.fetchall()
@@ -606,7 +607,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                 # Pobierz dane dla wybranego roku
                 try:
                     # Pobierz sesje z wybranego roku
-                    conn_sessions = sqlite3.connect("sesje_rpg.db")
+                    conn_sessions = sqlite3.connect(get_db_path("sesje_rpg.db"))
                     c_sessions = conn_sessions.cursor()
                     
                     c_sessions.execute("""
@@ -626,7 +627,7 @@ def fill_statystyki_tab(tab, dark_mode=False): # type: ignore
                             system_id_counts[system_id] += 1
                     
                     # Pobierz nazwy systemów
-                    conn_systems = sqlite3.connect("systemy_rpg.db")
+                    conn_systems = sqlite3.connect(get_db_path("systemy_rpg.db"))
                     c_systems = conn_systems.cursor()
                     
                     system_counts: dict[str, int] = {}

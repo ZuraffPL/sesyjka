@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.13-blue)
+![Version](https://img.shields.io/badge/version-0.3.14-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -49,9 +49,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.13-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.14-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.13.exe`
+4. Uruchom `Sesyjka-v0.3.14.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -77,11 +77,11 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.13-Windows.zip`:
+   - **SHA256 checksum** dla `Sesyjka-v0.3.14-Windows.zip`:
      ```
-     F8A4CDFBF7C959642AE3CB59989B366D93A9D162CE10B300E4B96975411F18E6
+     A4D0CE6CD71626C75AB246D7C96D0CE1CCDEB233EB771512A2DDBA4AF8C70F14
      ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.13-Windows.zip -Algorithm SHA256`
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.14-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -163,6 +163,15 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Domyślna rozdzielczość: 1800x1000 (Full HD)
 
 ## 📝 Changelog
+
+### v0.3.14 (16.02.2026)
+- 🐛 **NAPRAWIONO**: Wszystkie pozostałe hardcodowane ścieżki do baz danych (11 miejsc)
+- 📋 **Naprawiono pliki**:
+  - `statystyki.py` (6 odwołań): sesje_rpg.db, gracze.db, systemy_rpg.db
+  - `sesje_rpg.py` (5 odwołań): systemy_rpg.db, gracze.db
+- 🆕 **NOWE**: Dodano typ suplementu "Starter/Zestaw Startowy"
+- 📊 **Optymalizacja**: Dostosowano wysokości okien dialogów (+30px dla 6 typów suplementów)
+- ✅ **Status**: Wszystkie 56 wywołań `sqlite3.connect()` używają teraz `get_db_path()`
 
 ### v0.3.13 (14.02.2026)
 - 🐛 **NAPRAWIONO**: Puste okno dialogu "Dodaj sesję RPG" - brak list systemów i graczy

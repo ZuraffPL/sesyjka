@@ -42,6 +42,14 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Zachowanie filtrów po dodaniu rekordów
 - Filtry dla wszystkich zakładek
 
+### 🎨 Personalizacja
+- **Globalne skalowanie fontów** (80%-120%)
+- Suwak w ribbon z 8 krokami dostosowania
+- Natychmiastowa zmiana wielkości wszystkich elementów UI
+- Dostosowanie do różnych rozdzielczości (1080p, 2K, 4K)
+- Ochrona czytelności (minimum 8px)
+- Skalowanie wykresów matplotlib
+
 ## 🚀 Instalacja
 
 ### 📦 Opcja 1: Pobierz gotową wersję binarną (ZALECANE dla Windows)
@@ -123,6 +131,7 @@ python main.py
 sesyjka/
 ├── main.py                 # Punkt wejścia aplikacji
 ├── database_manager.py     # Zarządzanie bazami i migracjami
+├── font_scaling.py         # Moduł skalowania fontów
 ├── systemy_rpg.py         # Moduł systemów RPG
 ├── sesje_rpg.py           # Moduł sesji RPG
 ├── sesje_rpg_dialogs.py   # Dialogi dla sesji

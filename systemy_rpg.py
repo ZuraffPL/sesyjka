@@ -10,11 +10,14 @@ from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry, clamp_geometry
 
 DB_FILE = get_db_path("systemy_rpg.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_systemy: Dict[str, Any] = {}
+# Przechowuj stan sortowania na poziomie modułu
+active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
 
 def init_db() -> None:
     """Inicjalizuje bazę danych systemów RPG"""
@@ -254,16 +257,12 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     dialog = ctk.CTkToplevel(parent)
     dialog.title("Dodaj system RPG do bazy")
     dialog.transient(parent)
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
     
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 475
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 275
-    dialog.geometry(f"950x550+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 950, 550)
     
-    # Główna ramka z padding
-    main_frame = ctk.CTkFrame(dialog)
+    # Główna ramka z padding (scrollowalna dla małych ekranów / wysokiego DPI)
+    main_frame = ctk.CTkScrollableFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     main_frame.columnconfigure(1, weight=1)
     main_frame.columnconfigure(3, weight=1)
@@ -276,7 +275,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     ctk.CTkLabel(main_frame, text="Nazwa systemu *").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
     nazwa_entry = ctk.CTkEntry(main_frame, placeholder_text="Wprowadź nazwę systemu")
     nazwa_entry.grid(row=1, column=1, pady=8, sticky="ew")
-    nazwa_entry.focus_set()
+    dialog.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
 
     # Typ (Podręcznik Główny / Suplement)
     ctk.CTkLabel(main_frame, text="Typ *").grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")
@@ -406,21 +405,16 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         is_suplement = typ_var.get() == "Suplement"
         
         if is_vtt and is_suplement:
-            # VTT + Suplement - największe okno
             width, height = 1100, 850
         elif is_vtt:
-            # VTT bez suplementu
             width, height = 1100, 680
         elif is_suplement:
-            # Suplement bez VTT
             width, height = 950, 720
         else:
-            # Podstawowe okno
             width, height = 950, 560
         
-        new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
-        new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
-        dialog.geometry(f"{width}x{height}+{new_x}+{new_y}")
+        geo = clamp_geometry(dialog, parent, width, height)
+        dialog.geometry(geo)
     
     def on_vtt_change(*args: Any) -> None:
         """Obsługuje zmianę checkboxa VTT - pokazuje/ukrywa listę platform"""
@@ -685,6 +679,8 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     
     # Stan rozwinięcia dla każdego podręcznika głównego
     expanded_state: Dict[Any, bool] = {}
+    # Aktualny kierunek sortowania (używany przez build_hierarchical_data)
+    current_sort_reverse: List[bool] = [active_sort_systemy.get("reverse", False)]
     
     def build_hierarchical_data() -> List[List[Any]]:  # type: ignore
         """Buduje hierarchiczne dane na podstawie stanu rozwinięcia"""
@@ -749,7 +745,7 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                     data.append(supp_row)
         
         # Dodaj osierocone suplementy na końcu
-        for rec in orphaned_supplements:
+        for rec in sorted(orphaned_supplements, key=lambda r: (r[1] or '').lower(), reverse=current_sort_reverse[0]):
             # Znajdź nazwę systemu głównego jeśli istnieje
             main_system_name = ""
             if rec[3]:  # system_glowny_id
@@ -965,13 +961,16 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     sort_label.pack(side=tk.LEFT, padx=(0, 6))
     # Opcje sortowania dostosowane do hierarchii
     sort_options = ["ID", "Nazwa systemu", "Wydawca", "Język", "Status", "Posiadanie", "Cena"]
-    sort_var = tk.StringVar(value=sort_options[0])
+    sort_var = tk.StringVar(value=active_sort_systemy.get("column", sort_options[0]))
     sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=sort_options, state="readonly", width=15)
     sort_menu.pack(side=tk.LEFT)
     
     def do_hierarchical_sort(reverse: bool = False) -> None:
         """Sortuje podręczniki główne zachowując hierarchię"""
         nonlocal data, main_systems, supplements, orphaned_supplements
+        active_sort_systemy["column"] = sort_var.get()
+        active_sort_systemy["reverse"] = reverse
+        current_sort_reverse[0] = reverse
         sort_by = sort_var.get()
         
         # Sortuj główne systemy na podstawie oryginalnych rekordów z bazy
@@ -1056,6 +1055,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_hierarchical_sort(True))
     sort_desc_btn.pack(side=tk.LEFT, padx=4)
     
+    # Przywroć sortowanie z poprzedniej sesji
+    if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
+        do_hierarchical_sort(active_sort_systemy.get("reverse", False))
+
     # Separator
     separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
     separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
@@ -1069,16 +1072,12 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         dialog = tk.Toplevel(tab)
         dialog.title("Filtruj systemy RPG")
         dialog.transient(tab.winfo_toplevel())
-        dialog.grab_set()
         
         if dark_mode:
             apply_dark_theme_to_dialog(dialog)
         
-        # Centrowanie okna
-        tab.winfo_toplevel().update_idletasks()
-        x = tab.winfo_toplevel().winfo_rootx() + (tab.winfo_toplevel().winfo_width() // 2) - 200
-        y = tab.winfo_toplevel().winfo_rooty() + (tab.winfo_toplevel().winfo_height() // 2) - 225
-        dialog.geometry(f"400x450+{x}+{y}")
+        # Centrowanie okna (bezpieczna geometria)
+        apply_safe_geometry(dialog, tab.winfo_toplevel(), 400, 450)
         
         main_frame = tk.Frame(dialog)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -1240,6 +1239,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
             
             sheet.refresh()
             
+            # Przywróć sortowanie po filtrowaniu
+            if active_sort_systemy.get("column", "ID") != "ID" or current_sort_reverse[0]:
+                do_hierarchical_sort(current_sort_reverse[0])
+            
             # Aktualizuj tekst przycisku
             count = 0
             if active_filters_systemy.get('typ') != 'Wszystkie':
@@ -1301,6 +1304,11 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                     sheet.column_width(column=col, width=width_px)
             
             sheet.refresh()
+            
+            # Przywróć sortowanie po zresetowaniu filtrów
+            if active_sort_systemy.get("column", "ID") != "ID" or current_sort_reverse[0]:
+                do_hierarchical_sort(current_sort_reverse[0])
+            
             filter_btn.configure(text="Filtruj")
             dialog.destroy()
         
@@ -1570,6 +1578,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         
         sheet.refresh()
         
+        # Przywróć sortowanie po auto-filtrowaniu na starcie
+        if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
+            do_hierarchical_sort(active_sort_systemy.get("reverse", False))
+        
         # Aktualizuj tekst przycisku
         count = 0
         if active_filters_systemy.get('typ') != 'Wszystkie':
@@ -1641,31 +1653,22 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     dialog = ctk.CTkToplevel(parent)  # type: ignore
     dialog.title("Edytuj system RPG")
     dialog.transient(parent)  # type: ignore
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
     
     # Ustaw geometrię na podstawie tego czy VTT jest zaznaczone i czy to suplement
-    parent.update_idletasks()
-    
     if has_vtt and is_suplement:
-        # VTT + Suplement - największe okno
         width, height = 1100, 850
     elif has_vtt:
-        # VTT bez suplementu
         width, height = 1100, 680
     elif is_suplement:
-        # Suplement bez VTT
         width, height = 950, 720
     else:
-        # Podstawowe okno
         width, height = 950, 560
     
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
-    dialog.geometry(f"{width}x{height}+{x}+{y}")
+    apply_safe_geometry(dialog, parent, width, height)
     
-    # Główny frame z paddingiem
-    main_frame = ctk.CTkFrame(dialog)
+    # Główny frame z paddingiem (scrollowalny dla małych ekranów / wysokiego DPI)
+    main_frame = ctk.CTkScrollableFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     main_frame.columnconfigure(1, weight=1)
     main_frame.columnconfigure(3, weight=1)
@@ -1680,7 +1683,7 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     nazwa_entry = ctk.CTkEntry(main_frame, placeholder_text="Wprowadź nazwę systemu")
     nazwa_entry.grid(row=1, column=1, pady=8, sticky="ew")
     nazwa_entry.insert(0, system_data[1] or "")
-    nazwa_entry.focus_set()
+    dialog.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
 
     # Typ (Podręcznik Główny / Suplement)
     ctk.CTkLabel(main_frame, text="Typ *").grid(row=2, column=0, pady=8, padx=(0,10), sticky="w")
@@ -1837,21 +1840,16 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         is_suplement = typ_var.get() == "Suplement"
         
         if is_vtt and is_suplement:
-            # VTT + Suplement - największe okno
             width, height = 1100, 880
         elif is_vtt:
-            # VTT bez suplementu
             width, height = 1100, 680
         elif is_suplement:
-            # Suplement bez VTT
             width, height = 950, 750
         else:
-            # Podstawowe okno
             width, height = 950, 590
         
-        new_x = parent.winfo_rootx() + (parent.winfo_width() // 2) - (width // 2)
-        new_y = parent.winfo_rooty() + (parent.winfo_height() // 2) - (height // 2)
-        dialog.geometry(f"{width}x{height}+{new_x}+{new_y}")
+        geo = clamp_geometry(dialog, parent, width, height)
+        dialog.geometry(geo)
     
     def on_vtt_change(*args: Any) -> None:
         """Obsługuje zmianę checkboxa VTT - pokazuje/ukrywa listę platform"""
@@ -2101,7 +2099,6 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
     dialog = tk.Toplevel(parent)
     dialog.title(f"Suplementy do: {system_name}")
     dialog.transient(parent.winfo_toplevel())
-    dialog.grab_set()
     dialog.resizable(True, True)
     
     # Zastosuj tryb ciemny jeśli aktywny
@@ -2109,11 +2106,8 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
     if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
         apply_dark_theme_to_dialog(dialog)
     
-    # Ustawienia okna
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + 50
-    y = parent.winfo_rooty() + 50
-    dialog.geometry(f"800x600+{x}+{y}")
+    # Ustawienia okna (bezpieczna geometria)
+    apply_safe_geometry(dialog, parent, 800, 600)
     
     # Pobierz suplementy z bazy
     with sqlite3.connect(DB_FILE) as conn:
@@ -2209,16 +2203,12 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     dialog = ctk.CTkToplevel(parent)
     dialog.title(f"Dodaj suplement do: {system_glowny_nazwa}")
     dialog.transient(parent)
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
     
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 350
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 340
-    dialog.geometry(f"700x680+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 700, 680)
     
-    # Główny frame z paddingiem
-    main_frame = ctk.CTkFrame(dialog)
+    # Główny frame z paddingiem (scrollowalny dla małych ekranów / wysokiego DPI)
+    main_frame = ctk.CTkScrollableFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
     main_frame.columnconfigure(1, weight=1)
 
@@ -2231,7 +2221,7 @@ def dodaj_suplement_do_systemu(parent: Any, system_glowny_id: int, system_glowny
     ctk.CTkLabel(main_frame, text="Nazwa suplementu *").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
     nazwa_entry = ctk.CTkEntry(main_frame, placeholder_text="Wprowadź nazwę suplementu")
     nazwa_entry.grid(row=1, column=1, pady=8, sticky="ew")
-    nazwa_entry.focus_set()
+    dialog.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
 
     # Typ (zawsze Suplement)
     ctk.CTkLabel(main_frame, text="Typ *").grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")

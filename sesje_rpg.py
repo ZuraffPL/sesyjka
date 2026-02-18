@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
 from database_manager import get_db_path
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
 # Import funkcji dialogowych z oddzielnego modułu
 from sesje_rpg_dialogs import open_edit_session_dialog
@@ -14,6 +15,8 @@ DB_FILE = get_db_path("sesje_rpg.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_sesje: Dict[str, Any] = {}
+# Przechowuj stan sortowania na poziomie modułu
+active_sort_sesje: Dict[str, Any] = {"column": "ID", "reverse": False}
 
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
@@ -263,11 +266,13 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
     sort_label = tk.Label(sort_frame, text="Sortuj po kolumnie:")
     sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    sort_var = tk.StringVar(value=headers[0])
+    sort_var = tk.StringVar(value=active_sort_sesje.get("column", headers[0]))
     sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=headers, state="readonly", width=12)
     sort_menu.pack(side=tk.LEFT)
     
     def do_sort(reverse: bool = False) -> None:
+        active_sort_sesje["column"] = sort_var.get()
+        active_sort_sesje["reverse"] = reverse
         col = headers.index(sort_var.get())
         if col == 0:
             displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)  # type: ignore
@@ -285,6 +290,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_sort(True))
     sort_desc_btn.pack(side=tk.LEFT, padx=4)
     
+    # Przywroć sortowanie z poprzedniej sesji
+    if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
+        do_sort(active_sort_sesje.get("reverse", False))
+    
     # Separator
     separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
     separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
@@ -298,16 +307,12 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         dialog = tk.Toplevel(tab)
         dialog.title("Filtruj sesje RPG")
         dialog.transient(tab.winfo_toplevel())
-        dialog.grab_set()
         
         if dark_mode:
             apply_dark_theme_to_dialog(dialog)
         
-        # Centrowanie okna
-        tab.winfo_toplevel().update_idletasks()
-        x = tab.winfo_toplevel().winfo_rootx() + (tab.winfo_toplevel().winfo_width() // 2) - 200
-        y = tab.winfo_toplevel().winfo_rooty() + (tab.winfo_toplevel().winfo_height() // 2) - 150
-        dialog.geometry(f"400x300+{x}+{y}")
+        # Centrowanie okna (bezpieczna geometria)
+        apply_safe_geometry(dialog, tab.winfo_toplevel(), 400, 300)
         
         main_frame = tk.Frame(dialog)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -407,6 +412,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
                 sheet.column_width(column=c, width=width_px)
             sheet.refresh()
             
+            # Przywróć sortowanie po filtrowaniu
+            if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
+                do_sort(active_sort_sesje.get("reverse", False))
+            
             # Aktualizuj tekst przycisku
             count = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
             if count > 0:
@@ -427,6 +436,11 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
                 width_px = max(80, min(400, int(max_content * 9 + 24)))
                 sheet.column_width(column=c, width=width_px)
             sheet.refresh()
+            
+            # Przywróć sortowanie po zresetowaniu filtrów
+            if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
+                do_sort(active_sort_sesje.get("reverse", False))
+            
             filter_btn.configure(text="Filtruj")
             dialog.destroy()
         
@@ -651,6 +665,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=c, width=width_px)
         sheet.refresh()
+        
+        # Przywróć sortowanie po auto-filtrowaniu na starcie
+        if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
+            do_sort(active_sort_sesje.get("reverse", False))
         
         # Ponownie aplikuj kolorowanie po filtracji
         apply_month_colors()

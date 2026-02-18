@@ -4,8 +4,9 @@ from tkinter import ttk
 import webbrowser
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.16"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.19"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     
@@ -14,30 +15,14 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.16"): # type:
         app_name: Nazwa aplikacji
         app_version: Wersja aplikacji
     """
-    # Importuj współczynnik skalowania i rozdzielczość z main
-    try:
-        from main import current_dpi_scale, detected_screen_width, detected_screen_height
-        dpi_scale = current_dpi_scale
-        screen_w = detected_screen_width
-        screen_h = detected_screen_height
-    except:
-        dpi_scale = 1.0
-        screen_w = 1920
-        screen_h = 1080
-    
     # Utwórz okno modalnie
     dialog = ctk.CTkToplevel(parent) # type: ignore
     dialog.title("O programie")
-    dialog.geometry("520x720")
-    dialog.resizable(False, False)
+    dialog.resizable(True, True)
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
     
-    # Wyśrodkuj okno względem rodzica
-    dialog.update_idletasks()
-    x = (parent.winfo_x() + (parent.winfo_width() // 2)) - 260 # type: ignore
-    y = (parent.winfo_y() + (parent.winfo_height() // 2)) - 360 # type: ignore
-    dialog.geometry(f"+{x}+{y}")
+    # Bezpieczna geometria (obsługuje wysokie DPI)
+    apply_safe_geometry(dialog, parent, 520, 720)
     
     # Główny frame
     main_frame = ctk.CTkFrame(dialog)
@@ -79,6 +64,17 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.16"): # type:
     )
     
     # Treść z opisem funkcjonalności
+    # Pobierz info o skalowaniu do wyświetlenia w sekcji "O programie"
+    try:
+        from main import current_dpi_scale, detected_screen_width, detected_screen_height
+        _dpi_scale = current_dpi_scale
+        _screen_w = detected_screen_width
+        _screen_h = detected_screen_height
+    except Exception:
+        _dpi_scale = 1.0
+        _screen_w = dialog.winfo_screenwidth()
+        _screen_h = dialog.winfo_screenheight()
+    
     content = f"""AUTOR I KONTAKT:
 Autor: Marcin "Żuraff" Żurawicz
 Kontakt: https://linktr.ee/zuraffpl
@@ -96,8 +92,8 @@ TECHNOLOGIE:
 • Baza danych: SQLite
 
 SKALOWANIE INTERFEJSU:
-• Wykryta rozdzielczość: {screen_w}x{screen_h} pikseli
-• Współczynnik skalowania: {dpi_scale:.1f}x ({int(dpi_scale * 100)}%)
+• Wykryta rozdzielczość: {_screen_w}x{_screen_h} pikseli
+• Współczynnik skalowania: {_dpi_scale:.1f}x ({int(_dpi_scale * 100)}%)
 • Bazowa rozdzielczość: 1920x1080 (Full HD)
 ℹ️ Interfejs automatycznie dostosowuje się do rozdzielczości ekranu
 
@@ -148,6 +144,8 @@ INTERFEJS UŻYTKOWNIKA:
 • Liczniki aktywnych filtrów na przyciskach
 • Informacje o programie (ℹ️) i Historia wersji (📋)
 • Responsywny design dostosowujący się do zawartości
+• Bezpieczna geometria dialogów - dopasowanie do rozdzielczości i skalowania DPI
+• Globalne skalowanie fontów (80%-120%) - suwak w ribbonie
 
 STATYSTYKI:
 • Układ 3-kolumnowy zoptymalizowany dla ekranów 1080p
@@ -167,9 +165,7 @@ DODATKOWE FUNKCJE:
 • Możliwość resetowania filtrów jednym kliknięciem
 • Automatyczne odświeżanie widoków i statystyk
 • Walidacja danych wejściowych
-• Obsługa skrótów klawiszowych
-• Eksport i import danych
-• Backup automatyczny baz danych"""
+• Backup automatyczny baz danych przy każdej aktualizacji struktury"""
 
     text_widget.insert('1.0', content)
     text_widget.configure(state='disabled')
@@ -225,8 +221,8 @@ DODATKOWE FUNKCJE:
     # Obsługa klawisza Escape
     dialog.bind('<Escape>', lambda e: dialog.destroy())
     
-    # Ustaw focus na przycisk zamknij
-    close_button.focus_set()
+    # Ustaw focus na przycisk zamknij (z opóźnieniem, by okno zdążyło się wyrenderować)
+    dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
     
     # Zaczekaj aż okno zostanie zamknięte
     dialog.wait_window()

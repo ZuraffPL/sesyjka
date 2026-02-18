@@ -7,11 +7,14 @@ import tksheet  # type: ignore # <- przywrócono wymagany import
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
 DB_FILE = get_db_path("wydawcy.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_wydawcy: Dict[str, Any] = {}
+# Przechowuj stan sortowania na poziomie modułu
+active_sort_wydawcy: Dict[str, Any] = {"column": "ID", "reverse": False}
 
 def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:
     """Stosuje ciemny motyw do okna dialogowego"""
@@ -110,13 +113,9 @@ def dodaj_wydawce(parent: tk.Tk, refresh_callback=None): # type: ignore
     dialog = ctk.CTkToplevel(parent)
     dialog.title("Dodaj wydawcę do bazy")
     dialog.transient(parent)
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
 
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 180
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 130
-    dialog.geometry(f"400x280+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 400, 280)
 
     # Główna ramka
     main_frame = ctk.CTkFrame(dialog)
@@ -130,7 +129,7 @@ def dodaj_wydawce(parent: tk.Tk, refresh_callback=None): # type: ignore
     ctk.CTkLabel(main_frame, text="Nazwa wydawcy *").grid(row=1, column=0, pady=5, sticky="w")
     nazwa_entry = ctk.CTkEntry(main_frame, width=220, placeholder_text="Wprowadź nazwę wydawcy")
     nazwa_entry.grid(row=1, column=1, pady=5, padx=(10, 0), sticky="ew")
-    nazwa_entry.focus_set()
+    dialog.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
 
     # Strona internetowa
     ctk.CTkLabel(main_frame, text="Strona internetowa").grid(row=2, column=0, pady=5, sticky="w")
@@ -226,10 +225,12 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
     sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
     sort_label = tk.Label(sort_frame, text="Sortuj po kolumnie:")
     sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    sort_var = tk.StringVar(value=headers[0])
+    sort_var = tk.StringVar(value=active_sort_wydawcy.get("column", headers[0]))
     sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=headers, state="readonly", width=12)
     sort_menu.pack(side=tk.LEFT)
     def do_sort(reverse=False): # type: ignore
+        active_sort_wydawcy["column"] = sort_var.get()
+        active_sort_wydawcy["reverse"] = reverse
         col = headers.index(sort_var.get())
         if col == 0:
             displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
@@ -250,6 +251,10 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
     sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_sort(True))
     sort_desc_btn.pack(side=tk.LEFT, padx=4)
     
+    # Przywroć sortowanie z poprzedniej sesji
+    if active_sort_wydawcy.get("column", headers[0]) != headers[0] or active_sort_wydawcy.get("reverse", False):
+        do_sort(active_sort_wydawcy.get("reverse", False))
+    
     # Separator
     separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
     separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
@@ -263,13 +268,9 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
         dialog = ctk.CTkToplevel(tab)
         dialog.title("Filtruj wydawców")
         dialog.transient(tab.winfo_toplevel())
-        dialog.grab_set()
         
-        # Centrowanie okna
-        tab.winfo_toplevel().update_idletasks()
-        x = tab.winfo_toplevel().winfo_rootx() + (tab.winfo_toplevel().winfo_width() // 2) - 175
-        y = tab.winfo_toplevel().winfo_rooty() + (tab.winfo_toplevel().winfo_height() // 2) - 100
-        dialog.geometry(f"380x220+{x}+{y}")
+        # Centrowanie okna (bezpieczna geometria)
+        apply_safe_geometry(dialog, tab.winfo_toplevel(), 380, 220)
         
         main_frame = ctk.CTkFrame(dialog)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -337,6 +338,10 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
             
             sheet.refresh()
             
+            # Przywróć sortowanie po filtrowaniu
+            if active_sort_wydawcy.get("column", headers[0]) != headers[0] or active_sort_wydawcy.get("reverse", False):
+                do_sort(active_sort_wydawcy.get("reverse", False))
+            
             # Aktualizuj tekst przycisku
             count = 0
             if active_filters_wydawcy.get('kraj') != 'Wszystkie':
@@ -370,6 +375,11 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
                     sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
             
             sheet.refresh()
+            
+            # Przywróć sortowanie po zresetowaniu filtrów
+            if active_sort_wydawcy.get("column", headers[0]) != headers[0] or active_sort_wydawcy.get("reverse", False):
+                do_sort(active_sort_wydawcy.get("reverse", False))
+            
             filter_btn.configure(text="Filtruj")
             dialog.destroy()
         
@@ -425,6 +435,10 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode=False): # type: ignore
             width_px = max(80, min(400, int(max_content * 9 + 24)))
             sheet.column_width(column=c, width=width_px)
         sheet.refresh()
+        
+        # Przywróć sortowanie po auto-filtrowaniu na starcie
+        if active_sort_wydawcy.get("column", headers[0]) != headers[0] or active_sort_wydawcy.get("reverse", False):
+            do_sort(active_sort_wydawcy.get("reverse", False))
         
         # Ponownie aplikuj stylowanie linków po filtracji
         for r, row in enumerate(displayed_data):
@@ -495,13 +509,9 @@ def open_edit_dialog(parent, values, refresh_callback=None): # type: ignore
     dialog = ctk.CTkToplevel(parent) # type: ignore
     dialog.title("Edytuj wydawcę")
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
 
-    parent.update_idletasks() # type: ignore
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 180 # type: ignore
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 130 # type: ignore
-    dialog.geometry(f"400x280+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 400, 280)
 
     # Główna ramka
     main_frame = ctk.CTkFrame(dialog)
@@ -572,13 +582,9 @@ def usun_wydawce_dialog(parent, refresh_callback=None): # type: ignore
     dialog = ctk.CTkToplevel(parent) # type: ignore
     dialog.title("Usuń wydawcę")
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
-    dialog.resizable(False, False)
+    dialog.resizable(True, True)
 
-    parent.update_idletasks() # type: ignore
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 180 # type: ignore
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 130 # type: ignore
-    dialog.geometry(f"400x300+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 400, 300)
 
     # Główna ramka
     main_frame = ctk.CTkFrame(dialog)

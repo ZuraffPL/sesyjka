@@ -8,6 +8,7 @@ from typing import Optional, Callable, Sequence, Any, Dict, List, Tuple
 import customtkinter as ctk
 from database_manager import get_db_path
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
 DB_FILE = get_db_path("sesje_rpg.db")
@@ -120,14 +121,10 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
     dialog = ctk.CTkToplevel(parent)  # type: ignore
     dialog.title("Dodaj sesję RPG do bazy")
     dialog.transient(parent)  # type: ignore
-    dialog.grab_set()
     dialog.resizable(True, True)
     
     if parent is not None:
-        parent.update_idletasks()  # type: ignore
-        x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 300  # type: ignore
-        y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 280  # type: ignore
-        dialog.geometry(f"640x560+{x}+{y}")
+        apply_safe_geometry(dialog, parent, 640, 560)
     
     # Główna ramka z padding
     main_frame = ctk.CTkFrame(dialog)
@@ -234,20 +231,14 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         players_dialog = tk.Toplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
-        players_dialog.grab_set()
         players_dialog.resizable(True, True)
-        players_dialog.geometry("400x500")
         
         # Zastosuj tryb ciemny jeśli aktywny
         root = dialog.winfo_toplevel()
         if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
             apply_dark_theme_to_dialog(players_dialog)
         
-        # Wyśrodkuj okno względem okna głównego
-        dialog.update_idletasks()
-        x = dialog.winfo_rootx() + (dialog.winfo_width() // 2) - 200
-        y = dialog.winfo_rooty() + (dialog.winfo_height() // 2) - 250
-        players_dialog.geometry(f"400x500+{x}+{y}")
+        apply_safe_geometry(players_dialog, dialog, 400, 500)
         
         players_dialog.columnconfigure(0, weight=1)
         players_dialog.rowconfigure(1, weight=1)
@@ -388,15 +379,9 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         mg_dialog = tk.Toplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
-        mg_dialog.grab_set()
         mg_dialog.resizable(True, True)
-        mg_dialog.geometry("400x500")
         
-        # Wyśrodkuj okno względem okna głównego
-        dialog.update_idletasks()
-        x = dialog.winfo_rootx() + (dialog.winfo_width() // 2) - 200
-        y = dialog.winfo_rooty() + (dialog.winfo_height() // 2) - 250
-        mg_dialog.geometry(f"400x500+{x}+{y}")
+        apply_safe_geometry(mg_dialog, dialog, 400, 500)
         
         mg_dialog.columnconfigure(0, weight=1)
         mg_dialog.rowconfigure(1, weight=1)
@@ -627,20 +612,16 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
     cancel_btn.pack(side=tk.LEFT, padx=10)
     
     # Focus na datę
-    date_entry.focus_set()
+    dialog.after(100, lambda: date_entry.focus_set() if date_entry.winfo_exists() else None)
 
 def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_callback: Optional[Callable[..., None]] = None) -> None:
     """Otwiera okno edycji sesji RPG"""
     dialog = ctk.CTkToplevel(parent)
     dialog.title("Edytuj sesję RPG")
     dialog.transient(parent)
-    dialog.grab_set()
     dialog.resizable(True, True)
     
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 320
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 280
-    dialog.geometry(f"640x560+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 640, 560)
     
     # Główna ramka z padding
     main_frame = ctk.CTkFrame(dialog)
@@ -774,20 +755,14 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         players_dialog = tk.Toplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
-        players_dialog.grab_set()
         players_dialog.resizable(True, True)
-        players_dialog.geometry("450x600")
         
         # Zastosuj tryb ciemny jeśli aktywny
         root = dialog.winfo_toplevel()
         if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
             apply_dark_theme_to_dialog(players_dialog)
         
-        # Wyśrodkuj okno względem okna głównego
-        dialog.update_idletasks()
-        x = dialog.winfo_rootx() + (dialog.winfo_width() // 2) - 225
-        y = dialog.winfo_rooty() + (dialog.winfo_height() // 2) - 300
-        players_dialog.geometry(f"450x600+{x}+{y}")
+        apply_safe_geometry(players_dialog, dialog, 450, 600)
         
         players_dialog.columnconfigure(0, weight=1)
         players_dialog.rowconfigure(2, weight=1)
@@ -930,20 +905,14 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         mg_dialog = tk.Toplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
-        mg_dialog.grab_set()
         mg_dialog.resizable(True, True)
-        mg_dialog.geometry("400x500")
         
         # Zastosuj tryb ciemny jeśli aktywny
         root = dialog.winfo_toplevel()
         if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
             apply_dark_theme_to_dialog(mg_dialog)
         
-        # Wyśrodkuj okno względem okna głównego
-        dialog.update_idletasks()
-        x = dialog.winfo_rootx() + (dialog.winfo_width() // 2) - 200
-        y = dialog.winfo_rooty() + (dialog.winfo_height() // 2) - 250
-        mg_dialog.geometry(f"400x500+{x}+{y}")
+        apply_safe_geometry(mg_dialog, dialog, 400, 500)
         
         mg_dialog.columnconfigure(0, weight=1)
         mg_dialog.rowconfigure(1, weight=1)
@@ -1168,4 +1137,4 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
     cancel_btn.pack(side=tk.LEFT, padx=10)
     
     # Focus na datę
-    date_entry.focus_set()
+    dialog.after(100, lambda: date_entry.focus_set() if date_entry.winfo_exists() else None)

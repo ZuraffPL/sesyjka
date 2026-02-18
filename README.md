@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.16-blue)
+![Version](https://img.shields.io/badge/version-0.3.19-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -16,6 +16,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Obsługa wersji fizycznych i PDF
 - Wielojęzyczna kolekcja
 - Śledzenie cen zakupu i sprzedaży w różnych walutach
+- Obsługa platform VTT (9 platform: Roll20, Foundry VTT, Fantasy Grounds i inne)
+- Multi-wybór typów suplementów
+- Zaawansowane filtrowanie: Typ, Wydawca, Posiadanie, Język, Status, VTT
 
 ### ⚔️ Sesje RPG
 - Rejestracja przeprowadzonych sesji
@@ -51,6 +54,13 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Ochrona czytelności (minimum 8px)
 - Skalowanie wykresów matplotlib
 
+### 🖥️ Wysokie DPI i skalowanie
+- Automatyczne skalowanie interfejsu do rozdzielczości ekranu
+- Bezpieczna geometria dialogów — dopasowanie do aktualnego skalowania Windows (100%-300%)
+- Scrollowalne formularze w dialogach — brak ucinania elementów przy wysokim DPI
+- Poprawna obsługa rozdzielczości 2K/4K
+- Zapamiętywanie rozmiaru i pozycji okna głównego
+
 ## 🚀 Instalacja
 
 ### 📦 Opcja 1: Pobierz gotową wersję binarną (ZALECANE dla Windows)
@@ -58,9 +68,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.15-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.19-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.15.exe`
+4. Uruchom `Sesyjka-v0.3.19.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -86,11 +96,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.15-Windows.zip`:
-     ```
-     82A776A92BA97B7DCD23AE33A2993EE6F2E7094A7308B0F678687861B7BB73E2
-     ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.15-Windows.zip -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.19-Windows.zip`: dostępny na stronie Releases
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.19-Windows.zip -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -132,17 +139,19 @@ python main.py
 sesyjka/
 ├── main.py                 # Punkt wejścia aplikacji
 ├── database_manager.py     # Zarządzanie bazami i migracjami
+├── settings.py             # Ustawienia aplikacji (rozmiar okna, motywy)
 ├── font_scaling.py         # Moduł skalowania fontów
-├── systemy_rpg.py         # Moduł systemów RPG
-├── sesje_rpg.py           # Moduł sesji RPG
-├── sesje_rpg_dialogs.py   # Dialogi dla sesji
-├── gracze.py              # Moduł graczy
-├── wydawcy.py             # Moduł wydawców
-├── statystyki.py          # Moduł statystyk
-├── about_dialog.py        # Dialog "O programie"
-├── apphistory.py          # Historia wersji
-├── Icons/                 # Ikony aplikacji
-└── .github/               # Konfiguracja GitHub
+├── dialog_utils.py         # Bezpieczna geometria dialogów (DPI-safe)
+├── systemy_rpg.py          # Moduł systemów RPG
+├── sesje_rpg.py            # Moduł sesji RPG
+├── sesje_rpg_dialogs.py    # Dialogi dla sesji
+├── gracze.py               # Moduł graczy
+├── wydawcy.py              # Moduł wydawców
+├── statystyki.py           # Moduł statystyk
+├── about_dialog.py         # Dialog "O programie"
+├── apphistory.py           # Historia wersji
+├── Icons/                  # Ikony aplikacji
+└── .github/                # Konfiguracja GitHub
 ```
 
 ## 🗄️ Bazy danych
@@ -154,8 +163,7 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - `wydawcy.db` - Wydawcy
 
 ### 📁 Lokalizacja baz danych
-**Windows:** `C:\Users\{username}\AppData\Local\Sesyjka\`  
-**Linux/Mac:** `~/.sesyjka/`
+**Windows:** `C:\Users\{username}\AppData\Local\Sesyjka\`
 
 ### 🔄 Migracja i Kompatybilność
 - ✅ **Automatyczna migracja** starych baz przy pierwszym uruchomieniu
@@ -168,11 +176,24 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 ## 🎨 Interfejs
 
 - Nowoczesny interfejs oparty na CustomTkinter
-- Tryb jasny/ciemny
+- Tryb jasny/ciemny z natywnym przełącznikiem
 - Responsywne tabele z tksheet
-- Domyślna rozdzielczość: 1800x1000 (Full HD)
+- Domyślna rozdzielczość okna: 1800x920 (proporcjonalne skalowanie na 2K/4K)
+- Wstążka (ribbon) z kolorowymi przyciskami akcji
+- Spójny tryb ciemny we wszystkich oknach dialogowych
+- Liczniki aktywnych filtrów na przyciskach
+- Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.19 (18.02.2026)
+- 🛡️ **NOWE**: `dialog_utils.py` - centralny system bezpiecznej geometrii dialogów
+- 📐 **Bezpieczna geometria**: wszystkie dialogi dopasowują się do aktualnej rozdzielczości i skalowania DPI
+- 📜 **Scrollowalne formularze**: dialogi systemów RPG używają `CTkScrollableFrame` — brak ucinania przy 300% DPI
+- 🖥️ **Naprawa okna głównego**: poprawne rozmiary okna na 2K/4K z różnym skalowaniem Windows
+- 💾 **Naprawa zapisu ustawień**: okno zapisuje wartości logiczne zamiast pikseli fizycznych
+- 🎯 **Centrowanie przy starcie**: okno zawsze mieści się w obszarze ekranu (margines taskbar)
+- 🔧 **Refaktoryzacja**: `apply_safe_geometry()`, `clamp_geometry()`, `make_scrollable_dialog_frame()`
 
 ### v0.3.15 (16.02.2026)
 - ✨ **NOWE**: Globalne skalowanie fontów - suwak w ribbon (80%-120%, 8 kroków)

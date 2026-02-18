@@ -7,6 +7,7 @@ from typing import Optional, Callable, Sequence, Any, Union, List, Dict
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
 DB_FILE = get_db_path("gracze.db")
 
@@ -15,6 +16,8 @@ DB_FILE = get_db_path("gracze.db")
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_gracze: Dict[str, Any] = {}
+# Przechowuj stan sortowania na poziomie modułu
+active_sort_gracze: Dict[str, Any] = {"column": "ID", "reverse": False}
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
     root = tab.winfo_toplevel()
@@ -124,14 +127,10 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
     dialog = ctk.CTkToplevel(parent)  # type: ignore
     dialog.title("Dodaj gracza do bazy")
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
     
     if parent is not None:
-        parent.update_idletasks() # type: ignore
-        x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 200 # type: ignore
-        y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 180 # type: ignore
-        dialog.geometry(f"420x380+{x}+{y}")
+        apply_safe_geometry(dialog, parent, 420, 380)
     
     # Główny frame
     main_frame = ctk.CTkFrame(dialog, fg_color="transparent")  # type: ignore
@@ -149,7 +148,7 @@ def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Call
     ctk.CTkLabel(main_frame, text="Nick gracza *", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
     nick_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Wpisz nick...")  # type: ignore
     nick_entry.grid(row=1, column=1, pady=8, sticky="ew")
-    nick_entry.focus_set()
+    dialog.after(100, lambda: nick_entry.focus_set() if nick_entry.winfo_exists() else None)
 
     # Imię i nazwisko
     ctk.CTkLabel(main_frame, text="Imię i nazwisko", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=2, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
@@ -340,10 +339,12 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
     sort_label = tk.Label(sort_frame, text="Sortuj po kolumnie:")
     sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    sort_var = tk.StringVar(value=headers[0])
+    sort_var = tk.StringVar(value=active_sort_gracze.get("column", headers[0]))
     sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=headers, state="readonly", width=12)
     sort_menu.pack(side=tk.LEFT)
     def do_sort(reverse: bool = False) -> None:
+        active_sort_gracze["column"] = sort_var.get()
+        active_sort_gracze["reverse"] = reverse
         col = headers.index(sort_var.get())
         if col == 0:
             displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
@@ -379,6 +380,10 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_sort(True))
     sort_desc_btn.pack(side=tk.LEFT, padx=4)
     
+    # Przywroć sortowanie z poprzedniej sesji
+    if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
+        do_sort(active_sort_gracze.get("reverse", False))
+    
     # Separator
     separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
     separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
@@ -392,16 +397,12 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         dialog = tk.Toplevel(tab)
         dialog.title("Filtruj graczy")
         dialog.transient(tab.winfo_toplevel())
-        dialog.grab_set()
         
         if dark_mode:
             apply_dark_theme_to_dialog(dialog)
         
-        # Centrowanie okna
-        tab.winfo_toplevel().update_idletasks()
-        x = tab.winfo_toplevel().winfo_rootx() + (tab.winfo_toplevel().winfo_width() // 2) - 175
-        y = tab.winfo_toplevel().winfo_rooty() + (tab.winfo_toplevel().winfo_height() // 2) - 125
-        dialog.geometry(f"350x280+{x}+{y}")
+        # Centrowanie okna (bezpieczna geometria)
+        apply_safe_geometry(dialog, tab.winfo_toplevel(), 350, 280)
         
         main_frame = tk.Frame(dialog)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -516,6 +517,10 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
             
             sheet.refresh()
             
+            # Przywróć sortowanie po filtrowaniu
+            if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
+                do_sort(active_sort_gracze.get("reverse", False))
+            
             # Aktualizuj tekst przycisku
             count = 0
             if active_filters_gracze.get('plec') != 'Wszystkie':
@@ -558,6 +563,11 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
                     sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
             
             sheet.refresh()
+            
+            # Przywróć sortowanie po zresetowaniu filtrów
+            if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
+                do_sort(active_sort_gracze.get("reverse", False))
+            
             filter_btn.configure(text="Filtruj")
             dialog.destroy()
         
@@ -635,6 +645,10 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
             sheet.column_width(column=c, width=width_px)
         sheet.refresh()
         
+        # Przywróć sortowanie po auto-filtrowaniu na starcie
+        if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
+            do_sort(active_sort_gracze.get("reverse", False))
+        
         # Ponownie aplikuj kolorowanie po filtracji
         for r, row in enumerate(displayed_data):
             if row[link_col]:
@@ -709,13 +723,9 @@ def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_cal
     dialog = ctk.CTkToplevel(parent)  # type: ignore
     dialog.title("Edytuj gracza")
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
-    dialog.resizable(True, False)
+    dialog.resizable(True, True)
     
-    parent.update_idletasks()
-    x = parent.winfo_rootx() + (parent.winfo_width() // 2) - 200
-    y = parent.winfo_rooty() + (parent.winfo_height() // 2) - 180
-    dialog.geometry(f"420x380+{x}+{y}")
+    apply_safe_geometry(dialog, parent, 420, 380)
     
     # Główny frame
     main_frame = ctk.CTkFrame(dialog, fg_color="transparent")  # type: ignore

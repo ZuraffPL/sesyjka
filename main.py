@@ -15,15 +15,20 @@ import apphistory
 import database_manager
 import font_scaling
 from font_scaling import scale_font_size
+import settings as app_settings
 
 # Konfiguracja CustomTkinter
 ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.16"
+APP_VERSION = "0.3.19"
 START_WIDTH = 1800
 START_HEIGHT = 920
+
+# Ustawienia wczytane z pliku – wypełniane przed startem aplikacji
+_initial_dark_mode: bool = False
+_initial_geometry: dict[str, int] = {"width": START_WIDTH, "height": START_HEIGHT}
 
 # Globalna zmienna do przechowywania współczynnika skalowania DPI
 current_dpi_scale = 1.0
@@ -156,13 +161,53 @@ class SesyjkaApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title(f"{APP_NAME} v{APP_VERSION}")
-        self.geometry(f"{START_WIDTH}x{START_HEIGHT}")
+        
+        # Pobierz łączne skalowanie okna CTk (nasze custom + DPI systemu)
+        try:
+            self._total_window_scale = self._apply_window_scaling(10000) / 10000.0
+        except Exception:
+            self._total_window_scale = current_dpi_scale if current_dpi_scale > 1.0 else 1.0
+        scale = self._total_window_scale
+        print(f"[Window] Total CTk window scaling: {scale}")
+        
+        # Rozmiar bazowy okna (wartości logiczne CTk)
+        # CTk automatycznie przemnoży je przez window_scaling,
+        # więc 1800x920 na 1080p = 1800px, a na 1440p (1.3x) = 2340px
+        w = int(_initial_geometry.get("width", START_WIDTH))
+        h = int(_initial_geometry.get("height", START_HEIGHT))
+        
+        # Wymiary ekranu w pikselach fizycznych
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        TASKBAR_MARGIN = 48  # miejsce na pasek zadań Windows
+        
+        # Ogranicz rozmiar bazowy, aby po przeskalowaniu nie wychodził poza ekran
+        max_w = int((screen_w - 20) / scale) if scale > 1.0 else screen_w - 20
+        max_h = int((screen_h - TASKBAR_MARGIN) / scale) if scale > 1.0 else screen_h - TASKBAR_MARGIN
+        w = min(w, max_w)
+        h = min(h, max_h)
+        
+        # Oblicz fizyczny rozmiar okna (do centrowania)
+        phys_w = int(w * scale)
+        phys_h = int(h * scale)
+        x = max(0, (screen_w - phys_w) // 2)
+        y = max(0, (screen_h - phys_h - TASKBAR_MARGIN) // 2)
+        print(f"[Window] Base: {w}x{h}, Physical: {phys_w}x{phys_h}, Screen: {screen_w}x{screen_h}")
+        self.geometry(f"{w}x{h}+{x}+{y}")
+        
         self.minsize(800, 600)
-        self.dark_mode = False
+        self.dark_mode = _initial_dark_mode
+        
+        # Rozmiar zapisywany przed zamknięciem
+        self.saved_geometry: dict[str, int] = {}
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # Ustaw tryb CTk zgodnie z zapisanym ustawieniem
+        ctk.set_appearance_mode("dark" if self.dark_mode else "light")
         
         # Style dla ttk (dla kompatybilności z tksheet i Notebook)
         self.style = ttk.Style(self)
-        self.set_modern_theme()
+        self.set_modern_theme(self.dark_mode)
         
         self.create_ribbon()
         self.create_content_area()
@@ -310,7 +355,7 @@ class SesyjkaApp(ctk.CTk):
         
         self.font_scale_value_label = ctk.CTkLabel(
             font_scale_frame, 
-            text="100%", 
+            text=f"{int(font_scaling.get_font_scale_factor() * 100)}%", 
             font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(10), weight='bold'),
             width=45
         )
@@ -324,7 +369,7 @@ class SesyjkaApp(ctk.CTk):
             command=self.on_font_scale_change,
             width=150
         )
-        self.font_scale_slider.set(100)
+        self.font_scale_slider.set(int(font_scaling.get_font_scale_factor() * 100))
         self.font_scale_slider.pack(side=tk.LEFT)
         
         # Dolny rząd - Przełącznik trybu jasny/ciemny
@@ -333,7 +378,7 @@ class SesyjkaApp(ctk.CTk):
         
         self.mode_label = ctk.CTkLabel(
             mode_frame, 
-            text="☀️ Jasny", 
+            text="🌙 Ciemny" if self.dark_mode else "☀️ Jasny", 
             font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11))
         )
         self.mode_label.pack(side=tk.LEFT, padx=(0, 8))
@@ -346,6 +391,8 @@ class SesyjkaApp(ctk.CTk):
             onvalue=True,
             offvalue=False
         )
+        if self.dark_mode:
+            self.mode_switch.select()
         self.mode_switch.pack(side=tk.LEFT)
 
     def create_content_area(self):
@@ -446,10 +493,44 @@ class SesyjkaApp(ctk.CTk):
         """Odświeża zakładkę statystyk"""
         statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=self.dark_mode)
 
+    def on_close(self) -> None:
+        """Zapamiętuje rozmiar okna przed zamknięciem."""
+        # winfo_width/height zwraca piksele fizyczne (Tk), a geometry() CTk
+        # przyjmuje wartości logiczne (które mnoży przez skalę).
+        # Musimy podzielić przez skalę, aby zapisać wartości logiczne.
+        scale = getattr(self, '_total_window_scale', 1.0)
+        self.saved_geometry = {
+            "width":  int(self.winfo_width() / scale) if scale > 1.0 else self.winfo_width(),
+            "height": int(self.winfo_height() / scale) if scale > 1.0 else self.winfo_height(),
+        }
+        self.destroy()
+
 if __name__ == "__main__":
     # Inicjalizuj i zmigruj bazy danych
     database_manager.initialize_app_databases()
     
+    # Wczytaj zapisane ustawienia filtrów i sortowania
+    _saved = app_settings.load_settings()
+    systemy_rpg.active_filters_systemy.update(_saved["filters"].get("systemy", {}))
+    sesje_rpg.active_filters_sesje.update(_saved["filters"].get("sesje", {}))
+    gracze.active_filters_gracze.update(_saved["filters"].get("gracze", {}))
+    wydawcy.active_filters_wydawcy.update(_saved["filters"].get("wydawcy", {}))
+    systemy_rpg.active_sort_systemy.update(_saved["sort"].get("systemy", {}))
+    sesje_rpg.active_sort_sesje.update(_saved["sort"].get("sesje", {}))
+    gracze.active_sort_gracze.update(_saved["sort"].get("gracze", {}))
+    wydawcy.active_sort_wydawcy.update(_saved["sort"].get("wydawcy", {}))
+    
+    # Wczytaj tryb i skalowanie czcionek
+    _initial_dark_mode = bool(_saved.get("dark_mode", False))
+    font_scaling.set_font_scale_factor(float(_saved.get("font_scale", 1.0)))
+    
+    # Wczytaj geometrię okna (tylko rozmiar)
+    _win = _saved.get("window", {})
+    _initial_geometry = {
+        "width":  max(800, int(_win.get("width",  START_WIDTH))),
+        "height": max(600, int(_win.get("height", START_HEIGHT))),
+    }
+
     # Skonfiguruj automatyczne skalowanie DPI dla wyższych rozdzielczości
     setup_dpi_scaling()
     
@@ -457,6 +538,28 @@ if __name__ == "__main__":
     try:
         app.mainloop()
     finally:
+        # Zapisz ustawienia filtrów i sortowania przed zamknięciem
+        _to_save = {
+            "dark_mode": app.dark_mode,
+            "font_scale": font_scaling.get_font_scale_factor(),
+            "window": app.saved_geometry if app.saved_geometry else {
+                "width":  START_WIDTH,
+                "height": START_HEIGHT,
+            },
+            "filters": {
+                "systemy": dict(systemy_rpg.active_filters_systemy),
+                "sesje":   dict(sesje_rpg.active_filters_sesje),
+                "gracze":  dict(gracze.active_filters_gracze),
+                "wydawcy": dict(wydawcy.active_filters_wydawcy),
+            },
+            "sort": {
+                "systemy": dict(systemy_rpg.active_sort_systemy),
+                "sesje":   dict(sesje_rpg.active_sort_sesje),
+                "gracze":  dict(gracze.active_sort_gracze),
+                "wydawcy": dict(wydawcy.active_sort_wydawcy),
+            },
+        }
+        app_settings.save_settings(_to_save)
         # Zamknij okno cmd jeśli uruchomiono przez .bat
         import os, sys
         if os.name == "nt":

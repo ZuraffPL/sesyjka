@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
+from dialog_utils import apply_safe_geometry
 
 def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     """
@@ -15,16 +16,11 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Utwórz okno modalnie
     dialog = ctk.CTkToplevel(parent) # type: ignore
     dialog.title("Historia wersji")
-    dialog.geometry("620x820")
     dialog.resizable(True, True)
     dialog.transient(parent) # type: ignore
-    dialog.grab_set()
     
-    # Wyśrodkuj okno względem rodzica
-    dialog.update_idletasks()
-    x = (parent.winfo_x() + (parent.winfo_width() // 2)) - 310 # type: ignore
-    y = (parent.winfo_y() + (parent.winfo_height() // 2)) - 410 # type: ignore
-    dialog.geometry(f"+{x}+{y}")
+    # Bezpieczna geometria (obsługuje wysokie DPI)
+    apply_safe_geometry(dialog, parent, 620, 820)
     
     # Główny frame
     main_frame = ctk.CTkFrame(dialog)
@@ -48,6 +44,49 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     
     # Historia wersji
     version_history = [ # type: ignore
+        {
+            "version": "0.3.19",
+            "date": "18.02.2026",
+            "changes": [
+                "🛡️ BEZPIECZNA GEOMETRIA DIALOGÓW (dialog_utils.py):\n",
+                "",
+                "❌ PROBLEM - DIALOGI POZA EKRANEM:",
+                "  • Przy skalowaniu Windows 300% dialogi",
+                "    traciły elementy poza granicami ekranu",
+                "  • Formularze systemu RPG ucinały pola VTT",
+                "    i suplementów przy wysokim DPI",
+                "",
+                "✅ ROZWIĄZANIE - CENTRALNY MODUŁ dialog_utils.py:",
+                "  • clamp_geometry() - dopasowuje rozmiar do ekranu",
+                "  • apply_safe_geometry() - stosuje geometrię i centralnie",
+                "  • make_scrollable_dialog_frame() - CTkScrollableFrame",
+                "  • Obsługa CTk i tk.Toplevel (fallback scale=1.0)",
+                "",
+                "📐 SCROLLOWALNE FORMULARZE SYSTEMÓW RPG:",
+                "  • dodaj_system_rpg: CTkScrollableFrame + resizable",
+                "  • open_edit_system_dialog: CTkScrollableFrame",
+                "  • dodaj_suplement_do_systemu: CTkScrollableFrame",
+                "  • update_dialog_size() używa clamp_geometry()",
+                "",
+                "🖥️ NAPRAWA OKNA GŁÓWNEGO:",
+                "  • Okno clampowane do rozmiaru ekranu przy starcie",
+                "  • Margines: 20px (boki) + 48px (dół, taskbar)",
+                "  • Centrowanie w obszarze roboczym ekranu",
+                "",
+                "💾 NAPRAWA ZAPISU USTAWIEŃ:",
+                "  • Błąd: on_close() zapisywał piksele fizyczne",
+                "    (winfo_width/height = wartości fizyczne)",
+                "  • Fix: dzielenie przez _total_window_scale",
+                "  • Teraz settings.json przechowuje wartości logiczne",
+                "  • Brak podwójnego skalowania przy kolejnym starcie",
+                "",
+                "🔧 REFAKTORYZACJA WSZYSTKICH DIALOGÓW:",
+                "  • systemy_rpg.py, sesje_rpg_dialogs.py",
+                "  • sesje_rpg.py, gracze.py, wydawcy.py",
+                "  • about_dialog.py, apphistory.py",
+                "  • Każdy dialog używa apply_safe_geometry()"
+            ]
+        },
         {
             "version": "0.3.16",
             "date": "16.02.2026",
@@ -812,8 +851,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Obsługa klawisza Escape
     dialog.bind('<Escape>', lambda e: dialog.destroy())
     
-    # Ustaw focus na przycisk zamknij
-    close_button.focus_set()
+    # Ustaw focus na przycisk zamknij (z opóźnieniem, by okno zdążyło się wyrenderować)
+    dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
     
     # Zaczekaj aż okno zostanie zamknięte
     dialog.wait_window()

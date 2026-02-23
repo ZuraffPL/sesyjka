@@ -346,21 +346,29 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         active_sort_gracze["column"] = sort_var.get()
         active_sort_gracze["reverse"] = reverse
         col = headers.index(sort_var.get())
+
+        # Sortuj obie listy razem, zachowując synchronizację between displayed_data i displayed_records
         if col == 0:
-            displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)
+            pairs = sorted(zip(displayed_data, displayed_records), key=lambda p: int(p[0][0]) if p[0][0] else 0, reverse=reverse)
         elif col == 5:  # Status
-            # Sortuj: gwiazdka, korona, puste
-            def status_key(row: list[str]) -> tuple[int, str]:
-                status = row[col]
+            def status_key(pair: tuple[list[str], Any]) -> tuple[int, str]:
+                status = pair[0][col]
                 if status == '⭐':
                     return (0, status)
                 elif status == '👑':
                     return (1, status)
                 else:
                     return (2, status)
-            displayed_data.sort(key=status_key, reverse=reverse)
+            pairs = sorted(zip(displayed_data, displayed_records), key=status_key, reverse=reverse)
         else:
-            displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)
+            pairs = sorted(zip(displayed_data, displayed_records), key=lambda p: (p[0][col] or '').lower(), reverse=reverse)
+
+        displayed_data.clear()
+        displayed_records.clear()
+        for d, r in pairs:
+            displayed_data.append(d)
+            displayed_records.append(r)
+
         sheet.set_sheet_data(list(displayed_data)) # type: ignore
         for c in range(len(headers)):
             max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
@@ -667,9 +675,8 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:
             r, _ = sel[:2] # type: ignore
-            if r < len(displayed_data):
-                values = displayed_data[r] # type: ignore
-                open_edit_gracz_dialog(tab, values, refresh_callback=lambda **kwargs: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
+            if r < len(displayed_records):
+                open_edit_gracz_dialog(tab, displayed_records[r], refresh_callback=lambda **kwargs: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
     def context_delete() -> None:
         sel = sheet.get_currently_selected()
         if sel and len(sel) >= 2:

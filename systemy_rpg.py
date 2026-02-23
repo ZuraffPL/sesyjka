@@ -398,7 +398,6 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     
     def update_dialog_size() -> None:
         """Aktualizuje rozmiar okna na podstawie stanu VTT i typu"""
-        dialog.update_idletasks()
         parent.update_idletasks()
         
         is_vtt = vtt_var.get()
@@ -986,13 +985,13 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
             sorted_main_ids = sorted(main_systems.keys(), 
                                    key=lambda x: (main_systems[x][5] or '').lower(), 
                                    reverse=reverse)
-        elif sort_by == "Język":  # Język (indeks 8 w oryginalnych rekordach)
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: (main_systems[x][8] or '').lower(), 
-                                   reverse=reverse)
-        elif sort_by == "Status":  # Status (indeks 9 w oryginalnych rekordach - status połączony)
+        elif sort_by == "Język":  # Język (indeks 9 w oryginalnych rekordach)
             sorted_main_ids = sorted(main_systems.keys(), 
                                    key=lambda x: (main_systems[x][9] or '').lower(), 
+                                   reverse=reverse)
+        elif sort_by == "Status":  # Status (indeks 10 w oryginalnych rekordach - status połączony)
+            sorted_main_ids = sorted(main_systems.keys(), 
+                                   key=lambda x: (main_systems[x][10] or '').lower(), 
                                    reverse=reverse)
         elif sort_by == "Posiadanie":  # Posiadanie (fizyczny + pdf, indeks 6 i 7)
             def posiadanie_key(x: Any) -> str:
@@ -1006,10 +1005,10 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                 else:  # Żadne
                     return "4"
             sorted_main_ids = sorted(main_systems.keys(), key=posiadanie_key, reverse=reverse)
-        elif sort_by == "Cena":  # Cena (indeks 10 - sformatowana cena jako string)
+        elif sort_by == "Cena":  # Cena (indeks 11 - sformatowana cena jako string)
             def cena_key(x: Any) -> float:
                 rec = main_systems[x]
-                cena_str = rec[10] if rec[10] else ""  # Sformatowana cena np. "123.45 PLN"
+                cena_str = rec[11] if rec[11] else ""  # Sformatowana cena np. "123.45 PLN"
                 if cena_str:
                     # Wyciągnij liczbę z początku stringa
                     try:
@@ -1193,17 +1192,17 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                 
                 # Filtr Języka
                 if active_filters_systemy['jezyk'] != 'Wszystkie':
-                    if rec[8] != active_filters_systemy['jezyk']:
+                    if rec[9] != active_filters_systemy['jezyk']:
                         continue
                 
-                # Filtr Statusu (rec[9] to sformowany status)
+                # Filtr Statusu (rec[10] to sformowany status)
                 if active_filters_systemy['status'] != 'Wszystkie':
-                    if active_filters_systemy['status'] not in (rec[9] or ''):
+                    if active_filters_systemy['status'] not in (rec[10] or ''):
                         continue
                 
-                # Filtr Waluty (rec[10] to sformatowana cena np. "123.45 PLN")
+                # Filtr Waluty (rec[11] to sformatowana cena np. "123.45 PLN")
                 if active_filters_systemy['waluta'] != 'Wszystkie':
-                    cena_str = rec[10] if rec[10] else ""
+                    cena_str = rec[11] if rec[11] else ""
                     if active_filters_systemy['waluta'] not in cena_str:
                         continue
                 
@@ -1267,9 +1266,8 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         
         def reset_filters() -> None:
             """Resetuje wszystkie filtry"""
-            nonlocal data, main_systems, supplements, orphaned_supplements
+            nonlocal data, records, main_systems, supplements, orphaned_supplements
             active_filters_systemy.clear()
-            
             # Przeładuj wszystkie dane z bazy
             records = get_all_systems()
             
@@ -1344,39 +1342,12 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                 system_id = row[1]  # ID z drugiej kolumny
                 
                 if system_id:
-                    # Znajdź pełne dane systemu z oryginalnych rekordów
-                    system_record = None
-                    for rec in records:
-                        if str(rec[0]) == str(system_id):
-                            system_record = rec
-                            break
-                    
-                    if system_record:
-                        # Konwertuj na format wymagany przez open_edit_system_dialog
-                        values: List[Any] = [  # type: ignore
-                            str(system_record[0]),  # ID
-                            system_record[1] or "",  # Nazwa
-                            system_record[2] or "",  # Typ
-                            "",  # System główny (zostanie wypełniony w dialog)
-                            system_record[4] or "",  # Typ suplementu
-                            system_record[5] or "",  # Wydawca (nazwa)
-                            "Tak" if system_record[7] else "Nie",  # Fizyczny
-                            "Tak" if system_record[8] else "Nie",  # PDF
-                            system_record[9] or ""  # Język
-                        ]
-                        
-                        # Jeśli to suplement, znajdź nazwę systemu głównego
-                        if system_record[3]:  # system_glowny_id
-                            with sqlite3.connect(DB_FILE) as conn:
-                                c = conn.cursor()
-                                c.execute("SELECT nazwa FROM systemy_rpg WHERE id = ?", (system_record[3],))
-                                result = c.fetchone()
-                                if result:
-                                    values[3] = result[0]
-                        
-                        open_edit_system_dialog(tab, values, refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
+                    # open_edit_system_dialog pobiera wszystkie dane z bazy po ID
+                    open_edit_system_dialog(tab, [str(system_id)], refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
         except Exception as e:
-            print(f"Błąd podczas edycji: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab)  # type: ignore
     
     def context_delete() -> None:
         """Usuwa zaznaczony system"""
@@ -1819,9 +1790,6 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
         checkbox = ctk.CTkCheckBox(vtt_scroll_frame, text=platform, variable=var)
         checkbox.pack(anchor="w", pady=1)
     
-    # Aktualizuj dialog przed sprawdzeniem stanu VTT
-    dialog.update_idletasks()
-    
     # Początkowo ukryj frame wyboru VTT jeśli VTT nie jest zaznaczone
     # lub pokaż go jeśli jest zaznaczone
     if vtt_var.get():
@@ -1833,7 +1801,8 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     
     def update_dialog_size() -> None:
         """Aktualizuje rozmiar okna na podstawie stanu VTT i typu"""
-        dialog.update_idletasks()
+        if not dialog.winfo_exists():
+            return
         parent.update_idletasks()
         
         is_vtt = vtt_var.get()
@@ -1953,6 +1922,9 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     status_kolekcja_var.trace_add('write', on_status_kolekcja_change)
     on_status_kolekcja_change()  # Ustaw początkowy stan
 
+    # Flaga inicjalizacji - zapobiega wywołaniu update_dialog_size() podczas budowania dialogu
+    _initializing: List[bool] = [True]
+
     def on_typ_change(*args: Any) -> None:
         """Obsługuje zmianę typu (Podręcznik Główny/Suplement)"""
         if typ_var.get() == "Suplement":
@@ -1964,16 +1936,25 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
             typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0,10), sticky="nw")
             typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
             # Załaduj systemy główne
-            main_systems = get_main_systems()
-            if main_systems:
-                system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems]
+            main_systems_list = get_main_systems()
+            if main_systems_list:
+                system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems_list]
                 system_glowny_combo.configure(values=system_values)
-                # Ustaw obecnie wybrany system główny
+                # Ustaw obecnie wybrany system główny lub jawnie wyczyść
+                matched = False
                 if system_data[3]:  # system_glowny_id
-                    for sys in main_systems:
+                    for sys in main_systems_list:
                         if sys[0] == system_data[3]:
                             system_glowny_var.set(f"{sys[0]} - {sys[1]}")
+                            matched = True
                             break
+                if not matched:
+                    # Osierocony suplement - brak rodzica, wyczyść combo
+                    system_glowny_var.set("")
+            else:
+                # Brak podręczników głównych w bazie
+                system_glowny_combo.configure(values=[])
+                system_glowny_var.set("")
         else:
             # Ukryj pola dla suplementu
             system_glowny_label.grid_remove()
@@ -1982,10 +1963,13 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
             system_glowny_custom_entry.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
-        update_dialog_size()
+        if not _initializing[0]:
+            update_dialog_size()
 
     typ_var.trace_add('write', on_typ_change)
-    on_typ_change()  # Ustaw początkowy stan
+    on_typ_change()  # Ustaw początkowy stan bez resize
+    _initializing[0] = False
+    dialog.after(50, update_dialog_size)  # Opóźniony resize - po pełnej inicjalizacji CTkToplevel
 
     def on_save() -> None:
         """Zapisuje zmiany do bazy"""

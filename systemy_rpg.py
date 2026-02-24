@@ -6,13 +6,37 @@ import tkinter as tk
 import tksheet  # type: ignore
 from tkinter import ttk, messagebox
 import sqlite3
+import logging
+import traceback
 from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
-from database_manager import get_db_path
+from database_manager import get_db_path, get_app_data_dir
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, clamp_geometry
 
 DB_FILE = get_db_path("systemy_rpg.db")
+
+# ── Konfiguracja loggera ────────────────────────────────────────────────────
+def _setup_logger() -> logging.Logger:
+    """Tworzy logger zapisujący do pliku w katalogu danych aplikacji."""
+    _logger = logging.getLogger("systemy_rpg")
+    if _logger.handlers:
+        return _logger  # Już skonfigurowany
+    _logger.setLevel(logging.DEBUG)
+    try:
+        log_path = get_app_data_dir() / "sesyjka_debug.log"
+        fh = logging.FileHandler(str(log_path), encoding="utf-8")
+        fh.setLevel(logging.DEBUG)
+        fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                                datefmt="%Y-%m-%d %H:%M:%S")
+        fh.setFormatter(fmt)
+        _logger.addHandler(fh)
+    except Exception as _e:
+        print(f"[systemy_rpg] Nie można otworzyć pliku logu: {_e}")
+    return _logger
+
+logger = _setup_logger()
+# ────────────────────────────────────────────────────────────────────────────
 
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_systemy: Dict[str, Any] = {}
@@ -1325,108 +1349,109 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     # Menu kontekstowe - dostosowane do hierarchii
     menu = tk.Menu(tab, tearoff=0)
     
-    def context_edit() -> None:
-        """Edytuje zaznaczony system"""
+    def context_edit(row_idx: int) -> None:
+        """Edytuje system o podanym indeksie wiersza"""
         try:
-            selected = sheet.get_currently_selected()
-            if selected and len(selected) >= 2:
-                r: int = selected[0]  # type: ignore
-                
-                if r >= len(data):
-                    return
-                
-                row = data[r]
-                if len(row) < 2:
-                    return
-                
-                system_id = row[1]  # ID z drugiej kolumny
-                
-                if system_id:
-                    # open_edit_system_dialog pobiera wszystkie dane z bazy po ID
-                    open_edit_system_dialog(tab, [str(system_id)], refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
+            logger.debug("context_edit: row_idx=%d, len(data)=%d", row_idx, len(data))
+
+            if row_idx >= len(data):
+                logger.warning("context_edit: row_idx=%d >= len(data)=%d – pominięto", row_idx, len(data))
+                return
+
+            row = data[row_idx]
+            logger.debug("context_edit: wiersz nr %d, zawartość=%r", row_idx, row)
+
+            if len(row) < 2:
+                logger.warning("context_edit: wiersz ma za mało kolumn (%d)", len(row))
+                return
+
+            system_id = row[1]  # ID z drugiej kolumny
+            logger.info(
+                "context_edit: otwieranie edycji system_id=%r, typ=%r, nazwa=%r",
+                system_id,
+                row[3] if len(row) > 3 else '?',
+                row[2] if len(row) > 2 else '?'
+            )
+
+            if system_id:
+                open_edit_system_dialog(tab, [str(system_id)], refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
+            else:
+                logger.warning("context_edit: system_id jest pusty dla wiersza %d", row_idx)
         except Exception as e:
-            import traceback
+            logger.exception("context_edit: nieoczekiwany wyjątek")
             traceback.print_exc()
             messagebox.showerror("Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab)  # type: ignore
     
-    def context_delete() -> None:
-        """Usuwa zaznaczony system"""
+    def context_delete(row_idx: int) -> None:
+        """Usuwa system o podanym indeksie wiersza"""
         try:
-            selected = sheet.get_currently_selected()
-            if selected and len(selected) >= 2:
-                r: int = selected[0]  # type: ignore
-                
-                if r >= len(data):
-                    return
-                
-                row = data[r]
-                if len(row) < 4:
-                    return
-                
-                system_id = row[1]  # ID z drugiej kolumny
-                system_name = row[2]  # Nazwa z trzeciej kolumny
-                system_type = row[3]  # Typ z czwartej kolumny
-                
-                # Sprawdź czy to podręcznik główny czy suplement
-                is_main_system = (system_type == "Podręcznik Główny")
-                
-                # Dla podręczników głównych usuń licznik suplementów z nazwy
-                if is_main_system and " (" in system_name and " supl.)" in system_name:
-                    system_name = system_name.split(" (")[0]
-                
-                if system_id and system_name:
-                    # Sprawdź czy podręcznik główny ma suplementy
-                    warning_msg = f"Czy na pewno chcesz usunąć system: {system_name}?"
-                    if is_main_system and int(system_id) in supplements:
-                        supp_count = len(supplements[int(system_id)])
-                        warning_msg += f"\n\nUWAGA: Ten podręcznik główny ma {supp_count} suplementów, które również zostaną usunięte!"
-                    
-                    if messagebox.askyesno("Usuń system RPG", warning_msg, parent=tab):  # type: ignore
-                        with sqlite3.connect(DB_FILE) as conn:
-                            c = conn.cursor()
-                            # Usuń suplementy jeśli to podręcznik główny
-                            if is_main_system:
-                                c.execute("DELETE FROM systemy_rpg WHERE system_glowny_id = ?", (system_id,))
-                            # Usuń główny system
-                            c.execute("DELETE FROM systemy_rpg WHERE id = ?", (system_id,))
-                            conn.commit()
-                        fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+            if row_idx >= len(data):
+                return
+
+            row = data[row_idx]
+            if len(row) < 4:
+                return
+
+            system_id = row[1]  # ID z drugiej kolumny
+            system_name = row[2]  # Nazwa z trzeciej kolumny
+            system_type = row[3]  # Typ z czwartej kolumny
+
+            # Sprawdź czy to podręcznik główny czy suplement
+            is_main_system = (system_type == "Podręcznik Główny")
+
+            # Dla podręczników głównych usuń licznik suplementów z nazwy
+            if is_main_system and " (" in system_name and " supl.)" in system_name:
+                system_name = system_name.split(" (")[0]
+
+            if system_id and system_name:
+                # Sprawdź czy podręcznik główny ma suplementy
+                warning_msg = f"Czy na pewno chcesz usunąć system: {system_name}?"
+                if is_main_system and int(system_id) in supplements:
+                    supp_count = len(supplements[int(system_id)])
+                    warning_msg += f"\n\nUWAGA: Ten podręcznik główny ma {supp_count} suplementów, które również zostaną usunięte!"
+
+                if messagebox.askyesno("Usuń system RPG", warning_msg, parent=tab):  # type: ignore
+                    with sqlite3.connect(DB_FILE) as conn:
+                        c = conn.cursor()
+                        if is_main_system:
+                            c.execute("DELETE FROM systemy_rpg WHERE system_glowny_id = ?", (system_id,))
+                        c.execute("DELETE FROM systemy_rpg WHERE id = ?", (system_id,))
+                        conn.commit()
+                    fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
         except Exception as e:
+            logger.exception("context_delete: nieoczekiwany wyjątek")
             print(f"Błąd podczas usuwania: {e}")
     
-    def context_add_supplement() -> None:
-        """Dodaje suplement do wybranego podręcznika głównego"""
+    def context_add_supplement(row_idx: int) -> None:
+        """Dodaje suplement do podręcznika głównego o podanym indeksie wiersza"""
         try:
-            selected = sheet.get_currently_selected()
-            if selected and len(selected) >= 2:
-                r: int = selected[0]  # type: ignore
-                
-                if r >= len(data):
-                    return
-                
-                row = data[r]
-                if len(row) < 4:
-                    return
-                
-                system_id = row[1]  # ID z drugiej kolumny
-                system_name = row[2]  # Nazwa z trzeciej kolumny
-                system_type = row[3]  # Typ z czwartej kolumny
-                
-                # Sprawdź czy to podręcznik główny
-                if system_type != "Podręcznik Główny":
-                    return
-                
-                # Usuń licznik suplementów z nazwy jeśli istnieje
-                if " (" in system_name and " supl.)" in system_name:
-                    clean_system_name = system_name.split(" (")[0]
-                else:
-                    clean_system_name = system_name
-                
-                if system_id:
-                    # Otwórz okno dodawania suplementu z predefiniowanym systemem głównym
-                    dodaj_suplement_do_systemu(tab.winfo_toplevel(), int(system_id), clean_system_name, 
-                                              refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
+            if row_idx >= len(data):
+                return
+
+            row = data[row_idx]
+            if len(row) < 4:
+                return
+
+            system_id = row[1]  # ID z drugiej kolumny
+            system_name = row[2]  # Nazwa z trzeciej kolumny
+            system_type = row[3]  # Typ z czwartej kolumny
+
+            # Sprawdź czy to podręcznik główny
+            if system_type != "Podręcznik Główny":
+                return
+
+            # Usuń licznik suplementów z nazwy jeśli istnieje
+            if " (" in system_name and " supl.)" in system_name:
+                clean_system_name = system_name.split(" (")[0]
+            else:
+                clean_system_name = system_name
+
+            if system_id:
+                # Otwórz okno dodawania suplementu z predefiniowanym systemem głównym
+                dodaj_suplement_do_systemu(tab.winfo_toplevel(), int(system_id), clean_system_name,
+                                          refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
         except Exception as e:
+            logger.exception("context_add_supplement: nieoczekiwany wyjątek")
             print(f"Błąd podczas dodawania suplementu: {e}")
     
     # Utwórz menu kontekstowe
@@ -1438,25 +1463,36 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         c = sheet.identify_column(event)
         if r is not None and c is not None:
             sheet.set_currently_selected(r, c)  # type: ignore
-            
-            # Sprawdź typ zaznaczonego systemu
+
             if r < len(data) and len(data[r]) > 3:
-                system_type = data[r][3]  # Typ z czwartej kolumny
-                
-                # Wyczyść menu
+                # Przechwytujemy r w domyślnych wartościach argumentów — gwarantuje
+                # poprawny indeks niezależnie od stanu selekcji w momencie kliknięcia opcji
+                captured_r: int = int(r)
+                system_type = data[captured_r][3]
+                logger.debug(
+                    "show_context_menu: row=%d, system_type=%r, symbol=%r",
+                    captured_r, system_type,
+                    data[captured_r][0] if data[captured_r] else '?'
+                )
+
                 menu.delete(0, 'end')
-                
-                # Dodaj podstawowe opcje
-                menu.add_command(label="Edytuj", command=context_edit)
-                
-                # Dodaj opcję dodawania suplementu tylko dla podręczników głównych
+                menu.add_command(
+                    label="Edytuj",
+                    command=lambda row_idx=captured_r: context_edit(row_idx)  # type: ignore
+                )
+
                 if system_type == "Podręcznik Główny":
-                    menu.add_command(label="Dodaj suplement do podręcznika głównego", command=context_add_supplement)
-                
+                    menu.add_command(
+                        label="Dodaj suplement do podręcznika głównego",
+                        command=lambda row_idx=captured_r: context_add_supplement(row_idx)  # type: ignore
+                    )
+
                 menu.add_separator()
-                menu.add_command(label="Usuń", command=context_delete)
-                
-                # Pokaż menu
+                menu.add_command(
+                    label="Usuń",
+                    command=lambda row_idx=captured_r: context_delete(row_idx)  # type: ignore
+                )
+
                 menu.tk_popup(event.x_root, event.y_root)  # type: ignore
     
     sheet.bind("<Button-3>", show_context_menu)  # type: ignore
@@ -1603,23 +1639,48 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     
     # Najpierw pobierz dane z bazy, aby sprawdzić czy VTT jest zaznaczone
     system_id = values[0]
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("""
-            SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
-                   wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
-                   cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy, system_glowny_nazwa_custom
-            FROM systemy_rpg WHERE id = ?
-        """, (system_id,))
-        system_data = c.fetchone()
+    logger.info("=== open_edit_system_dialog: START === system_id=%r", system_id)
+    logger.debug("open_edit_system_dialog: przekazane values=%r", list(values))
+
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("""
+                SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
+                       wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
+                       cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy, system_glowny_nazwa_custom
+                FROM systemy_rpg WHERE id = ?
+            """, (system_id,))
+            system_data = c.fetchone()
+    except Exception as _db_exc:
+        logger.exception("open_edit_system_dialog: błąd zapytania do bazy")
+        messagebox.showerror("Błąd bazy danych",
+                             f"Nie można odczytać danych systemu:\n{_db_exc}",
+                             parent=parent)
+        return
     
     if not system_data:
+        logger.error("open_edit_system_dialog: brak rekordu w bazie dla id=%r", system_id)
         messagebox.showerror("Błąd", "Nie znaleziono systemu w bazie danych.", parent=parent)
         return
     
+    logger.debug(
+        "open_edit_system_dialog: dane z bazy: id=%r, nazwa=%r, typ=%r, "
+        "system_glowny_id=%r, typ_suplementu=%r, system_glowny_nazwa_custom=%r, "
+        "kolumn=%d",
+        system_data[0], system_data[1], system_data[2],
+        system_data[3], system_data[4],
+        system_data[16] if len(system_data) > 16 else "<brak kolumny>",
+        len(system_data)
+    )
+
     # Sprawdź czy VTT jest zaznaczone
     has_vtt = bool(system_data[8])  # vtt
     is_suplement = system_data[2] == "Suplement"  # typ
+    logger.info(
+        "open_edit_system_dialog: is_suplement=%r, has_vtt=%r, system_glowny_id=%r",
+        is_suplement, has_vtt, system_data[3]
+    )
     
     dialog = ctk.CTkToplevel(parent)  # type: ignore
     dialog.title("Edytuj system RPG")
@@ -1927,42 +1988,67 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
 
     def on_typ_change(*args: Any) -> None:
         """Obsługuje zmianę typu (Podręcznik Główny/Suplement)"""
-        if typ_var.get() == "Suplement":
-            # Pokaż pola dla suplementu
-            system_glowny_label.grid()
-            system_glowny_combo.grid()
-            system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
-            system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
-            typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0,10), sticky="nw")
-            typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
-            # Załaduj systemy główne
-            main_systems_list = get_main_systems()
-            if main_systems_list:
-                system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems_list]
-                system_glowny_combo.configure(values=system_values)
-                # Ustaw obecnie wybrany system główny lub jawnie wyczyść
-                matched = False
-                if system_data[3]:  # system_glowny_id
-                    for sys in main_systems_list:
-                        if sys[0] == system_data[3]:
-                            system_glowny_var.set(f"{sys[0]} - {sys[1]}")
-                            matched = True
-                            break
-                if not matched:
-                    # Osierocony suplement - brak rodzica, wyczyść combo
+        current_typ = typ_var.get()
+        logger.debug("on_typ_change: wywołano, typ=%r, _initializing=%r", current_typ, _initializing[0])
+        try:
+            if current_typ == "Suplement":
+                # Pokaż pola dla suplementu
+                system_glowny_label.grid()
+                system_glowny_combo.grid()
+                system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
+                system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
+                typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0,10), sticky="nw")
+                typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
+                # Załaduj systemy główne
+                main_systems_list = get_main_systems()
+                logger.debug(
+                    "on_typ_change: pobrano %d systemów głównych, system_glowny_id=%r",
+                    len(main_systems_list) if main_systems_list else 0,
+                    system_data[3]
+                )
+                if main_systems_list:
+                    system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems_list]
+                    system_glowny_combo.configure(values=system_values)
+                    # Ustaw obecnie wybrany system główny lub jawnie wyczyść
+                    matched = False
+                    if system_data[3]:  # system_glowny_id
+                        for sys in main_systems_list:
+                            if sys[0] == system_data[3]:
+                                system_glowny_var.set(f"{sys[0]} - {sys[1]}")
+                                matched = True
+                                logger.debug("on_typ_change: dopasowano system główny id=%r", sys[0])
+                                break
+                    if not matched:
+                        # Osierocony suplement - brak rodzica, wyczyść combo
+                        system_glowny_var.set("")
+                        logger.info(
+                            "on_typ_change: suplement id=%r nie ma dopasowanego systemu głównego "
+                            "(system_glowny_id=%r) – ustawiam pusty combo",
+                            system_data[0], system_data[3]
+                        )
+                else:
+                    # Brak podręczników głównych w bazie
+                    system_glowny_combo.configure(values=[])
                     system_glowny_var.set("")
+                    logger.warning(
+                        "on_typ_change: brak podręczników głównych w bazie dla suplementu id=%r",
+                        system_data[0]
+                    )
             else:
-                # Brak podręczników głównych w bazie
-                system_glowny_combo.configure(values=[])
-                system_glowny_var.set("")
-        else:
-            # Ukryj pola dla suplementu
-            system_glowny_label.grid_remove()
-            system_glowny_combo.grid_remove()
-            system_glowny_custom_label.grid_remove()
-            system_glowny_custom_entry.grid_remove()
-            typ_suplementu_label.grid_remove()
-            typ_suplementu_frame.grid_remove()
+                # Ukryj pola dla suplementu
+                system_glowny_label.grid_remove()
+                system_glowny_combo.grid_remove()
+                system_glowny_custom_label.grid_remove()
+                system_glowny_custom_entry.grid_remove()
+                typ_suplementu_label.grid_remove()
+                typ_suplementu_frame.grid_remove()
+        except Exception as _exc:
+            logger.exception(
+                "on_typ_change: nieoczekiwany wyjątek dla system_id=%r, typ=%r",
+                system_data[0] if system_data else '?', current_typ
+            )
+            raise
+
         if not _initializing[0]:
             update_dialog_size()
 

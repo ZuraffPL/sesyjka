@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.19-blue)
+![Version](https://img.shields.io/badge/version-0.3.21-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -24,7 +24,6 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Rejestracja przeprowadzonych sesji
 - Powiązanie z systemami RPG
 - Obsługa graczy i mistrza gry
-- Opis sesji z możliwością długich notatek
 
 ### 👥 Gracze
 - Baza danych graczy
@@ -188,6 +187,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.21 (24.02.2026)
+- 🐛 **NAPRAWA**: Edycja suplementów bez przypisanego podręcznika głównego nie otwierała okna edycji u części użytkowników
+- 🔧 **Przyczyna**: `context_edit`/`context_delete`/`context_add_supplement` czytały selekcję przez `get_currently_selected()` po otwarciu menu, przez co indeks wiersza mógł być nieważny
+- ✅ **Naprawiono**: Indeks wiersza przechwytywany w `captured_r` w momencie prawego kliknięcia i przekazywany przez domyślne argumenty lambda
+- 📜 **NOWE**: System logowania diagnostycznego (`sesyjka_debug.log`) w katalogu AppData
+- 📎 Logi w `open_edit_system_dialog`, `on_typ_change`, `context_edit`, `show_context_menu`
+- 🧾 **Refaktoryzacja**: funkcje menu kontekstowego przyjmują `row_idx` bezpośrednio zamiast pytać o aktualną selekcję
 
 ### v0.3.19 (18.02.2026)
 - 🛡️ **NOWE**: `dialog_utils.py` - centralny system bezpiecznej geometrii dialogów

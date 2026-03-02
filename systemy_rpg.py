@@ -2056,6 +2056,17 @@ def open_edit_system_dialog(parent: tk.Widget, values: Sequence[Any], refresh_ca
     on_typ_change()  # Ustaw początkowy stan bez resize
     _initializing[0] = False
     dialog.after(50, update_dialog_size)  # Opóźniony resize - po pełnej inicjalizacji CTkToplevel
+    # Wymuszenie widoczności okna po zakończeniu cyklu withdraw/deiconify CTkToplevel.
+    # CTkToplevel wywołuje wewnętrznie withdraw() a potem after(~200ms, deiconify).
+    # Dla osieroconych suplementów (system_glowny_id=None) configure() na CTkComboBox
+    # może sprowokować wcześniejsze przetwarzanie kolejki zdarzeń Tk, przez co okno
+    # zostaje ukryte zanim CTkToplevel zrobi deiconify. 300 ms > 200 ms = bezpieczna wartość.
+    def _ensure_visible() -> None:
+        if dialog.winfo_exists():
+            dialog.deiconify()
+            dialog.lift()
+            dialog.focus_force()
+    dialog.after(300, _ensure_visible)
 
     def on_save() -> None:
         """Zapisuje zmiany do bazy"""

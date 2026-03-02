@@ -22,7 +22,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.20"
+APP_VERSION = "0.3.22"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -211,6 +211,13 @@ class SesyjkaApp(ctk.CTk):
         
         self.create_ribbon()
         self.create_content_area()
+
+    def report_callback_exception(self, exc: type, val: BaseException, tb: object) -> None:  # type: ignore
+        """Cicho ignoruje TclError 'bad window path' (po destroy widgetów przy rebuild tabeli)."""
+        import _tkinter  # type: ignore
+        if isinstance(val, _tkinter.TclError) and "bad window path" in str(val):  # type: ignore
+            return
+        super().report_callback_exception(exc, val, tb)  # type: ignore
 
     def set_modern_theme(self, dark=False): # type: ignore
         if dark:

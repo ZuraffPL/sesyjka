@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.21-blue)
+![Version](https://img.shields.io/badge/version-0.3.22-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -187,6 +187,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.22 (02.03.2026)
+- 🔧 **PRZEBUDOWA**: Moduł wydawców — widok tabeli przeszedł z `CTkScrollableFrame` (ręczny grid) na `CTkDataTable` (spójny z resztą aplikacji)
+- 📐 **Szerokość kolumn**: auto-dopasowanie do zawartości przez `_compute_widths()` (tkfont), limity: Nazwa ≤ 280px, Strona ≤ 500px, Kraj ≤ 120px
+- 🖊️ **Ikona edycji**: `Icons/edit.png` z PIL tint — dwa warianty kolorystyczne: jasny tryb `#1558d6`, ciemny tryb `#7baaff`
+- 💬 **Tooltip**: przycisk edycji wyświetla tooltip "Edytuj" (fix `add="+"` w bindingach)
+- 🐛 **NAPRAWA**: `TclError: bad window path` po przełączeniu dark/light mode — `CTkComboBox` → `ttk.Combobox` w dialogu filtrowania + `report_callback_exception()` w `SesyjkaApp`
+- 🔄 **Przywrócono** brakujące funkcje: `usun_wydawce_dialog`, `usun_zaznaczonego_wydawce` (używa `CTkDataTable.get_selected()`)
 
 ### v0.3.21 (24.02.2026)
 - 🐛 **NAPRAWA**: Edycja suplementów bez przypisanego podręcznika głównego nie otwierała okna edycji u części użytkowników

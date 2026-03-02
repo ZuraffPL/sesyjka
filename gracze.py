@@ -1,13 +1,15 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 import tkinter as tk
-import tksheet  # type: ignore
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox
 import sqlite3
-from typing import Optional, Callable, Sequence, Any, Union, List, Dict
+import webbrowser
+from typing import Optional, Callable, Sequence, Any, Union, List, Dict, Tuple
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry
+from ctk_table import CTkDataTable
 
 DB_FILE = get_db_path("gracze.db")
 
@@ -63,58 +65,6 @@ def _apply_dark_theme_to_widget(widget: Union[tk.Widget, tk.Toplevel], dark_bg: 
         # Ignoruj błędy konfiguracji (niektóre widgety mogą nie obsługiwać pewnych opcji)
         pass
 
-def apply_gender_colors(sheet: tksheet.Sheet, data: list[list[str]], dark_mode: bool) -> None:
-    """Aplikuje kolorowanie wierszy wg płci gracza."""
-    gender_col = 3  # Kolumna "Płeć"
-    
-    # Palety kolorów dla trybu jasnego
-    light_colors = {
-        "Kobieta": "#ffe6f0",      # Jasnoróżowy
-        "Mężczyzna": "#e6f3ff",    # Jasnobłękitny  
-        "Niebinarna": "#fff2e6",   # Jasnopomarańczowy
-        "Inne": "#f0e6ff"          # Jasnofioletowy
-    }
-    
-    # Palety kolorów dla trybu ciemnego
-    dark_colors = {
-        "Kobieta": "#4a1a3a",      # Ciemnoróżowy
-        "Mężczyzna": "#1a3a4a",    # Ciemnobłękitny
-        "Niebinarna": "#4a3a1a",   # Ciemnopomarańczowy  
-        "Inne": "#3a1a4a"          # Ciemnofioletowy
-    }
-    
-    colors = dark_colors if dark_mode else light_colors
-    
-    for r, row in enumerate(data):
-        if r < len(data) and gender_col < len(row):
-            gender = row[gender_col]
-            if gender in colors:
-                # Podświetl cały wiersz
-                sheet.highlight_rows(r, bg=colors[gender])
-
-def apply_status_colors(sheet: Any, data: list[list[str]], records: list[tuple[Any, ...]], dark_mode: bool = False) -> None:
-    """Stosuje kolory dla głównego użytkownika i ważnych osób"""
-    # Kolory dla trybu jasnego
-    light_main_user = "#fff9e6"    # Jasny złoty/żółty
-    light_important = "#f0e6ff"     # Jasny fioletowy
-    
-    # Kolory dla trybu ciemnego  
-    dark_main_user = "#4a4a1a"     # Ciemny złoty/żółty
-    dark_important = "#3a1a4a"      # Ciemny fioletowy
-    
-    main_color = dark_main_user if dark_mode else light_main_user
-    important_color = dark_important if dark_mode else light_important
-    
-    for r, rec in enumerate(records):
-        if len(rec) > 6:
-            is_main = rec[5] == 1
-            is_important = rec[6] == 1
-            
-            # Główny użytkownik ma priorytet
-            if is_main:
-                sheet.highlight_rows(r, bg=main_color)
-            elif is_important:
-                sheet.highlight_rows(r, bg=important_color)
 
 def dodaj_gracza(parent: Optional[tk.Tk] = None, refresh_callback: Optional[Callable[..., None]] = None) -> None:
     if parent is None:
@@ -276,449 +226,321 @@ def get_all_players() -> list[tuple[Any, ...]]:
         return c.fetchall()
 
 def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ignore
+    """Główny widok graczy — tabela CTkDataTable."""
     for widget in tab.winfo_children():
         widget.destroy()
-    headers: list[str] = ["ID", "Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
-    records: list[tuple[int, str, Optional[str], Optional[str], Optional[str], int, int]] = get_all_players()
-    # Formatuj dane z oznaczeniami dla statusów
-    data: list[list[str]] = []
+
+    records = get_all_players()
+
+    # Buduj 8-polowe wiersze: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
+    # Pierwsze 6 jest widocznych (6 col_widths), ostatnie 2 są ukryte — potrzebne dla okna edycji.
+    data: List[List[Any]] = []
     for rec in records:
-        row = [str(v) if v is not None else "" for v in rec[:5]]
-        # Status - główny użytkownik ma priorytet
-        if rec[5] == 1:
-            row.append("⭐")
-        elif rec[6] == 1:
-            row.append("👑")
-        else:
-            row.append("")
-        data.append(row)
-    
-    # Zmienna do przechowywania aktualnie wyświetlanych danych (pełne lub przefiltrowane)
-    displayed_data: list[list[str]] = list(data)
-    displayed_records: list[tuple[int, str, Optional[str], Optional[str], Optional[str], int, int]] = list(records)
-    
-    sheet = tksheet.Sheet(tab,
-        data=displayed_data,  # type: ignore
-        headers=headers,
-        show_x_scrollbar=True,
-        show_y_scrollbar=True,
-        width=1200,
-        height=600)
-    # Automatyczne dopasowanie szerokości kolumn do zawartości lub nagłówka
-    for col in range(len(headers)):
-        max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
-        width_px = max(80, min(400, int(max_content * 9 + 24)))
-        sheet.column_width(column=col, width=width_px)
-    
-    # Skalowanie fontów
-    sheet.set_options(
-        font=("Segoe UI", scale_font_size(10), "normal"),
-        header_font=("Segoe UI", scale_font_size(10), "bold")
-    )  # type: ignore
-    
-    # Wycentrowanie kolumny ID i Status
-    sheet.align_columns(columns=[0, 5], align="center")
-    # Włącz obsługę zaznaczania i interakcji jak u wydawców
-    sheet.enable_bindings((
-        "single_select",
-        "row_select",
-        "column_select",
-        "arrowkeys",
-        "right_click_popup_menu",
-        "rc_select",
-        "copy",
-        "cut",
-        "paste",
-        "delete",
-        "undo",
-        "edit_cell",
-        "column_header_click"
-    )) # type: ignore
-    # Panel sortowania nad tabelą
-    sort_frame = tk.Frame(tab)
-    sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-    sort_label = tk.Label(sort_frame, text="Sortuj po kolumnie:")
-    sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    sort_var = tk.StringVar(value=active_sort_gracze.get("column", headers[0]))
-    sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=headers, state="readonly", width=12)
-    sort_menu.pack(side=tk.LEFT)
-    def do_sort(reverse: bool = False) -> None:
-        active_sort_gracze["column"] = sort_var.get()
-        active_sort_gracze["reverse"] = reverse
-        col = headers.index(sort_var.get())
+        status = "⭐" if rec[5] == 1 else ("👑" if rec[6] == 1 else "")
+        data.append([
+            rec[0],
+            rec[1] if rec[1] else "",
+            rec[2] if rec[2] else "",
+            rec[3] if rec[3] else "",
+            rec[4] if rec[4] else "",
+            status,
+            rec[5],   # glowny_uzytkownik int (ukryty)
+            rec[6],   # wazna int (ukryty)
+        ])
 
-        # Sortuj obie listy razem, zachowując synchronizację between displayed_data i displayed_records
-        if col == 0:
-            pairs = sorted(zip(displayed_data, displayed_records), key=lambda p: int(p[0][0]) if p[0][0] else 0, reverse=reverse)
-        elif col == 5:  # Status
-            def status_key(pair: tuple[list[str], Any]) -> tuple[int, str]:
-                status = pair[0][col]
-                if status == '⭐':
-                    return (0, status)
-                elif status == '👑':
-                    return (1, status)
-                else:
-                    return (2, status)
-            pairs = sorted(zip(displayed_data, displayed_records), key=status_key, reverse=reverse)
-        else:
-            pairs = sorted(zip(displayed_data, displayed_records), key=lambda p: (p[0][col] or '').lower(), reverse=reverse)
+    _HEADERS  = ["ID", "Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
+    _SORTABLE = {"ID": 0, "Nick": 1, "Imię i nazwisko": 2, "Płeć": 3, "Social media": 4, "Status": 5}
 
-        displayed_data.clear()
-        displayed_records.clear()
-        for d, r in pairs:
-            displayed_data.append(d)
-            displayed_records.append(r)
+    # ── Obliczanie szerokości kolumn ─────────────────────────────────────────
+    _mf      = tkfont.Font(family="Segoe UI", size=scale_font_size(10))
+    _mf_bold = tkfont.Font(family="Segoe UI", size=scale_font_size(10), weight="bold")
 
-        sheet.set_sheet_data(list(displayed_data)) # type: ignore
-        for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
-            width_px = max(80, min(400, int(max_content * 9 + 24)))
-            sheet.column_width(column=c, width=width_px)
-        # Ponowne zastosowanie kolorowania po sortowaniu
-        apply_gender_colors(sheet, displayed_data, dark_mode)
-        apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
-        # Ponowne zastosowanie stylowania linków
-        link_col = 4
-        for r, row in enumerate(displayed_data):
-            if row[link_col]:
-                sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
-        sheet.refresh()
-    sort_asc_btn = ttk.Button(sort_frame, text="Rosnąco", command=lambda: do_sort(False))
-    sort_asc_btn.pack(side=tk.LEFT, padx=4)
-    sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_sort(True))
-    sort_desc_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przywroć sortowanie z poprzedniej sesji
-    if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
-        do_sort(active_sort_gracze.get("reverse", False))
-    
-    # Separator
-    separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
-    separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
-    
-    # Filtrowanie
-    filter_label = tk.Label(sort_frame, text="Filtruj:")
-    filter_label.pack(side=tk.LEFT, padx=(0, 6))
-    
-    def open_filter_dialog() -> None:
-        """Otwiera okno dialogowe filtrowania"""
-        dialog = tk.Toplevel(tab)
-        dialog.title("Filtruj graczy")
-        dialog.transient(tab.winfo_toplevel())
-        
+    def _compute_widths(rows: List[List[Any]]) -> List[int]:
+        pad = 24
+        w_nick   = max([_mf_bold.measure("Nick")]            + ([_mf.measure(str(r[1])) for r in rows if r[1]] or [0])) + pad
+        w_imie   = max([_mf_bold.measure("Imię i nazwisko")] + ([_mf.measure(str(r[2])) for r in rows if r[2]] or [0])) + pad
+        w_plec   = max([_mf_bold.measure("Płeć")]            + ([_mf.measure(str(r[3])) for r in rows if r[3]] or [0])) + pad
+        w_social = max([_mf_bold.measure("Social media")]    + ([_mf.measure(str(r[4])) for r in rows if r[4]] or [0])) + pad
+        return [
+            44,
+            min(max(w_nick,    80), 200),
+            min(max(w_imie,   120), 280),
+            min(max(w_plec,    70), 110),
+            min(max(w_social, 100), 380),
+            56,
+        ]
+
+    # ── Kolorowanie wierszy (płeć + status, status ma priorytet) ─────────────
+    def _row_color(i: int, row: List[Any]) -> Optional[Tuple[Optional[str], Optional[str]]]:
+        status = row[5] if len(row) > 5 else ""
+        gender = row[3] if len(row) > 3 else ""
         if dark_mode:
-            apply_dark_theme_to_dialog(dialog)
-        
-        # Centrowanie okna (bezpieczna geometria)
-        apply_safe_geometry(dialog, tab.winfo_toplevel(), 350, 280)
-        
-        main_frame = tk.Frame(dialog)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
+            if status == "⭐":
+                return ("#4a4a1a", None)
+            elif status == "👑":
+                return ("#3a1a4a", None)
+            dgc: Dict[str, str] = {
+                "Kobieta":    "#4a1a3a",
+                "Mężczyzna":  "#1a3a4a",
+                "Niebinarna": "#4a3a1a",
+                "Inne":       "#3a1a4a",
+            }
+            return (dgc.get(gender), None)
+        else:
+            if status == "⭐":
+                return ("#fff9e6", None)
+            elif status == "👑":
+                return ("#f0e6ff", None)
+            lgc: Dict[str, str] = {
+                "Kobieta":    "#ffe6f0",
+                "Mężczyzna":  "#e6f3ff",
+                "Niebinarna": "#fff2e6",
+                "Inne":       "#f0e6ff",
+            }
+            return (lgc.get(gender), None)
+
+    # ── Stan ─────────────────────────────────────────────────────────────────
+    bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
+    fg_top = "#e0e0e0" if dark_mode else "#212121"
+    FONT   = ("Segoe UI", scale_font_size(10))
+    displayed_data: List[List[Any]] = []
+    _table: List[Optional[CTkDataTable]] = [None]
+
+    # ── Filtry + sortowanie ──────────────────────────────────────────────────
+    def _apply_and_draw() -> None:
+        nonlocal displayed_data
+        filtered: List[List[Any]] = list(data)
+
         # Filtr płci
-        tk.Label(main_frame, text="Płeć:").grid(row=0, column=0, sticky="w", pady=5)
-        plec_var = tk.StringVar(value=active_filters_gracze.get('plec', 'Wszystkie'))
-        
-        # Pobierz unikalne płcie z danych
-        plci: set[str] = set()
-        for row in data:
-            if row[3]:  # Płeć
-                plci.add(row[3])
-        plec_values = ['Wszystkie'] + sorted(list(plci))
-        plec_combo = ttk.Combobox(main_frame, textvariable=plec_var, values=plec_values, state="readonly", width=25)
-        plec_combo.grid(row=0, column=1, sticky="ew", pady=5)
-        
-        # Filtr Imię i nazwisko
-        tk.Label(main_frame, text="Imię i nazwisko:").grid(row=1, column=0, sticky="w", pady=5)
-        imie_var = tk.StringVar(value=active_filters_gracze.get('imie', 'Wszystkie'))
-        imie_values = ['Wszystkie', 'Wpisane', 'Puste']
-        imie_combo = ttk.Combobox(main_frame, textvariable=imie_var, values=imie_values, state="readonly", width=25)
-        imie_combo.grid(row=1, column=1, sticky="ew", pady=5)
-        
-        # Filtr Social media
-        tk.Label(main_frame, text="Social media:").grid(row=2, column=0, sticky="w", pady=5)
-        social_var = tk.StringVar(value=active_filters_gracze.get('social', 'Wszystkie'))
-        social_values = ['Wszystkie', 'Wpisane', 'Puste']
-        social_combo = ttk.Combobox(main_frame, textvariable=social_var, values=social_values, state="readonly", width=25)
-        social_combo.grid(row=2, column=1, sticky="ew", pady=5)
-        
-        # Filtr Status
-        tk.Label(main_frame, text="Status:").grid(row=3, column=0, sticky="w", pady=5)
-        status_var = tk.StringVar(value=active_filters_gracze.get('status', 'Wszystkie'))
-        status_values = ['Wszystkie', 'Główny użytkownik', 'Ważna osoba', 'Zwykła osoba']
-        status_combo = ttk.Combobox(main_frame, textvariable=status_var, values=status_values, state="readonly", width=25)
-        status_combo.grid(row=3, column=1, sticky="ew", pady=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-        
-        # Przyciski
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
-        
-        def apply_filters() -> None:
-            """Aplikuje filtry"""
-            nonlocal displayed_data, displayed_records
-            active_filters_gracze['plec'] = plec_var.get()
-            active_filters_gracze['imie'] = imie_var.get()
-            active_filters_gracze['social'] = social_var.get()
-            active_filters_gracze['status'] = status_var.get()
-            
-            # Filtruj dane i rekordy równolegle
-            filtered_data: List[Any] = []
-            filtered_records: List[Any] = []
-            for i, row in enumerate(data):
-                # Filtr płci
-                if active_filters_gracze['plec'] != 'Wszystkie':
-                    if row[3] != active_filters_gracze['plec']:
-                        continue
-                
-                # Filtr Imię i nazwisko (kolumna 2)
-                if active_filters_gracze['imie'] == 'Wpisane':
-                    if not row[2] or row[2].strip() == '':
-                        continue
-                elif active_filters_gracze['imie'] == 'Puste':
-                    if row[2] and row[2].strip() != '':
-                        continue
-                
-                # Filtr Social media (kolumna 4)
-                if active_filters_gracze['social'] == 'Wpisane':
-                    if not row[4] or row[4].strip() == '':
-                        continue
-                elif active_filters_gracze['social'] == 'Puste':
-                    if row[4] and row[4].strip() != '':
-                        continue
-                
-                # Filtr Status (kolumna 5)
-                if active_filters_gracze.get('status') == 'Główny użytkownik':
-                    if row[5] != '⭐':
-                        continue
-                elif active_filters_gracze.get('status') == 'Ważna osoba':
-                    if row[5] != '👑':
-                        continue
-                elif active_filters_gracze.get('status') == 'Zwykła osoba':
-                    if row[5] in ['⭐', '👑']:
-                        continue
-                
-                filtered_data.append(row)
-                filtered_records.append(records[i])
-            
-            displayed_data.clear()
-            displayed_data.extend(filtered_data)
-            displayed_records.clear()
-            displayed_records.extend(filtered_records)
-            
-            sheet.set_sheet_data(displayed_data)  # type: ignore
-            for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=c, width=width_px)
-            
-            # Ponowne zastosowanie kolorowania po filtrowaniu
-            apply_gender_colors(sheet, displayed_data, dark_mode)
-            apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
-            
-            # Ponowne zastosowanie stylowania linków
-            link_col = 4
-            for r, row in enumerate(displayed_data):
-                if row[link_col]:
-                    sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
-            
-            sheet.refresh()
-            
-            # Przywróć sortowanie po filtrowaniu
-            if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
-                do_sort(active_sort_gracze.get("reverse", False))
-            
-            # Aktualizuj tekst przycisku
-            count = 0
-            if active_filters_gracze.get('plec') != 'Wszystkie':
-                count += 1
-            if active_filters_gracze.get('imie') != 'Wszystkie':
-                count += 1
-            if active_filters_gracze.get('social') != 'Wszystkie':
-                count += 1
-            if active_filters_gracze.get('status') != 'Wszystkie':
-                count += 1
-            
-            if count > 0:
-                filter_btn.configure(text=f"Filtruj ({count})")
-            else:
-                filter_btn.configure(text="Filtruj")
-            
-            dialog.destroy()
-        
-        def reset_filters() -> None:
-            """Resetuje wszystkie filtry"""
-            nonlocal displayed_data, displayed_records
-            active_filters_gracze.clear()
-            displayed_data.clear()
-            displayed_data.extend(data)
-            displayed_records.clear()
-            displayed_records.extend(records)
-            sheet.set_sheet_data(displayed_data)  # type: ignore
-            for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])])
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=c, width=width_px)
-            
-            # Ponowne zastosowanie kolorowania
-            apply_gender_colors(sheet, displayed_data, dark_mode)
-            
-            # Ponowne zastosowanie stylowania linków
-            link_col = 4
-            for r, row in enumerate(data):
-                if row[link_col]:
-                    sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
-            
-            sheet.refresh()
-            
-            # Przywróć sortowanie po zresetowaniu filtrów
-            if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
-                do_sort(active_sort_gracze.get("reverse", False))
-            
-            filter_btn.configure(text="Filtruj")
-            dialog.destroy()
-        
-        ttk.Button(btn_frame, text="Zastosuj", command=apply_filters).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(btn_frame, text="Resetuj", command=reset_filters).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Anuluj", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
-    
-    filter_btn = ttk.Button(sort_frame, text="Filtruj", command=open_filter_dialog)
+        if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
+            filtered = [r for r in filtered if r[3] == active_filters_gracze['plec']]
+
+        # Filtr imię i nazwisko
+        imie_f = active_filters_gracze.get('imie', 'Wszystkie')
+        if imie_f == 'Wpisane':
+            filtered = [r for r in filtered if r[2] and str(r[2]).strip()]
+        elif imie_f == 'Puste':
+            filtered = [r for r in filtered if not r[2] or not str(r[2]).strip()]
+
+        # Filtr social media
+        social_f = active_filters_gracze.get('social', 'Wszystkie')
+        if social_f == 'Wpisane':
+            filtered = [r for r in filtered if r[4] and str(r[4]).strip()]
+        elif social_f == 'Puste':
+            filtered = [r for r in filtered if not r[4] or not str(r[4]).strip()]
+
+        # Filtr status
+        status_f = active_filters_gracze.get('status', 'Wszystkie')
+        if status_f == 'Główny użytkownik':
+            filtered = [r for r in filtered if r[5] == "⭐"]
+        elif status_f == 'Ważna osoba':
+            filtered = [r for r in filtered if r[5] == "👑"]
+        elif status_f == 'Zwykła osoba':
+            filtered = [r for r in filtered if r[5] not in ("⭐", "👑")]
+
+        # Sortowanie
+        col_i = _SORTABLE.get(active_sort_gracze.get("column", "ID"), 0)
+        rev   = active_sort_gracze.get("reverse", False)
+        if col_i == 0:
+            filtered.sort(key=lambda x: int(x[0]) if x[0] != "" else 0, reverse=rev)
+        elif col_i == 5:
+            def _skey(r: List[Any]) -> Tuple[int, str]:
+                s = r[5]
+                if s == "⭐": return (0, "")
+                if s == "👑": return (1, "")
+                return (2, "")
+            filtered.sort(key=_skey, reverse=rev)
+        else:
+            filtered.sort(key=lambda x: (str(x[col_i]) or '').lower(), reverse=rev)
+
+        displayed_data = filtered
+        if _table[0] is not None:
+            _table[0].set_data(displayed_data)
+        _refresh_filter_btn()
+
+    def _refresh_filter_btn() -> None:
+        active = sum(1 for v in active_filters_gracze.values() if v != 'Wszystkie')
+        filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
+
+    # ── Górny pasek (sortowanie + filtry) ────────────────────────────────────
+    top_bar = tk.Frame(tab, bg=bg_top)
+    top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
+    tk.Label(top_bar, text="Sortuj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    sort_var = tk.StringVar(value=active_sort_gracze.get("column", "ID"))
+    ttk.Combobox(
+        top_bar, textvariable=sort_var,
+        values=list(_SORTABLE.keys()),
+        state="readonly", width=14,
+    ).pack(side=tk.LEFT)
+
+    def _sort_asc() -> None:
+        active_sort_gracze["column"]  = sort_var.get()
+        active_sort_gracze["reverse"] = False
+        _apply_and_draw()
+
+    def _sort_desc() -> None:
+        active_sort_gracze["column"]  = sort_var.get()
+        active_sort_gracze["reverse"] = True
+        _apply_and_draw()
+
+    ttk.Button(top_bar, text="Rosnąco",  command=_sort_asc ).pack(side=tk.LEFT, padx=4)
+    ttk.Button(top_bar, text="Malejąco", command=_sort_desc).pack(side=tk.LEFT, padx=4)
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    filter_btn = ttk.Button(top_bar, text="Filtruj", command=lambda: _open_filter())
     filter_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przesuń tabelę w dół (row=1)
-    sheet.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+    # ── Callbacki tabeli ─────────────────────────────────────────────────────
+    def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        # row_data: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
+        # open_edit_gracz_dialog oczekuje: [id, nick, imie, plec, social, glowny_int, wazna_int]
+        edit_vals: List[Any] = [
+            row_data[0], row_data[1], row_data[2], row_data[3], row_data[4],
+            row_data[6] if len(row_data) > 6 else 0,
+            row_data[7] if len(row_data) > 7 else 0,
+        ]
+        open_edit_gracz_dialog(
+            tab, edit_vals,
+            refresh_callback=lambda **_kw: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab)),  # type: ignore[misc]
+        )
+
+    def _on_sort(col_idx: int) -> None:
+        col_name = _HEADERS[col_idx]
+        if active_sort_gracze.get("column") == col_name:
+            active_sort_gracze["reverse"] = not active_sort_gracze.get("reverse", False)
+        else:
+            active_sort_gracze["column"]  = col_name
+            active_sort_gracze["reverse"] = False
+        sort_var.set(col_name)
+        _apply_and_draw()
+
+    def _on_cell_click(_row_idx: int, col_idx: int, row_data: List[Any]) -> None:
+        if col_idx == 4 and row_data[4]:
+            webbrowser.open(str(row_data[4]))
+
+    def _on_right_click(_row_idx: int, row_data: List[Any], event: Any) -> None:
+        def _edit() -> None:
+            _on_edit(_row_idx, row_data)
+
+        def _del() -> None:
+            if messagebox.askyesno(
+                    "Usuń gracza",
+                    f"Czy na pewno chcesz usunąć gracza: {row_data[1]}?",
+                    parent=tab):
+                with sqlite3.connect(DB_FILE) as conn:
+                    conn.cursor().execute("DELETE FROM gracze WHERE id=?", (row_data[0],))
+                    conn.commit()
+                fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+
+        ctx = tk.Menu(tab, tearoff=0)
+        ctx.add_command(label="Edytuj", command=_edit)
+        ctx.add_separator()
+        ctx.add_command(label="Usuń",   command=_del)
+        ctx.tk_popup(event.x_root, event.y_root)
+        ctx.grab_release()
+
+    # ── Tabela ───────────────────────────────────────────────────────────────
+    tbl = CTkDataTable(
+        tab,
+        headers=_HEADERS,
+        col_widths=_compute_widths(data) if data else [44, 120, 160, 90, 200, 56],
+        data=[],
+        edit_callback=_on_edit,
+        id_col=0,
+        row_color_fn=_row_color,
+        link_cols=[4],
+        center_cols=[0, 5],
+        dark_mode=dark_mode,
+        sort_callback=_on_sort,
+        cell_click_callback=_on_cell_click,
+        right_click_callback=_on_right_click,
+    )
+    tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
     tab.columnconfigure(0, weight=1)
-    # Stylowanie kolumny Social media jako link (kolor)
-    link_col = 4
-    for r, row in enumerate(displayed_data):
-        if row[link_col]:
-            sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
-    
-    # Kolorowanie wierszy wg płci
-    apply_gender_colors(sheet, displayed_data, dark_mode)
-    # Kolorowanie wierszy dla głównego użytkownika i ważnych osób (nadpisuje kolory płci)
-    apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
-    
-    # Automatycznie aplikuj filtry jeśli są aktywne
-    if active_filters_gracze:
-        # Filtruj dane i rekordy równolegle
-        filtered_data: List[Any] = []
-        filtered_records: List[Any] = []
-        for i, row in enumerate(data):
-            # Filtr płci
-            if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
-                if row[3] != active_filters_gracze['plec']:
-                    continue
-            
-            # Filtr Imię i nazwisko (kolumna 2)
-            if active_filters_gracze.get('imie', 'Wszystkie') == 'Wpisane':
-                if not row[2] or row[2].strip() == '':
-                    continue
-            elif active_filters_gracze.get('imie', 'Wszystkie') == 'Puste':
-                if row[2] and row[2].strip() != '':
-                    continue
-            
-            # Filtr Social media (kolumna 4)
-            if active_filters_gracze.get('social', 'Wszystkie') == 'Wpisane':
-                if not row[4] or row[4].strip() == '':
-                    continue
-            elif active_filters_gracze.get('social', 'Wszystkie') == 'Puste':
-                if row[4] and row[4].strip() != '':
-                    continue
-            
-            # Filtr Status (kolumna 5)
-            if active_filters_gracze.get('status', 'Wszystkie') == 'Główny użytkownik':
-                if row[5] != '⭐':
-                    continue
-            elif active_filters_gracze.get('status', 'Wszystkie') == 'Ważna osoba':
-                if row[5] != '👑':
-                    continue
-            elif active_filters_gracze.get('status', 'Wszystkie') == 'Zwykła osoba':
-                if row[5] in ['⭐', '👑']:
-                    continue
-            
-            filtered_data.append(row)
-            filtered_records.append(records[i])
-        
-        displayed_data.clear()
-        displayed_data.extend(filtered_data)
-        displayed_records.clear()
-        displayed_records.extend(filtered_records)
-        sheet.set_sheet_data(displayed_data)  # type: ignore
-        for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-            width_px = max(80, min(400, int(max_content * 9 + 24)))
-            sheet.column_width(column=c, width=width_px)
-        sheet.refresh()
-        
-        # Przywróć sortowanie po auto-filtrowaniu na starcie
-        if active_sort_gracze.get("column", headers[0]) != headers[0] or active_sort_gracze.get("reverse", False):
-            do_sort(active_sort_gracze.get("reverse", False))
-        
-        # Ponownie aplikuj kolorowanie po filtracji
-        for r, row in enumerate(displayed_data):
-            if row[link_col]:
-                sheet.highlight_cells(row=r, column=link_col, fg="#1a0dab" if not dark_mode else "#7baaff")
-        apply_gender_colors(sheet, displayed_data, dark_mode)
-        apply_status_colors(sheet, displayed_data, displayed_records, dark_mode)
-        
-        # Aktualizuj tekst przycisku
-        count = sum(1 for v in active_filters_gracze.values() if v != 'Wszystkie')
-        if count > 0:
-            filter_btn.configure(text=f"Filtruj ({count})")
-    
-    # --- MENU KONTEKSTOWE ---
-    menu = tk.Menu(tab, tearoff=0)
-    def context_edit() -> None:
-        sel = sheet.get_currently_selected()
-        if sel and len(sel) >= 2:
-            r, _ = sel[:2] # type: ignore
-            if r < len(displayed_records):
-                open_edit_gracz_dialog(tab, displayed_records[r], refresh_callback=lambda **kwargs: fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))) # type: ignore
-    def context_delete() -> None:
-        sel = sheet.get_currently_selected()
-        if sel and len(sel) >= 2:
-            r, _ = sel[:2] # type: ignore
-            if r < len(displayed_data):
-                values = displayed_data[r] # type: ignore
-                if messagebox.askyesno("Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {values[1]}?", parent=tab): # type: ignore
-                    with sqlite3.connect(DB_FILE) as conn:
-                        c = conn.cursor()
-                        c.execute("DELETE FROM gracze WHERE id=?", (values[0],)) # type: ignore
-                        conn.commit()
-                    fill_gracze_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
-    menu.add_command(label="Edytuj", command=context_edit)
-    menu.add_command(label="Usuń", command=context_delete)
-    def on_right_click(event: tk.Event) -> None:
-        r = sheet.identify_row(event)
-        c = sheet.identify_column(event)
-        if r is not None and c is not None:
-            sheet.set_currently_selected(r, c) # type: ignore
-            menu.tk_popup(event.x_root, event.y_root)
-    sheet.bind("<Button-3>", on_right_click) # type: ignore
-    # --- KONIEC MENU KONTEKSTOWEGO ---
-    def on_mouse_motion(event: tk.Event) -> None:
-        r = sheet.identify_row(event)
-        c = sheet.identify_column(event)
-        if r is not None and c is not None and c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
-            sheet.config(cursor="hand2")
-        else:
-            sheet.config(cursor="arrow")
-    sheet.bind("<Motion>", on_mouse_motion) # type: ignore
-    def on_cell_click(event: Any) -> None:
-        sel = sheet.get_currently_selected()
-        if sel and len(sel) >= 2:
-            r, c = sel[:2] # type: ignore
-            if c == link_col and r < len(displayed_data) and displayed_data[r][link_col]:
-                import webbrowser
-                webbrowser.open(displayed_data[r][link_col]) # type: ignore
-    sheet.extra_bindings("cell_select", on_cell_click) # type: ignore
-    
-    # Tryb ciemny
-    if dark_mode:
-        sheet.set_options(theme="dark") # type: ignore
+    _table[0] = tbl
+
+    # ── Dialog filtrowania ────────────────────────────────────────────────────
+    def _open_filter() -> None:
+        dlg = ctk.CTkToplevel(tab)
+        dlg.title("Filtruj graczy")
+        dlg.transient(tab.winfo_toplevel())
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 390, 310)
+
+        mf = ctk.CTkFrame(dlg)
+        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Płeć
+        ctk.CTkLabel(mf, text="Płeć:").grid(row=0, column=0, sticky="w", pady=8)
+        plci: set[str] = {str(r[3]) for r in data if r[3]}
+        plec_var_ = tk.StringVar(value=active_filters_gracze.get('plec', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=plec_var_,
+            values=['Wszystkie'] + sorted(plci),
+            width=22, state="readonly",
+        ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # Imię i nazwisko
+        ctk.CTkLabel(mf, text="Imię i nazwisko:").grid(row=1, column=0, sticky="w", pady=8)
+        imie_var_ = tk.StringVar(value=active_filters_gracze.get('imie', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=imie_var_,
+            values=['Wszystkie', 'Wpisane', 'Puste'],
+            width=22, state="readonly",
+        ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # Social media
+        ctk.CTkLabel(mf, text="Social media:").grid(row=2, column=0, sticky="w", pady=8)
+        social_var_ = tk.StringVar(value=active_filters_gracze.get('social', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=social_var_,
+            values=['Wszystkie', 'Wpisane', 'Puste'],
+            width=22, state="readonly",
+        ).grid(row=2, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # Status
+        ctk.CTkLabel(mf, text="Status:").grid(row=3, column=0, sticky="w", pady=8)
+        status_var_ = tk.StringVar(value=active_filters_gracze.get('status', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=status_var_,
+            values=['Wszystkie', 'Główny użytkownik', 'Ważna osoba', 'Zwykła osoba'],
+            width=22, state="readonly",
+        ).grid(row=3, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        mf.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(mf, fg_color="transparent")
+        bf.grid(row=4, column=0, columnspan=2, pady=(20, 0))
+
+        def _apply() -> None:
+            active_filters_gracze['plec']   = plec_var_.get()
+            active_filters_gracze['imie']   = imie_var_.get()
+            active_filters_gracze['social'] = social_var_.get()
+            active_filters_gracze['status'] = status_var_.get()
+            _apply_and_draw()
+            dlg.destroy()
+
+        def _reset() -> None:
+            active_filters_gracze.clear()
+            _apply_and_draw()
+            dlg.destroy()
+
+        ctk.CTkButton(bf, text="Zastosuj", command=_apply,
+                      fg_color="#2E7D32", hover_color="#1B5E20",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Resetuj",  command=_reset,
+                      fg_color="#1976D2", hover_color="#1565C0",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Anuluj",   command=dlg.destroy,
+                      fg_color="#666666", hover_color="#555555",
+                      width=90).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(300, lambda: dlg.winfo_exists() and (
+            dlg.deiconify(), dlg.lift(), dlg.focus_force()))
+
+    # ── Pierwsze wypełnienie ─────────────────────────────────────────────────
+    _apply_and_draw()
+
 
 # --- OKNO EDYCJI GRACZA ---
 def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_callback: Optional[Callable[..., None]] = None) -> None:
@@ -830,30 +652,26 @@ def open_edit_gracz_dialog(parent: tk.Widget, values: Sequence[Any], refresh_cal
     dialog.protocol("WM_DELETE_WINDOW", on_cancel)
 
 def usun_zaznaczonego_gracza(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
-    sheet: Optional[tksheet.Sheet] = None
+    table: Optional[CTkDataTable] = None
     for widget in tab.winfo_children():
-        if isinstance(widget, tksheet.Sheet):
-            sheet = widget
+        if isinstance(widget, CTkDataTable):
+            table = widget
             break
-    if sheet is None:
-        messagebox.showerror("Błąd", "Nie znaleziono tabeli graczy.", parent=tab) # type: ignore
+    if table is None:
+        messagebox.showerror("Błąd", "Nie znaleziono tabeli graczy.", parent=tab)  # type: ignore
         return
-    sel = sheet.get_currently_selected()
-    if not sel or len(sel) < 2:
-        messagebox.showinfo("Brak wyboru", "Zaznacz gracza do usunięcia w tabeli.", parent=tab) # type: ignore
+    sel = table.get_selected()
+    if not sel:
+        messagebox.showinfo("Brak wyboru", "Zaznacz gracza do usunięcia w tabeli.", parent=tab)  # type: ignore
         return
-    r, _ = sel[:2] # type: ignore
-    values = sheet.get_row_data(r) # type: ignore
-    if len(values) < 1:
-        return
-    gracz_id = values[0]
-    if messagebox.askyesno("Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {values[1]}?", parent=tab): # type: ignore
+    _, row_data = sel
+    gracz_id   = row_data[0]
+    gracz_nick = row_data[1]
+    if messagebox.askyesno("Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {gracz_nick}?", parent=tab):  # type: ignore
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
             c.execute("DELETE FROM gracze WHERE id=?", (gracz_id,))
             conn.commit()
-        if hasattr(sheet, 'delete_row'):
-            sheet.delete_row(r) # type: ignore
         if refresh_callback:
             refresh_callback(dark_mode=get_dark_mode_from_tab(tab))
 

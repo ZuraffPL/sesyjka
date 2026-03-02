@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.22-blue)
+![Version](https://img.shields.io/badge/version-0.3.23-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -147,12 +147,13 @@ sesyjka/
 ├── systemy_rpg.py          # Moduł systemów RPG
 ├── sesje_rpg.py            # Moduł sesji RPG
 ├── sesje_rpg_dialogs.py    # Dialogi dla sesji
+├── ctk_table.py            # Reużywalny widget CTkDataTable (tabele z ikonami, tooltipami, sortowaniem)
 ├── gracze.py               # Moduł graczy
 ├── wydawcy.py              # Moduł wydawców
 ├── statystyki.py           # Moduł statystyk
 ├── about_dialog.py         # Dialog "O programie"
 ├── apphistory.py           # Historia wersji
-├── Icons/                  # Ikony aplikacji
+├── Icons/                  # Ikony aplikacji (edit.png, ...)
 └── .github/                # Konfiguracja GitHub
 ```
 
@@ -187,6 +188,15 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.23 (02.03.2026)
+- 🔧 **MIGRACJA**: Moduł graczy — tabela przebudowana z `tksheet.Sheet` na `CTkDataTable` (spójny z wydawcami)
+- ✏️ **Przycisk Edytuj**: ikona PNG z tooltipem w każdym wierszu graczy
+- 🎨 **Kolorowanie**: Status (⭐/👑) ma priorytet nad kolorem płci, obsługiwane przez `row_color_fn`
+- 🔗 **Kolumna Social media**: klikalny link (otwiera przeglądarkę), menu PPM: Edytuj / Usuń
+- 📐 **Naprawa fillery**: ostatnia kolumna w CTkDataTable nie rozciąga się do szerokości okna (`relwidth=1, width=-x`)
+- 📦 **Ikona edycji w EXE**: `ensure_app_icons()` kopiuje `edit.png` do `AppData/Local/Sesyjka/Icons/` przy starcie (PyInstaller + dev)
+- 📝 **README i O programie**: zaktualizowane technologie i struktura projektu
 
 ### v0.3.22 (02.03.2026)
 - 🔧 **PRZEBUDOWA**: Moduł wydawców — widok tabeli przeszedł z `CTkScrollableFrame` (ręczny grid) na `CTkDataTable` (spójny z resztą aplikacji)
@@ -265,7 +275,9 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - **Python 3.9+** - Język programowania
 - **CustomTkinter** - Nowoczesny framework GUI
 - **tkinter** - Podstawowy framework GUI
-- **tksheet** - Widok tabelaryczny
+- **tksheet** - Widok tabelaryczny (Systemy RPG)
+- **CTkDataTable** (własny widget) - Tabele z ikonami, tooltipami i sortowaniem (Gracze, Wydawcy, Sesje)
+- **Pillow (PIL)** - Przetwarzanie i tintowanie ikon PNG
 - **matplotlib** - Wykresy i statystyki
 - **SQLite** - Baza danych
 

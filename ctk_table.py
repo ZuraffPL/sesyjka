@@ -26,11 +26,35 @@ try:
 except ImportError:  # pragma: no cover
     _pil_ok = False
 
+import sys as _sys
 from font_scaling import scale_font_size
 
-# ── ikona przycisku edycji (dwa warianty: jasny/ciemny) ────────────────────
+# ── ikona przycisku edycji (dwa warianty: jasny/ciemny) ──────────────────────────
 _edit_photo_light: Optional[Any] = None
 _edit_photo_dark:  Optional[Any] = None
+
+def _get_icon_path() -> Optional[Path]:
+    """
+    Szuka pliku edit.png w kolejności:
+    1. AppData/Local/Sesyjka/Icons/  (skopiowane przez ensure_app_icons na starcie)
+    2. sys._MEIPASS/Icons/           (PyInstaller one-file, jeszcze przed skopiowaniem)
+    3. folder obok pliku             (tryb deweloperski)
+    """
+    try:
+        from database_manager import get_app_data_dir
+        p = get_app_data_dir() / 'Icons' / 'edit.png'
+        if p.exists():
+            return p
+    except Exception:
+        pass
+    if hasattr(_sys, '_MEIPASS'):
+        p2 = Path(getattr(_sys, '_MEIPASS')) / 'Icons' / 'edit.png'
+        if p2.exists():
+            return p2
+    p3 = Path(__file__).parent / 'Icons' / 'edit.png'
+    if p3.exists():
+        return p3
+    return None
 
 def _get_edit_photo(dark: bool = False) -> Optional[Any]:
     """Zwraca ImageTk.PhotoImage z Icons/edit.png, pokolorowaną pod tryb."""
@@ -40,8 +64,8 @@ def _get_edit_photo(dark: bool = False) -> Optional[Any]:
         return cached
     if not _pil_ok:
         return None
-    icon_path = Path(__file__).parent / "Icons" / "edit.png"
-    if not icon_path.exists():
+    icon_path = _get_icon_path()
+    if icon_path is None:
         return None
     try:
         img = _PILImage.open(icon_path).convert("RGBA").resize(  # type: ignore
@@ -241,6 +265,11 @@ class CTkDataTable(tk.Frame):
                 )
                 x += _EDIT_W
 
+        # Wypełnienie prawej części nagłówka za ostatnią kolumną
+        tk.Label(hf, text="", bg=t["hdr_bg"]).place(
+            x=x, y=0, relwidth=1, width=-x, height=_HDR_H
+        )
+
     # ── wiersze ────────────────────────────────────────────────────────────
     def _build_rows(self) -> None:
         for f in self._row_frames:
@@ -407,6 +436,19 @@ class CTkDataTable(tk.Frame):
                     )
 
                 x += _EDIT_W
+
+        # Wypełnienie prawej części wiersza za ostatnią kolumną
+        filler = tk.Label(rf, text="", bg=def_bg)
+        filler.place(x=x, y=0, relwidth=1, width=-x, height=_ROW_H)
+        filler.bind("<Enter>", _on_enter)
+        filler.bind("<Leave>", _on_leave)
+        filler.bind("<Button-1>", _on_click)
+        if self._rc_cb is not None:
+            ri_, rd_ = i, list(row)
+            filler.bind(
+                "<Button-3>",
+                lambda _e, ri=ri_, rd=rd_: self._rc_cb(ri, rd, _e),  # type: ignore
+            )
 
     # ── publiczne API ──────────────────────────────────────────────────────
     def set_data(self, data: List[List[Any]]) -> None:

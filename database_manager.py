@@ -232,12 +232,40 @@ def initialize_app_databases() -> None:
     print("=" * 60)
     print()
 
+def ensure_app_icons() -> None:
+    """
+    Kopiuje ikony aplikacji do katalogu AppData przy każdym uruchomieniu.
+    Dziła zarówno z kodu źródłowego jak i z pliku EXE (PyInstaller one-file).
+    Dzięki temu ikona przycisku edycji jest dostępna na każdym komputerze.
+    """
+    import sys
+    icons_dst = get_app_data_dir() / 'Icons'
+    icons_dst.mkdir(parents=True, exist_ok=True)
+
+    # Źródło ikon: PyInstaller _MEIPASS > katalog pliku
+    if hasattr(sys, '_MEIPASS'):
+        src = Path(getattr(sys, '_MEIPASS')) / 'Icons'
+    else:
+        src = Path(__file__).parent / 'Icons'
+
+    if not src.exists():
+        return
+
+    for icon_file in src.glob('*.png'):
+        dst = icons_dst / icon_file.name
+        try:
+            shutil.copy2(str(icon_file), str(dst))
+        except Exception:
+            pass
+
+
 # Eksportuj funkcje dla kompatybilności
 __all__ = [
     'get_app_data_dir',
     'get_db_path',
     'migrate_old_databases',
     'initialize_app_databases',
+    'ensure_app_icons',
     'backup_database',
     'CURRENT_DB_VERSION'
 ]

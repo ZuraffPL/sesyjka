@@ -6,7 +6,7 @@ import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.22"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.23"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     
@@ -87,7 +87,9 @@ PODZIĘKOWANIA DLA TESTERÓW:
 TECHNOLOGIE:
 • Język: Python 3.9+
 • GUI: CustomTkinter + tkinter
-• Arkusze: tksheet
+• Arkusze (systemy): tksheet
+• Tabele (gracze/wydawcy/sesje): CTkDataTable (własny widget)
+• Ikony: Pillow (PIL) — tintowanie PNG
 • Wykresy: matplotlib
 • Baza danych: SQLite
 

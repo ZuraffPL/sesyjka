@@ -22,7 +22,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.22"
+APP_VERSION = "0.3.23"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -515,6 +515,8 @@ class SesyjkaApp(ctk.CTk):
 if __name__ == "__main__":
     # Inicjalizuj i zmigruj bazy danych
     database_manager.initialize_app_databases()
+    # Skopiuj ikony do AppData (działa również z pliku EXE)
+    database_manager.ensure_app_icons()
     
     # Wczytaj zapisane ustawienia filtrów i sortowania
     _saved = app_settings.load_settings()

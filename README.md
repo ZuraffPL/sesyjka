@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.23-blue)
+![Version](https://img.shields.io/badge/version-0.3.24-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.19-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.24-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.19.exe`
+4. Uruchom `Sesyjka-v0.3.24.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,11 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.19-Windows.zip`:
-     ```
-     E3DD4D150C37CE364AC8078EE86742C5551B8C4FFB951C8CC7928E9EEB6E907B
-     ```
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.19-Windows.zip -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.24.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.24.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -188,6 +185,16 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.24 (03.03.2026)
+- 🔧 **MIGRACJA**: Moduł sesji RPG — tabela przebudowana z `tksheet.Sheet` na `CTkDataTable` (spójny z graczami i wydawcami)
+- ✏️ **Przycisk Edytuj**: ikona PNG z tooltipem w każdym wierszu sesji
+- 🎨 **Kolorowanie**: wiersze kolorowane według miesiąca sesji (12 kolorów, osobne palety dla trybu jasnego i ciemnego)
+- 🔍 **Dialog filtrowania**: Rok, System, Typ sesji, Mistrz Gry — w stylu CTkToplevel
+- 🗑️ **Usuwanie**: `usun_zaznaczona_sesja()` zaktualizowane do API CTkDataTable
+- ⚡ **Optymalizacja `ctk_table.py`**: `_build_rows()` teraz inkrementalny — reużywa istniejące `tk.Frame`, niszczy tylko dzieci (`_refresh_row()` + `_populate_row()`)
+- 🚀 **Cache zakładek**: `fill_*_tab()` dla graczy, wydawców i sesji zapisuje cache na obiekcie zakładki — szybka ścieżka bez przebudowy UI, brak flickera po operacjach CRUD
+- 🔗 **`data_ref` pattern**: mutable container `List[data]` zapewnia poprawny sharing stanu w zamknięciach (filtr, sort)
 
 ### v0.3.23 (02.03.2026)
 - 🔧 **MIGRACJA**: Moduł graczy — tabela przebudowana z `tksheet.Sheet` na `CTkDataTable` (spójny z wydawcami)

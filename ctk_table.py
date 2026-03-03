@@ -272,14 +272,36 @@ class CTkDataTable(tk.Frame):
 
     # ── wiersze ────────────────────────────────────────────────────────────
     def _build_rows(self) -> None:
-        for f in self._row_frames:
-            f.destroy()
-        self._row_frames.clear()
-        self._selected_idx  = None
-        self._selected_data = None
+        new_count = len(self._data)
+        old_count = len(self._row_frames)
 
-        for i, row in enumerate(self._data):
-            self._add_row(i, row)
+        # Usuń nadmiarowe ramki (gdy nowe danych jest mniej niż starych)
+        for f in self._row_frames[new_count:]:
+            f.destroy()
+        del self._row_frames[new_count:]
+
+        # Zaktualizuj istniejące ramki (bez destroy/pack – tylko update dzieci)
+        for i in range(min(new_count, old_count)):
+            self._refresh_row(i, self._data[i])
+
+        # Dodaj brakujące ramki
+        for i in range(old_count, new_count):
+            self._add_row(i, self._data[i])
+
+        # Resetuj selekcję jeśli wypadła poza zakres
+        if self._selected_idx is not None and self._selected_idx >= new_count:
+            self._selected_idx  = None
+            self._selected_data = None
+
+    def _refresh_row(self, i: int, row: List[Any]) -> None:
+        """Aktualizuje istniejącą ramkę wiersza in-place (bez destroy Frame)."""
+        rf = self._row_frames[i]
+        # Zniszcz tylko dzieci (Label/Button) – Frame zostaje
+        for ch in rf.winfo_children():
+            ch.destroy()
+        def_bg, _ = self._resolve_colors(i, row)
+        rf.configure(bg=def_bg)
+        self._populate_row(rf, i, row)
 
     def _resolve_colors(
         self, i: int, row: List[Any]
@@ -302,13 +324,17 @@ class CTkDataTable(tk.Frame):
         return def_bg, fg_ov
 
     def _add_row(self, i: int, row: List[Any]) -> None:
-        t = self._theme
-        def_bg, fg_ov = self._resolve_colors(i, row)
-
+        def_bg, _ = self._resolve_colors(i, row)
         rf = tk.Frame(self._scroll, bg=def_bg, height=_ROW_H)
         rf.pack(fill=tk.X)
         rf.pack_propagate(False)
         self._row_frames.append(rf)
+        self._populate_row(rf, i, row)
+
+    def _populate_row(self, rf: tk.Frame, i: int, row: List[Any]) -> None:
+        """Tworzy dzieci (Label/Button) wewnątrz ramki rf dla wiersza i."""
+        t = self._theme
+        def_bg, fg_ov = self._resolve_colors(i, row)
 
         # ── hover / selekcja ───────────────────────────────────────────
         def _repaint(f: tk.Frame, color: str) -> None:

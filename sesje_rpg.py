@@ -1,12 +1,15 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 import tkinter as tk
-import tksheet  # type: ignore
+import tkinter.font as tkfont
 from tkinter import ttk, messagebox
 import sqlite3
 from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
+import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry
+from ctk_table import CTkDataTable
 
 # Import funkcji dialogowych z oddzielnego modułu
 from sesje_rpg_dialogs import open_edit_session_dialog
@@ -226,507 +229,353 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
 # Funkcja dodaj_sesje_rpg została przeniesiona do sesje_rpg_dialogs.py
 def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     """Wypełnia zakładkę Sesje RPG"""
-    # Inicjalizuj bazę danych
     init_db()
-    
+
+    # ── Szybka ścieżka: odśwież dane bez niszczenia całego UI ───────────────
+    cache = getattr(tab, '_sesje_tab_cache', None)
+    if cache is not None and cache.get('table_ref') is not None and cache.get('dark_mode') == dark_mode:
+        try:
+            if cache['table_ref'].winfo_exists():
+                new_raw = get_all_sessions()
+                new_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in new_raw]
+                cache['data_ref'][0] = new_data
+                cache['apply_fn']()
+                return
+        except Exception:
+            pass
+        # Widget zniszczony – usuń stary cache i przebuduj
+        del tab._sesje_tab_cache  # type: ignore[attr-defined]
+
     for widget in tab.winfo_children():
         widget.destroy()
-    
-    headers = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
-    data = get_all_sessions()
-    
-    # Zmienna do przechowywania aktualnie wyświetlanych danych (pełne lub przefiltrowane)
-    displayed_data: List[Any] = list(data)
-    
-    sheet = tksheet.Sheet(tab,
-        data=displayed_data,  # type: ignore
-        headers=headers,
-        show_x_scrollbar=True,
-        show_y_scrollbar=True,
-        width=1200,
-        height=600)
-    
-    # Automatyczne dopasowanie szerokości kolumn do zawartości lub nagłówka
-    for col in range(len(headers)):
-        max_content = max([len(str(row[col])) for row in data] + [len(headers[col])]) if data else len(headers[col])
-        width_px = max(80, min(400, int(max_content * 9 + 24)))
-        sheet.column_width(column=col, width=width_px)
-    
-    # Skalowanie fontów
-    sheet.set_options(
-        font=("Segoe UI", scale_font_size(10), "normal"),
-        header_font=("Segoe UI", scale_font_size(10), "bold")
-    )  # type: ignore
-    
-    # Wycentrowanie kolumny ID
-    sheet.align_columns(columns=[0], align="center")
-    
-    # Panel sortowania nad tabelą
-    sort_frame = tk.Frame(tab)
-    sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-    sort_label = tk.Label(sort_frame, text="Sortuj po kolumnie:")
-    sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    sort_var = tk.StringVar(value=active_sort_sesje.get("column", headers[0]))
-    sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=headers, state="readonly", width=12)
-    sort_menu.pack(side=tk.LEFT)
-    
-    def do_sort(reverse: bool = False) -> None:
-        active_sort_sesje["column"] = sort_var.get()
-        active_sort_sesje["reverse"] = reverse
-        col = headers.index(sort_var.get())
-        if col == 0:
-            displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=reverse)  # type: ignore
+
+    data_raw = get_all_sessions()
+    _initial_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in data_raw]
+    # Mutable holder – closure’y zawsze widzą aktualne dane przez data_ref[0]
+    data_ref: List[List[List[Any]]] = [_initial_data]
+
+    _HEADERS  = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
+    _SORTABLE = {"ID": 0, "Data": 1, "System": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5}
+
+    # ── Kolory górnego paska ─────────────────────────────────────────────────
+    bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
+    fg_top = "#e0e0e0" if dark_mode else "#212121"
+    FONT   = ("Segoe UI", scale_font_size(10))
+
+    # ── Obliczanie szerokości kolumn ─────────────────────────────────────────
+    _mf      = tkfont.Font(family="Segoe UI", size=scale_font_size(10))
+    _mf_bold = tkfont.Font(family="Segoe UI", size=scale_font_size(10), weight="bold")
+
+    def _compute_widths(rows: List[List[Any]]) -> List[int]:
+        pad = 24
+        w_data   = max([_mf_bold.measure("Data")]        + ([_mf.measure(str(r[1])) for r in rows if r[1]] or [0])) + pad
+        w_system = max([_mf_bold.measure("System")]      + ([_mf.measure(str(r[2])) for r in rows if r[2]] or [0])) + pad
+        w_typ    = max([_mf_bold.measure("Typ sesji")]   + ([_mf.measure(str(r[3])) for r in rows if r[3]] or [0])) + pad
+        w_mg     = max([_mf_bold.measure("Mistrz Gry")] + ([_mf.measure(str(r[4])) for r in rows if r[4]] or [0])) + pad
+        w_gracze = max([_mf_bold.measure("Gracze")]      + ([_mf.measure(str(r[5])) for r in rows if r[5]] or [0])) + pad
+        return [
+            44,
+            min(max(w_data,    90), 120),
+            min(max(w_system, 100), 280),
+            min(max(w_typ,    100), 360),
+            min(max(w_mg,      80), 160),
+            min(max(w_gracze, 100), 480),
+        ]
+
+    # ── Kolorowanie wierszy według miesiąca daty sesji ───────────────────────
+    _month_colors_light: Dict[int, str] = {
+        1: "#D1E7FF", 2: "#E6D1FF", 3: "#D1FFD1",  4: "#FFF4C4",
+        5: "#FFD1D1", 6: "#D1F4FF", 7: "#FFDED1",  8: "#F0D1FF",
+        9: "#D1FFB8", 10: "#FFD8B8", 11: "#D1D1FF", 12: "#FFD1E6",
+    }
+    _month_colors_dark: Dict[int, str] = {
+        1: "#0D4F73", 2: "#4D0D73", 3: "#0D730D",  4: "#73730D",
+        5: "#730D0D", 6: "#0D7373", 7: "#73470D",  8: "#470D73",
+        9: "#47730D", 10: "#73470D", 11: "#0D0D73", 12: "#730D47",
+    }
+
+    def _row_color(i: int, row: List[Any]) -> Optional[Tuple[Optional[str], Optional[str]]]:
+        date_str = str(row[1]) if len(row) > 1 and row[1] else ""
+        if not date_str:
+            return None
+        try:
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            month = date_obj.month
+        except (ValueError, TypeError):
+            return None
+        colors = _month_colors_dark if dark_mode else _month_colors_light
+        return (colors.get(month), None)
+
+    # ── Stan ─────────────────────────────────────────────────────────────────
+    displayed_data: List[List[Any]] = []
+    _table: List[Optional[CTkDataTable]] = [None]
+
+    # ── Filtry + sortowanie ──────────────────────────────────────────────────
+    def _apply_and_draw() -> None:
+        nonlocal displayed_data
+        filtered: List[List[Any]] = list(data_ref[0])
+
+        year_f = active_filters_sesje.get('year', 'Wszystkie')
+        if year_f != 'Wszystkie':
+            filtered = [r for r in filtered if r[1] and str(r[1]).startswith(year_f)]
+
+        system_f = active_filters_sesje.get('system', 'Wszystkie')
+        if system_f != 'Wszystkie':
+            filtered = [r for r in filtered if r[2] == system_f]
+
+        typ_f = active_filters_sesje.get('typ', 'Wszystkie')
+        if typ_f != 'Wszystkie':
+            filtered = [r for r in filtered if r[3] and str(r[3]).startswith(typ_f)]
+
+        mg_f = active_filters_sesje.get('mg', 'Wszystkie')
+        if mg_f != 'Wszystkie':
+            filtered = [r for r in filtered if r[4] == mg_f]
+
+        col_i = _SORTABLE.get(active_sort_sesje.get("column", "ID"), 0)
+        rev   = active_sort_sesje.get("reverse", False)
+        if col_i == 0:
+            filtered.sort(key=lambda x: int(x[0]) if x[0] != "" else 0, reverse=rev)
         else:
-            displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=reverse)  # type: ignore
-        sheet.set_sheet_data(list(displayed_data))  # type: ignore
-        for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-            width_px = max(80, min(400, int(max_content * 9 + 24)))
-            sheet.column_width(column=c, width=width_px)
-        sheet.refresh()
-    
-    sort_asc_btn = ttk.Button(sort_frame, text="Rosnąco", command=lambda: do_sort(False))
-    sort_asc_btn.pack(side=tk.LEFT, padx=4)
-    sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_sort(True))
-    sort_desc_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przywroć sortowanie z poprzedniej sesji
-    if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
-        do_sort(active_sort_sesje.get("reverse", False))
-    
-    # Separator
-    separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
-    separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
-    
-    # Filtrowanie
-    filter_label = tk.Label(sort_frame, text="Filtruj:")
-    filter_label.pack(side=tk.LEFT, padx=(0, 6))
-    
-    def open_filter_dialog() -> None:
-        """Otwiera okno dialogowe filtrowania"""
-        dialog = tk.Toplevel(tab)
-        dialog.title("Filtruj sesje RPG")
-        dialog.transient(tab.winfo_toplevel())
-        
-        if dark_mode:
-            apply_dark_theme_to_dialog(dialog)
-        
-        # Centrowanie okna (bezpieczna geometria)
-        apply_safe_geometry(dialog, tab.winfo_toplevel(), 400, 300)
-        
-        main_frame = tk.Frame(dialog)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Filtr roku
-        tk.Label(main_frame, text="Rok:").grid(row=0, column=0, sticky="w", pady=5)
-        year_var = tk.StringVar(value=active_filters_sesje.get('year', 'Wszystkie'))
-        
-        # Pobierz unikalne lata z danych
-        years: set[str] = set()
-        for row in data:
-            if row[1]:  # Data sesji
-                try:
-                    year = row[1].split('-')[0]
-                    years.add(year)
-                except:
-                    pass
-        year_values = ['Wszystkie'] + sorted(list(years), reverse=True)
-        year_combo = ttk.Combobox(main_frame, textvariable=year_var, values=year_values, state="readonly", width=25)
-        year_combo.grid(row=0, column=1, sticky="ew", pady=5)
-        
-        # Filtr systemu
-        tk.Label(main_frame, text="System:").grid(row=1, column=0, sticky="w", pady=5)
-        system_var = tk.StringVar(value=active_filters_sesje.get('system', 'Wszystkie'))
-        
-        systems: set[str] = set()
-        for row in data:
-            if row[2]:  # System
-                systems.add(row[2])
-        system_values = ['Wszystkie'] + sorted(list(systems))
-        system_combo = ttk.Combobox(main_frame, textvariable=system_var, values=system_values, state="readonly", width=25)
-        system_combo.grid(row=1, column=1, sticky="ew", pady=5)
-        
-        # Filtr typu sesji
-        tk.Label(main_frame, text="Typ sesji:").grid(row=2, column=0, sticky="w", pady=5)
-        typ_var = tk.StringVar(value=active_filters_sesje.get('typ', 'Wszystkie'))
-        typ_values = ['Wszystkie', 'Kampania', 'Jednostrzał']
-        typ_combo = ttk.Combobox(main_frame, textvariable=typ_var, values=typ_values, state="readonly", width=25)
-        typ_combo.grid(row=2, column=1, sticky="ew", pady=5)
-        
-        # Filtr Mistrza Gry
-        tk.Label(main_frame, text="Mistrz Gry:").grid(row=3, column=0, sticky="w", pady=5)
-        mg_var = tk.StringVar(value=active_filters_sesje.get('mg', 'Wszystkie'))
-        
-        mgs: set[str] = set()
-        for row in data:
-            if row[4]:  # MG
-                mgs.add(row[4])
-        mg_values = ['Wszystkie'] + sorted(list(mgs))
-        mg_combo = ttk.Combobox(main_frame, textvariable=mg_var, values=mg_values, state="readonly", width=25)
-        mg_combo.grid(row=3, column=1, sticky="ew", pady=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-        
-        # Przyciski
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
-        
-        def apply_filters() -> None:
-            """Aplikuje filtry"""
-            nonlocal displayed_data
-            active_filters_sesje['year'] = year_var.get()
-            active_filters_sesje['system'] = system_var.get()
-            active_filters_sesje['typ'] = typ_var.get()
-            active_filters_sesje['mg'] = mg_var.get()
-            
-            # Filtruj dane
-            filtered_data: List[Any] = []
-            for row in data:
-                # Filtr roku
-                if active_filters_sesje['year'] != 'Wszystkie':
-                    if not row[1] or not row[1].startswith(active_filters_sesje['year']):
-                        continue
-                
-                # Filtr systemu
-                if active_filters_sesje['system'] != 'Wszystkie':
-                    if row[2] != active_filters_sesje['system']:
-                        continue
-                
-                # Filtr typu sesji
-                if active_filters_sesje['typ'] != 'Wszystkie':
-                    if not row[3] or not row[3].startswith(active_filters_sesje['typ']):
-                        continue
-                
-                # Filtr MG
-                if active_filters_sesje['mg'] != 'Wszystkie':
-                    if row[4] != active_filters_sesje['mg']:
-                        continue
-                
-                filtered_data.append(row)
-            
-            displayed_data = filtered_data
-            sheet.set_sheet_data(displayed_data)  # type: ignore
-            for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=c, width=width_px)
-            sheet.refresh()
-            
-            # Przywróć sortowanie po filtrowaniu
-            if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
-                do_sort(active_sort_sesje.get("reverse", False))
-            
-            # Aktualizuj tekst przycisku
-            count = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
-            if count > 0:
-                filter_btn.configure(text=f"Filtruj ({count})")
-            else:
-                filter_btn.configure(text="Filtruj")
-            
-            dialog.destroy()
-        
-        def reset_filters() -> None:
-            """Resetuje wszystkie filtry"""
-            nonlocal displayed_data
-            active_filters_sesje.clear()
-            displayed_data = list(data)
-            sheet.set_sheet_data(displayed_data)  # type: ignore
-            for c in range(len(headers)):
-                max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=c, width=width_px)
-            sheet.refresh()
-            
-            # Przywróć sortowanie po zresetowaniu filtrów
-            if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
-                do_sort(active_sort_sesje.get("reverse", False))
-            
-            filter_btn.configure(text="Filtruj")
-            dialog.destroy()
-        
-        ttk.Button(btn_frame, text="Zastosuj", command=apply_filters).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(btn_frame, text="Resetuj", command=reset_filters).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Anuluj", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
-    
-    filter_btn = ttk.Button(sort_frame, text="Filtruj", command=open_filter_dialog)
+            filtered.sort(key=lambda x: (str(x[col_i]) or '').lower(), reverse=rev)
+
+        displayed_data = filtered
+        if _table[0] is not None:
+            _table[0].set_data(displayed_data)
+        _refresh_filter_btn()
+
+    def _refresh_filter_btn() -> None:
+        active = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
+        filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
+
+    # ── Górny pasek ──────────────────────────────────────────────────────────
+    top_bar = tk.Frame(tab, bg=bg_top)
+    top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
+    tk.Label(top_bar, text="Sortuj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    sort_var = tk.StringVar(value=active_sort_sesje.get("column", "ID"))
+    ttk.Combobox(
+        top_bar, textvariable=sort_var,
+        values=list(_SORTABLE.keys()),
+        state="readonly", width=12,
+    ).pack(side=tk.LEFT)
+
+    def _sort_asc() -> None:
+        active_sort_sesje["column"]  = sort_var.get()
+        active_sort_sesje["reverse"] = False
+        _apply_and_draw()
+
+    def _sort_desc() -> None:
+        active_sort_sesje["column"]  = sort_var.get()
+        active_sort_sesje["reverse"] = True
+        _apply_and_draw()
+
+    ttk.Button(top_bar, text="Rosnąco",  command=_sort_asc ).pack(side=tk.LEFT, padx=4)
+    ttk.Button(top_bar, text="Malejąco", command=_sort_desc).pack(side=tk.LEFT, padx=4)
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    filter_btn = ttk.Button(top_bar, text="Filtruj", command=lambda: _open_filter())
     filter_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przesuń tabelę w dół (row=1)
-    sheet.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+    # ── Callbacki tabeli ─────────────────────────────────────────────────────
+    def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        open_edit_session_dialog(
+            tab, row_data,
+            refresh_callback=lambda **_kw: fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)),  # type: ignore[misc]
+        )
+
+    def _on_sort(col_idx: int) -> None:
+        col_name = _HEADERS[col_idx]
+        if active_sort_sesje.get("column") == col_name:
+            active_sort_sesje["reverse"] = not active_sort_sesje.get("reverse", False)
+        else:
+            active_sort_sesje["column"]  = col_name
+            active_sort_sesje["reverse"] = False
+        sort_var.set(col_name)
+        _apply_and_draw()
+
+    def _on_right_click(_row_idx: int, row_data: List[Any], event: Any) -> None:
+        def _edit() -> None:
+            _on_edit(_row_idx, row_data)
+
+        def _del() -> None:
+            sesja_id   = row_data[0]
+            sesja_data = row_data[1]
+            if messagebox.askyesno(
+                    "Usuń sesję",
+                    f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
+                    parent=tab):
+                try:
+                    with sqlite3.connect(DB_FILE) as conn:
+                        c = conn.cursor()
+                        c.execute("DELETE FROM sesje_gracze WHERE sesja_id=?", (sesja_id,))
+                        c.execute("DELETE FROM sesje_rpg WHERE id=?", (sesja_id,))
+                        conn.commit()
+                    fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+                except sqlite3.Error as e:
+                    messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć sesji:\n{e}", parent=tab)
+
+        ctx = tk.Menu(tab, tearoff=0)
+        ctx.add_command(label="Edytuj", command=_edit)
+        ctx.add_separator()
+        ctx.add_command(label="Usuń",   command=_del)
+        ctx.tk_popup(event.x_root, event.y_root)
+        ctx.grab_release()
+
+    # ── Tabela ───────────────────────────────────────────────────────────────
+    tbl = CTkDataTable(
+        tab,
+        headers=_HEADERS,
+        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260],
+        data=[],
+        edit_callback=_on_edit,
+        id_col=0,
+        row_color_fn=_row_color,
+        center_cols=[0],
+        dark_mode=dark_mode,
+        sort_callback=_on_sort,
+        right_click_callback=_on_right_click,
+    )
+    tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
     tab.columnconfigure(0, weight=1)
-    
-    # Menu kontekstowe
-    menu = tk.Menu(tab, tearoff=0)
-    
-    def context_delete() -> None:
-        """Usuwa zaznaczoną sesję"""
-        sel = sheet.get_currently_selected()  # type: ignore
-        if sel and len(sel) >= 2:  # type: ignore
-            r, _ = sel[:2]  # type: ignore
-            if r < len(displayed_data):
-                values = displayed_data[r]  # type: ignore
-                sesja_id = values[0]  # type: ignore
-                sesja_data = values[1]  # type: ignore
-                
-                result = messagebox.askyesno(
-                    "Potwierdzenie usunięcia",
-                    f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
-                    parent=tab
-                )
-                
-                if result:
-                    try:
-                        with sqlite3.connect(DB_FILE) as conn:
-                            c = conn.cursor()
-                            c.execute("DELETE FROM sesje_gracze WHERE sesja_id = ?", (sesja_id,))  # type: ignore
-                            c.execute("DELETE FROM sesje_rpg WHERE id = ?", (sesja_id,))  # type: ignore
-                            conn.commit()
-                        
-                        messagebox.showinfo("Sukces", "Sesja została usunięta z bazy.", parent=tab)
-                        fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
-                    
-                    except sqlite3.Error as e:
-                        messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć sesji:\n{str(e)}", parent=tab)
-    
-    def context_edit() -> None:
-        """Edytuje zaznaczoną sesję"""
-        sel = sheet.get_currently_selected()
-        if sel and len(sel) >= 2:
-            r, _ = sel[:2]  # type: ignore
-            if r < len(displayed_data):
-                values = displayed_data[r]  # type: ignore
-                open_edit_session_dialog(tab, values, refresh_callback=lambda **kwargs: fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
-    
-    menu.add_command(label="Edytuj", command=context_edit)
-    menu.add_separator()
-    menu.add_command(label="Usuń", command=context_delete)
-    
-    def show_context_menu(event: Any) -> None:
-        """Obsługuje kliknięcie prawym przyciskiem myszy"""
-        r = sheet.identify_row(event)  # type: ignore
-        c = sheet.identify_column(event)  # type: ignore
-        if r is not None and c is not None:
-            sheet.set_currently_selected(r, c)  # type: ignore
-        try:
-            menu.tk_popup(event.x_root, event.y_root)  # type: ignore
-        finally:
-            menu.grab_release()
-    
-    sheet.bind("<Button-3>", show_context_menu)  # type: ignore
-    
-    # Dodaj dodatkowe opcje dla tksheet
-    sheet.enable_bindings(
-        "single_select",
-        "row_select",
-        "column_width_resize",
-        "double_click_column_resize",
-        "rc_select",
-        "copy",
-        "paste",
-        "delete",
-        "select_all"
-    )
-    
-    sheet.set_all_column_widths()
-    
-    # Sortowanie po kliknięciu nagłówka dowolnej kolumny
-    sort_state: Dict[str, Any] = {'col': None, 'reverse': False}  # type: ignore
-    def on_header_click(event: Any) -> None:
-        c = sheet.identify_column(event)
-        if c is not None:
-            col = c
-            if sort_state['col'] == col:
-                sort_state['reverse'] = not sort_state['reverse']
-            else:
-                sort_state['col'] = col
-                sort_state['reverse'] = False
-            if col == 0:
-                displayed_data.sort(key=lambda x: int(x[0]) if x[0] else 0, reverse=sort_state['reverse'])  # type: ignore
-            else:
-                displayed_data.sort(key=lambda x: (x[col] or '').lower(), reverse=sort_state['reverse'])  # type: ignore
-            sheet.set_sheet_data(displayed_data)  # type: ignore
-    
-    sheet.extra_bindings("header_select", on_header_click)  # type: ignore
-    
-    # Kolorowanie wierszy według miesiąca z daty sesji
-    def apply_month_colors():
-        """Aplikuje kolory tła wierszy według miesiąca z daty sesji"""
-        # Kolory dla każdego miesiąca (tryb jasny i ciemny) - wysoki kontrast
-        month_colors_light = {
-            1: "#D1E7FF",   # Styczeń - mocny jasny niebieski
-            2: "#E6D1FF",   # Luty - mocny jasny fioletowy  
-            3: "#D1FFD1",   # Marzec - mocny jasny zielony
-            4: "#FFF4C4",   # Kwiecień - mocny jasny żółty
-            5: "#FFD1D1",   # Maj - mocny jasny różowy
-            6: "#D1F4FF",   # Czerwiec - mocny jasny cyan
-            7: "#FFDED1",   # Lipiec - mocny jasny pomarańczowy
-            8: "#F0D1FF",   # Sierpień - mocny jasny lawendowy
-            9: "#D1FFB8",   # Wrzesień - mocny jasny limonowy
-            10: "#FFD8B8",  # Październik - mocny jasny brzoskwiniowy
-            11: "#D1D1FF",  # Listopad - mocny jasny indygo
-            12: "#FFD1E6"   # Grudzień - mocny jasny magenta
-        }
-        
-        month_colors_dark = {
-            1: "#0D4F73",   # Styczeń - mocny ciemny niebieski
-            2: "#4D0D73",   # Luty - mocny ciemny fioletowy
-            3: "#0D730D",   # Marzec - mocny ciemny zielony
-            4: "#73730D",   # Kwiecień - mocny ciemny żółty
-            5: "#730D0D",   # Maj - mocny ciemny czerwony
-            6: "#0D7373",   # Czerwiec - mocny ciemny cyan
-            7: "#73470D",   # Lipiec - mocny ciemny pomarańczowy
-            8: "#470D73",   # Sierpień - mocny ciemny lawendowy
-            9: "#47730D",   # Wrzesień - mocny ciemny limonowy
-            10: "#73470D",  # Październik - mocny ciemny brzoskwiniowy
-            11: "#0D0D73",  # Listopad - mocny ciemny indygo
-            12: "#730D47"   # Grudzień - mocny ciemny magenta
-        }
-        
-        colors = month_colors_dark if dark_mode else month_colors_light
-        
-        for r, row in enumerate(displayed_data):
-            if len(row) > 1 and row[1]:  # Sprawdź czy istnieje data
+    _table[0] = tbl
+
+    # ── Zapisz cache na widgecie ───────────────────────────────────────────
+    tab._sesje_tab_cache = {  # type: ignore[attr-defined]
+        'data_ref':  data_ref,
+        'apply_fn':  _apply_and_draw,
+        'table_ref': tbl,
+        'dark_mode': dark_mode,
+    }
+
+    # ── Dialog filtrowania ────────────────────────────────────────────────────
+    def _open_filter() -> None:
+        dlg = ctk.CTkToplevel(tab)
+        dlg.title("Filtruj sesje RPG")
+        dlg.transient(tab.winfo_toplevel())
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 400, 300)
+
+        mf = ctk.CTkFrame(dlg)
+        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        cur = data_ref[0]  # bieżące dane (aktualne po każdym odświeżeniu)
+
+        # Rok
+        ctk.CTkLabel(mf, text="Rok:").grid(row=0, column=0, sticky="w", pady=8)
+        years: set[str] = set()
+        for r in cur:
+            if r[1]:
                 try:
-                    # Parsuj datę w formacie YYYY-MM-DD
-                    date_str = str(row[1])
-                    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-                    month = date_obj.month
-                    
-                    # Aplikuj kolor dla całego wiersza
-                    if month in colors:
-                        for col in range(len(headers)):
-                            sheet.highlight_cells(row=r, column=col, bg=colors[month])
-                except (ValueError, TypeError):
-                    # W przypadku błędu parsowania daty, zostaw domyślny kolor
+                    years.add(str(r[1]).split('-')[0])
+                except Exception:
                     pass
-    
-    # Aplikuj kolorowanie miesiąca
-    apply_month_colors()
-    
-    # Funkcja do ponownego kolorowania po sortowaniu
-    def reapply_colors_after_sort():
-        apply_month_colors()
-    
-    # Nadpisz funkcję sortowania, żeby zachować kolorowanie
-    original_do_sort = do_sort
-    def do_sort_with_colors(reverse: bool = False) -> None:
-        original_do_sort(reverse)
-        reapply_colors_after_sort()
-    
-    # Zastąp przyciski sortowania
-    sort_asc_btn.config(command=lambda: do_sort_with_colors(False))
-    sort_desc_btn.config(command=lambda: do_sort_with_colors(True))
-    
-    # Nadpisz funkcję sortowania nagłówków
-    original_header_click = on_header_click
-    def on_header_click_with_colors(event: Any) -> None:
-        original_header_click(event)
-        reapply_colors_after_sort()
-    
-    sheet.extra_bindings("header_select", on_header_click_with_colors)  # type: ignore
-    
-    # Tryb ciemny
-    if dark_mode:
-        sheet.set_options(theme="dark")  # type: ignore
-    
-    # Automatycznie aplikuj filtry jeśli są aktywne
-    if active_filters_sesje:
-        # Filtruj dane
-        filtered_data: List[Any] = []
-        for row in data:
-            # Filtr roku
-            if active_filters_sesje.get('year', 'Wszystkie') != 'Wszystkie':
-                if not row[1] or not row[1].startswith(active_filters_sesje['year']):
-                    continue
-            
-            # Filtr systemu
-            if active_filters_sesje.get('system', 'Wszystkie') != 'Wszystkie':
-                if row[2] != active_filters_sesje['system']:
-                    continue
-            
-            # Filtr typu sesji
-            if active_filters_sesje.get('typ', 'Wszystkie') != 'Wszystkie':
-                if not row[3] or not row[3].startswith(active_filters_sesje['typ']):
-                    continue
-            
-            # Filtr MG
-            if active_filters_sesje.get('mg', 'Wszystkie') != 'Wszystkie':
-                if row[4] != active_filters_sesje['mg']:
-                    continue
-            
-            filtered_data.append(row)
-        
-        displayed_data.clear()
-        displayed_data.extend(filtered_data)
-        sheet.set_sheet_data(displayed_data)  # type: ignore
-        for c in range(len(headers)):
-            max_content = max([len(str(row[c])) for row in displayed_data] + [len(headers[c])]) if displayed_data else len(headers[c])
-            width_px = max(80, min(400, int(max_content * 9 + 24)))
-            sheet.column_width(column=c, width=width_px)
-        sheet.refresh()
-        
-        # Przywróć sortowanie po auto-filtrowaniu na starcie
-        if active_sort_sesje.get("column", headers[0]) != headers[0] or active_sort_sesje.get("reverse", False):
-            do_sort(active_sort_sesje.get("reverse", False))
-        
-        # Ponownie aplikuj kolorowanie po filtracji
-        apply_month_colors()
-        
-        # Aktualizuj tekst przycisku
-        count = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
-        if count > 0:
-            filter_btn.configure(text=f"Filtruj ({count})")
+        year_var_ = tk.StringVar(value=active_filters_sesje.get('year', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=year_var_,
+            values=['Wszystkie'] + sorted(years, reverse=True),
+            width=22, state="readonly",
+        ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # System
+        ctk.CTkLabel(mf, text="System:").grid(row=1, column=0, sticky="w", pady=8)
+        systems: set[str] = {str(r[2]) for r in cur if r[2]}
+        system_var_ = tk.StringVar(value=active_filters_sesje.get('system', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=system_var_,
+            values=['Wszystkie'] + sorted(systems),
+            width=22, state="readonly",
+        ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # Typ sesji
+        ctk.CTkLabel(mf, text="Typ sesji:").grid(row=2, column=0, sticky="w", pady=8)
+        typ_var_ = tk.StringVar(value=active_filters_sesje.get('typ', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=typ_var_,
+            values=['Wszystkie', 'Kampania', 'Jednostrzał'],
+            width=22, state="readonly",
+        ).grid(row=2, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        # Mistrz Gry
+        ctk.CTkLabel(mf, text="Mistrz Gry:").grid(row=3, column=0, sticky="w", pady=8)
+        mgs: set[str] = {str(r[4]) for r in cur if r[4]}
+        mg_var_ = tk.StringVar(value=active_filters_sesje.get('mg', 'Wszystkie'))
+        ttk.Combobox(
+            mf, textvariable=mg_var_,
+            values=['Wszystkie'] + sorted(mgs),
+            width=22, state="readonly",
+        ).grid(row=3, column=1, sticky="ew", pady=8, padx=(10, 0))
+
+        mf.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(mf, fg_color="transparent")
+        bf.grid(row=4, column=0, columnspan=2, pady=(20, 0))
+
+        def _apply() -> None:
+            active_filters_sesje['year']   = year_var_.get()
+            active_filters_sesje['system'] = system_var_.get()
+            active_filters_sesje['typ']    = typ_var_.get()
+            active_filters_sesje['mg']     = mg_var_.get()
+            _apply_and_draw()
+            dlg.destroy()
+
+        def _reset() -> None:
+            active_filters_sesje.clear()
+            _apply_and_draw()
+            dlg.destroy()
+
+        ctk.CTkButton(bf, text="Zastosuj", command=_apply,
+                      fg_color="#2E7D32", hover_color="#1B5E20",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Resetuj",  command=_reset,
+                      fg_color="#1976D2", hover_color="#1565C0",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Anuluj",   command=dlg.destroy,
+                      fg_color="#666666", hover_color="#555555",
+                      width=90).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(300, lambda: dlg.winfo_exists() and (
+            dlg.deiconify(), dlg.lift(), dlg.focus_force()))
+
+    # ── Pierwsze wypełnienie ─────────────────────────────────────────────────
+    _apply_and_draw()
+
 
 def usun_zaznaczona_sesja(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
     """Usuwa zaznaczoną sesję z bazy danych"""
-    sheet = None
+    table: Optional[CTkDataTable] = None
     for widget in tab.winfo_children():
-        if hasattr(widget, 'get_currently_selected'):
-            sheet = widget
+        if isinstance(widget, CTkDataTable):
+            table = widget
             break
-    
-    if sheet is None:
+
+    if table is None:
         messagebox.showerror("Błąd", "Nie znaleziono tabeli sesji RPG.", parent=tab)
         return
-    
-    sel = sheet.get_currently_selected()  # type: ignore
-    if not sel or len(sel) < 2:  # type: ignore
+
+    sel = table.get_selected()
+    if not sel:
         messagebox.showinfo("Brak wyboru", "Zaznacz sesję do usunięcia w tabeli.", parent=tab)
         return
-    
-    r, _ = sel[:2]  # type: ignore
-    values = sheet.get_row_data(r)  # type: ignore
-    if len(values) < 2:  # type: ignore
-        return
-    
-    sesja_id = values[0]  # type: ignore
-    sesja_data = values[1]  # type: ignore
-    
-    # Potwierdzenie usunięcia
+
+    _, row_data = sel
+    sesja_id   = row_data[0]
+    sesja_data = row_data[1]
+
     result = messagebox.askyesno(
         "Potwierdzenie usunięcia",
         f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
         parent=tab
     )
-    
+
     if result:
         try:
-            # Usuń z bazy danych
             with sqlite3.connect(DB_FILE) as conn:
                 c = conn.cursor()
-                # Usuń relacje sesja-gracze (CASCADE powinno to zrobić automatycznie)
-                c.execute("DELETE FROM sesje_gracze WHERE sesja_id = ?", (sesja_id,))  # type: ignore
-                # Usuń sesję
-                c.execute("DELETE FROM sesje_rpg WHERE id = ?", (sesja_id,))  # type: ignore
+                c.execute("DELETE FROM sesje_gracze WHERE sesja_id = ?", (sesja_id,))
+                c.execute("DELETE FROM sesje_rpg WHERE id = ?", (sesja_id,))
                 conn.commit()
-            
             messagebox.showinfo("Sukces", "Sesja została usunięta z bazy.", parent=tab)
-            
-            # Odśwież widok
             if refresh_callback:
                 refresh_callback()
-        
         except sqlite3.Error as e:
             messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć sesji:\n{str(e)}", parent=tab)
 

@@ -227,17 +227,43 @@ def get_all_players() -> list[tuple[Any, ...]]:
 
 def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ignore
     """Główny widok graczy — tabela CTkDataTable."""
+
+    # ── Szybka ścieżka: odśwież dane bez niszczenia całego UI ───────────────
+    cache = getattr(tab, '_gracze_tab_cache', None)
+    if cache is not None and cache.get('table_ref') is not None and cache.get('dark_mode') == dark_mode:
+        try:
+            if cache['table_ref'].winfo_exists():
+                records = get_all_players()
+                new_data: List[List[Any]] = []
+                for rec in records:
+                    status = "⭐" if rec[5] == 1 else ("👑" if rec[6] == 1 else "")
+                    new_data.append([
+                        rec[0],
+                        rec[1] if rec[1] else "",
+                        rec[2] if rec[2] else "",
+                        rec[3] if rec[3] else "",
+                        rec[4] if rec[4] else "",
+                        status,
+                        rec[5],
+                        rec[6],
+                    ])
+                cache['data_ref'][0] = new_data
+                cache['apply_fn']()
+                return
+        except Exception:
+            pass
+        del tab._gracze_tab_cache  # type: ignore[attr-defined]
+
     for widget in tab.winfo_children():
         widget.destroy()
 
     records = get_all_players()
 
     # Buduj 8-polowe wiersze: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
-    # Pierwsze 6 jest widocznych (6 col_widths), ostatnie 2 są ukryte — potrzebne dla okna edycji.
-    data: List[List[Any]] = []
+    _initial_data: List[List[Any]] = []
     for rec in records:
         status = "⭐" if rec[5] == 1 else ("👑" if rec[6] == 1 else "")
-        data.append([
+        _initial_data.append([
             rec[0],
             rec[1] if rec[1] else "",
             rec[2] if rec[2] else "",
@@ -247,6 +273,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
             rec[5],   # glowny_uzytkownik int (ukryty)
             rec[6],   # wazna int (ukryty)
         ])
+    data_ref: List[List[List[Any]]] = [_initial_data]
 
     _HEADERS  = ["ID", "Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
     _SORTABLE = {"ID": 0, "Nick": 1, "Imię i nazwisko": 2, "Płeć": 3, "Social media": 4, "Status": 5}
@@ -309,7 +336,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     # ── Filtry + sortowanie ──────────────────────────────────────────────────
     def _apply_and_draw() -> None:
         nonlocal displayed_data
-        filtered: List[List[Any]] = list(data)
+        filtered: List[List[Any]] = list(data_ref[0])
 
         # Filtr płci
         if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
@@ -443,7 +470,7 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(data) if data else [44, 120, 160, 90, 200, 56],
+        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 120, 160, 90, 200, 56],
         data=[],
         edit_callback=_on_edit,
         id_col=0,
@@ -460,6 +487,14 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
 
+    # ── Zapisz cache na widgecie ───────────────────────────────────────────
+    tab._gracze_tab_cache = {  # type: ignore[attr-defined]
+        'data_ref':  data_ref,
+        'apply_fn':  _apply_and_draw,
+        'table_ref': tbl,
+        'dark_mode': dark_mode,
+    }
+
     # ── Dialog filtrowania ────────────────────────────────────────────────────
     def _open_filter() -> None:
         dlg = ctk.CTkToplevel(tab)
@@ -470,9 +505,11 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
         mf = ctk.CTkFrame(dlg)
         mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
+        cur = data_ref[0]
+
         # Płeć
         ctk.CTkLabel(mf, text="Płeć:").grid(row=0, column=0, sticky="w", pady=8)
-        plci: set[str] = {str(r[3]) for r in data if r[3]}
+        plci: set[str] = {str(r[3]) for r in cur if r[3]}
         plec_var_ = tk.StringVar(value=active_filters_gracze.get('plec', 'Wszystkie'))
         ttk.Combobox(
             mf, textvariable=plec_var_,

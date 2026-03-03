@@ -176,12 +176,28 @@ def dodaj_wydawce(parent: tk.Tk, refresh_callback=None): # type: ignore
 
 def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ignore
     """Główny widok wydawców — tabela CTkDataTable."""
-    for widget in tab.winfo_children():
-        widget.destroy()
     init_db()
 
+    # ── Szybka ścieżka: odśwież dane bez niszczenia całego UI ───────────────
+    cache = getattr(tab, '_wydawcy_tab_cache', None)
+    if cache is not None and cache.get('table_ref') is not None and cache.get('dark_mode') == dark_mode:
+        try:
+            if cache['table_ref'].winfo_exists():
+                records = get_all_publishers()
+                new_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in records]
+                cache['data_ref'][0] = new_data
+                cache['apply_fn']()
+                return
+        except Exception:
+            pass
+        del tab._wydawcy_tab_cache  # type: ignore[attr-defined]
+
+    for widget in tab.winfo_children():
+        widget.destroy()
+
     records = get_all_publishers()
-    data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in records]
+    _initial_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in records]
+    data_ref: List[List[List[Any]]] = [_initial_data]
 
     # ── Kolory górnego paska ─────────────────────────────────────────────────
     bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
@@ -217,7 +233,7 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: i
     # ── Filtry + sortowanie ──────────────────────────────────────────────────
     def _apply_and_draw() -> None:
         nonlocal displayed_data
-        filtered: List[List[Any]] = list(data)
+        filtered: List[List[Any]] = list(data_ref[0])
         if active_filters_wydawcy.get('kraj', 'Wszystkie') != 'Wszystkie':
             filtered = [r for r in filtered if r[3] == active_filters_wydawcy['kraj']]
         strona_f = active_filters_wydawcy.get('strona', 'Wszystkie')
@@ -314,7 +330,7 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: i
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(data),
+        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 160, 200, 80],
         data=[],
         edit_callback=_on_edit,
         id_col=0,
@@ -330,7 +346,15 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: i
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
 
-    # ── Dialog filtrowania ───────────────────────────────────────────────────
+    # ── Zapisz cache na widgecie ───────────────────────────────────────────
+    tab._wydawcy_tab_cache = {  # type: ignore[attr-defined]
+        'data_ref':  data_ref,
+        'apply_fn':  _apply_and_draw,
+        'table_ref': tbl,
+        'dark_mode': dark_mode,
+    }
+
+    # ── Dialog filtrowania ────────────────────────────────────────────────────
     def _open_filter() -> None:
         dlg = ctk.CTkToplevel(tab)
         dlg.title("Filtruj wydawców")
@@ -340,8 +364,10 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: i
         mf = ctk.CTkFrame(dlg)
         mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
+        cur = data_ref[0]
+
         ctk.CTkLabel(mf, text="Kraj:").grid(row=0, column=0, sticky="w", pady=8)
-        kraje: set[str] = set(r[3] for r in data if r[3])
+        kraje: set[str] = set(r[3] for r in cur if r[3])
         kraj_var_ = tk.StringVar(value=active_filters_wydawcy.get('kraj', 'Wszystkie'))
         ttk.Combobox(
             mf, textvariable=kraj_var_,

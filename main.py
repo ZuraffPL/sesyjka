@@ -1,4 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false
+from __future__ import annotations
+from typing import Optional
 import customtkinter as ctk  # type: ignore
 import tkinter as tk
 from tkinter import ttk
@@ -22,7 +24,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.24"
+APP_VERSION = "0.3.25"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -428,65 +430,97 @@ class SesyjkaApp(ctk.CTk):
         wydawcy.fill_wydawcy_tab(self.tabs["Wydawcy"], dark_mode=getattr(self, 'dark_mode', False)) # type: ignore
         statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=getattr(self, 'dark_mode', False)) # type: ignore
         self.notebook.select(0)  # type: ignore # Startowa zakładka: Systemy RPG
+        self._dirty_tabs: set[str] = set()
+        self._font_scale_timer: Optional[str] = None  # type: ignore
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
     def select_tab(self, idx): # type: ignore
         self.notebook.select(idx) # type: ignore
 
+    # ── Lazy rebuild zakładek ─────────────────────────────────────────────────
+
+    def _get_active_tab_name(self) -> Optional[str]:  # type: ignore
+        try:
+            idx = self.notebook.index(self.notebook.select())
+            return list(self.tabs.keys())[idx]
+        except Exception:
+            return None
+
+    def _on_tab_changed(self, _event: object = None) -> None:
+        """Przy przełączeniu zakładki odświeża ją, jeśli jest oznaczona jako brudna."""
+        self._refresh_active_tab()
+
+    def _refresh_active_tab(self) -> None:
+        name = self._get_active_tab_name()
+        if name and name in self._dirty_tabs:
+            self._rebuild_tab(name)
+            self._dirty_tabs.discard(name)
+
+    def _rebuild_tab(self, name: str) -> None:
+        import systemy_rpg, sesje_rpg, gracze, wydawcy, statystyki
+        dm  = self.dark_mode
+        tab = self.tabs[name]
+        if   name == "Systemy RPG" : systemy_rpg.fill_systemy_rpg_tab(tab, dark_mode=dm)
+        elif name == "Sesje RPG"   : sesje_rpg.fill_sesje_rpg_tab(tab, dark_mode=dm)
+        elif name == "Gracze"      : gracze.fill_gracze_tab(tab, dark_mode=dm)
+        elif name == "Wydawcy"     : wydawcy.fill_wydawcy_tab(tab, dark_mode=dm)
+        elif name == "Statystyki"  : statystyki.fill_statystyki_tab(tab, dark_mode=dm)
+
+    # ── Tryb jasny/ciemny ────────────────────────────────────────────────────
+
     def toggle_mode(self):
-        # Pobierz stan z przełącznika CTk
         self.dark_mode = bool(self.mode_switch.get())
-        
-        # Ustaw tryb CustomTkinter
         ctk.set_appearance_mode("dark" if self.dark_mode else "light")
-        
-        # Aktualizuj style ttk dla kompatybilności
         self.set_modern_theme(self.dark_mode)
-        
-        # Aktualizuj tekst etykiety
         self.mode_label.configure(text="🌙 Ciemny" if self.dark_mode else "☀️ Jasny")
-        
-        # Odśwież wszystkie zakładki
-        import systemy_rpg, sesje_rpg, gracze, wydawcy, statystyki
-        systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode)
-        sesje_rpg.fill_sesje_rpg_tab(self.tabs["Sesje RPG"], dark_mode=self.dark_mode)
-        gracze.fill_gracze_tab(self.tabs["Gracze"], dark_mode=self.dark_mode)
-        wydawcy.fill_wydawcy_tab(self.tabs["Wydawcy"], dark_mode=self.dark_mode)
-        statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=self.dark_mode)
-    
+
+        # Oznacz wszystkie zakładki jako wymagające przebudowy
+        self._dirty_tabs = set(self.tabs.keys())
+
+        # Natychmiast przebuduj tylko aktywną zakładkę
+        self._refresh_active_tab()
+
+    # ── Skalowanie czcionek (debounce) ────────────────────────────────────────
+
     def on_font_scale_change(self, value: float) -> None:
-        """Zmienia globalną skalę fontów w aplikacji"""
+        """Aktualizuje etykietę natychmiast; rzeczywisty rebuild odkłada o 250 ms."""
         scale_percent = int(value)
-        
-        # Zapisz skalę do modułu font_scaling
         font_scaling.set_font_scale_factor(scale_percent / 100.0)
-        
-        # Zapisz wartość slidera przed odbudową
-        slider_value = scale_percent
-        
-        # Zniszcz obecny ribbon
-        if hasattr(self, 'ribbon'):
-            self.ribbon.destroy()
-        
-        # Odpakuj notebook aby zwolnić przestrzeń
-        self.notebook.pack_forget()
-        
-        # Odbuduj ribbon (zostanie dodany na górze dzięki pack(side=tk.TOP))
-        self.create_ribbon()
-        
-        # Przepakuj notebook poniżej ribbona
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Przywróć wartość slidera i etykiety
-        self.font_scale_slider.set(slider_value)
-        self.font_scale_value_label.configure(text=f"{scale_percent}%")
-        
-        # Odśwież wszystkie zakładki z nową skalą fontów
-        import systemy_rpg, sesje_rpg, gracze, wydawcy, statystyki
-        systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode)
-        sesje_rpg.fill_sesje_rpg_tab(self.tabs["Sesje RPG"], dark_mode=self.dark_mode)
-        gracze.fill_gracze_tab(self.tabs["Gracze"], dark_mode=self.dark_mode)
-        wydawcy.fill_wydawcy_tab(self.tabs["Wydawcy"], dark_mode=self.dark_mode)
-        statystyki.fill_statystyki_tab(self.tabs["Statystyki"], dark_mode=self.dark_mode)
+
+        # Zaktualizuj etykietę od razu (bez rebuild)
+        try:
+            self.font_scale_value_label.configure(text=f"{scale_percent}%")
+        except Exception:
+            pass
+
+        # Anuluj poprzedni timer i zaplanuj nowy
+        if self._font_scale_timer is not None:
+            try:
+                self.after_cancel(self._font_scale_timer)
+            except Exception:
+                pass
+        self._font_scale_timer = self.after(250, lambda v=scale_percent: self._apply_font_scale(v))  # type: ignore
+
+    def _apply_font_scale(self, scale_percent: int) -> None:
+        """Wykonuje pełny rebuild po zatrzymaniu slidera."""
+        self._font_scale_timer = None
+
+        # Ukryj okno podczas destrukcji/budowy ribbona – eliminuje flicker
+        self.withdraw()
+        try:
+            if hasattr(self, 'ribbon'):
+                self.ribbon.destroy()
+            self.notebook.pack_forget()
+            self.create_ribbon()
+            self.notebook.pack(fill=tk.BOTH, expand=True)
+            self.font_scale_slider.set(scale_percent)
+            self.font_scale_value_label.configure(text=f"{scale_percent}%")
+        finally:
+            self.deiconify()
+
+        # Oznacz zakładki jako brudne i przebuduj aktywną
+        self._dirty_tabs = set(self.tabs.keys())
+        self._refresh_active_tab()
 
     def show_about(self):
         """Wyświetla okno 'O programie'"""

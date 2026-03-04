@@ -433,6 +433,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         dark_mode=dark_mode,
         sort_callback=_on_sort,
         right_click_callback=_on_right_click,
+        show_row_numbers=True,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

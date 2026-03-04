@@ -118,9 +118,10 @@ _D: dict[str, str] = {
     "link_fg":    "#7baaff",
 }
 
-_EDIT_W = 36   # szerokość kolumny przycisku edycji (px)
-_ROW_H  = 28   # wysokość wiersza danych (px)
-_HDR_H  = 30   # wysokość nagłówka (px)
+_EDIT_W    = 36   # szerokość kolumny przycisku edycji (px)
+_ROW_NUM_W = 36   # szerokość kolumny numeru wiersza Lp. (px)
+_ROW_H     = 28   # wysokość wiersza danych (px)
+_HDR_H     = 30   # wysokość nagłówka (px)
 
 
 # ─── tooltip ───────────────────────────────────────────────────────────────
@@ -188,6 +189,8 @@ class CTkDataTable(tk.Frame):
         Wywoływana (row_idx, col_idx, row_data) przy lewym kliku na komórkę.
     right_click_callback : Callable[[int, list, event], None] | None
         Wywoływana (row_idx, row_data, event) przy prawym kliku.
+    show_row_numbers : bool
+        Jeśli True, wyświetla kolumnę "Lp." przed pierwszą kolumną danych.
     """
 
     # ── konstruktor ────────────────────────────────────────────────────────
@@ -207,6 +210,7 @@ class CTkDataTable(tk.Frame):
         sort_callback: Optional[Callable[[int], None]] = None,
         cell_click_callback: Optional[Callable[[int, int, List[Any]], None]] = None,
         right_click_callback: Optional[Callable[[int, List[Any], Any], None]] = None,
+        show_row_numbers: bool = False,
         **kw: Any,
     ) -> None:
         t = _D if dark_mode else _L
@@ -223,6 +227,7 @@ class CTkDataTable(tk.Frame):
         self._sort_cb         = sort_callback
         self._cell_cb         = cell_click_callback
         self._rc_cb           = right_click_callback
+        self._show_row_num    = show_row_numbers
         self._theme           = t
         self._row_frames: List[tk.Frame] = []
         self._selected_idx:  Optional[int]       = None
@@ -241,6 +246,14 @@ class CTkDataTable(tk.Frame):
         hf.pack_propagate(False)
 
         x = 0
+        if self._show_row_num:
+            tk.Label(
+                hf, text="Lp.", bg=t["hdr_bg"], fg=t["hdr_fg"],
+                font=("Segoe UI", scale_font_size(10), "bold"),
+                anchor="center", relief="flat",
+            ).place(x=x, y=0, width=_ROW_NUM_W, height=_HDR_H)
+            x += _ROW_NUM_W
+
         for i, (h, w) in enumerate(zip(self.headers, self.col_widths)):
             lbl = tk.Label(
                 hf, text=h, bg=t["hdr_bg"], fg=t["hdr_fg"],
@@ -388,6 +401,25 @@ class CTkDataTable(tk.Frame):
 
         # ── komórki ────────────────────────────────────────────────────
         x = 0
+        if self._show_row_num:
+            num_lbl = tk.Label(
+                rf, text=str(i + 1), bg=def_bg,
+                fg=t["hdr_fg"],
+                font=("Segoe UI", scale_font_size(9)),
+                anchor="center",
+            )
+            num_lbl.place(x=x, y=0, width=_ROW_NUM_W, height=_ROW_H)
+            num_lbl.bind("<Enter>", _on_enter)
+            num_lbl.bind("<Leave>", _on_leave)
+            num_lbl.bind("<Button-1>", _on_click)
+            if self._rc_cb is not None:
+                ri_, rd_ = i, list(row)
+                num_lbl.bind(
+                    "<Button-3>",
+                    lambda _e, ri=ri_, rd=rd_: self._rc_cb(ri, rd, _e),  # type: ignore
+                )
+            x += _ROW_NUM_W
+
         for j, (val, w) in enumerate(zip(row, self.col_widths)):
             text   = str(val) if val is not None else ""
             anchor = "center" if j in self._center_cols else "w"

@@ -340,6 +340,7 @@ def fill_wydawcy_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: i
         sort_callback=_on_sort,
         cell_click_callback=_on_cell_click,
         right_click_callback=_on_right_click,
+        show_row_numbers=True,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

@@ -187,14 +187,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 ## 📝 Changelog
 
 ### v0.3.26 (05.03.2026)
-- ⚡ **`toggle_expand()`**: nowa metoda w `CTkDataTable` — expand/collapse suplementów bez przebudowy całej tabeli; `pack(after=…)` / `pack_forget()` na konkretnych ramkach, złożoność O(k) niezależna od rozmiary tabeli
+- 🔧 **Migracja** `systemy_rpg.py`: tabela z `tksheet` na `CTkDataTable` — hierarchia główne/suplementy, expand/collapse `[+]`/`[-]`, 13 kolumn, filtry, sort, kolorowanie, menu PPM
+- ⚡ **Optymalizacja** `sesje_rpg.py`: zastąpienie N+1 zapytań DB zapytaniami zbiorczymi (2800+ połączeń → 3 niezależnie od liczby rekordów)
+- ⚡ **`toggle_expand()`**: nowa metoda w `CTkDataTable` — expand/collapse suplementów bez przebudowy całej tabeli; `pack(after=…)` / `pack_forget()` na konkretnych ramkach, złożoność O(k) niezależna od rozmiaru tabeli
 - 🏷️ **`_cell_labels`**: każda ramka wiersza przechowuje referencje do swoich `Label` — aktualizacja symbolu `[+]`/`[-]` jednym `Label.configure()` bez destroy+create
-- 🚀 **Wyniki**: pierwsze rozwinięcie ~450 ms → ~5 ms, zwinięcie/re-rozwinięcie ~120 ms → ~2 ms
-- 🔧 **`systemy_rpg.py`**: `_on_cell_click` używa `toggle_expand` zamiast `set_data_patch` + `_build_hierarchical_data()`
+- 🚀 **Wyniki expand/collapse**: pierwsze rozwinięcie ~450 ms → ~5 ms, zwinięcie/re-rozwinięcie ~120 ms → ~2 ms
 
 ### v0.3.25 (04.03.2026)
 - ✅ **Kolumna Lp.**: parametr `show_row_numbers=True` w `CTkDataTable` — numeracja wierszy (36 px, centrowana, hover/selekcja/PPM jak pozostałe komórki); włączone w `sesje_rpg.py`, `gracze.py`, `wydawcy.py`
-- 🔧 **Migracja** `systemy_rpg.py`: tabela z `tksheet` na `CTkDataTable` — hierarchia główne/suplementy, expand/collapse `[+]`/`[-]`, 13 kolumn, filtry, sort, menu PPM
 - ⚡ **Debounce suwaka czcionek**: pełny rebuild 250 ms po zatrzymaniu (zamiast przy każdym pikselu); ribbon rebuild w withdraw/deiconify eliminuje flicker
 - ⚡ **Lazy rebuild zakładek**: dirty-flag — przebudowa tylko aktywnej zakładki natychmiast, pozostałe przy pierwszym przełączeniu (5 rebuildów → 1 przy zmianie dark/light)
 

@@ -3,15 +3,16 @@
 # pyright: reportUnknownMemberType=false
 
 import tkinter as tk
+import tkinter.font as tkfont
 import tksheet  # type: ignore
 from tkinter import ttk, messagebox
 import sqlite3
 import logging
-import traceback
 from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path, get_app_data_dir
 from font_scaling import scale_font_size
+from ctk_table import CTkDataTable
 from dialog_utils import apply_safe_geometry, clamp_geometry
 
 DB_FILE = get_db_path("systemy_rpg.db")
@@ -200,20 +201,19 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         """)
         systems = c.fetchall()
     
-    # Dla każdego systemu pobierz nazwę wydawcy z oddzielnej bazy
+    # Pobierz wszystkich wydawców jednym zapytaniem
+    publishers_map: Dict[int, str] = {}
+    try:
+        with sqlite3.connect(get_db_path("wydawcy.db")) as wydawcy_conn:
+            w_cursor = wydawcy_conn.cursor()
+            w_cursor.execute("SELECT id, nazwa FROM wydawcy")
+            publishers_map = {row[0]: row[1] for row in w_cursor.fetchall()}
+    except sqlite3.Error:
+        pass
+
     result = []
     for system in systems:
-        try:
-            with sqlite3.connect(get_db_path("wydawcy.db")) as wydawcy_conn:
-                w_cursor = wydawcy_conn.cursor()
-                if system[5]:  # wydawca_id
-                    w_cursor.execute("SELECT nazwa FROM wydawcy WHERE id = ?", (system[5],))
-                    wydawca_result = w_cursor.fetchone()
-                    wydawca_nazwa = wydawca_result[0] if wydawca_result else ""
-                else:
-                    wydawca_nazwa = ""
-        except sqlite3.Error:
-            wydawca_nazwa = ""
+        wydawca_nazwa = publishers_map.get(system[5], "") if system[5] else ""
         
         # Sformuj status jako string: "Grane/Nie grane, W kolekcji/Na sprzedaż"
         status_gra = system[10] if system[10] else "Nie grane"
@@ -673,964 +673,535 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     dialog.protocol("WM_DELETE_WINDOW", on_cancel)
 
 def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ignore
-    """Wypełnia zakładkę systemów RPG danymi z bazy w hierarchicznej strukturze"""
+    """Wypełnia zakładkę systemów RPG danymi z bazy – CTkDataTable."""
+    init_db()
+
+    # ── Szybka ścieżka: odśwież dane bez niszczenia całego UI ───────────────
+    cache = getattr(tab, '_systemy_tab_cache', None)
+    if cache is not None and cache.get('table_ref') is not None and cache.get('dark_mode') == dark_mode:
+        try:
+            if cache['table_ref'].winfo_exists():
+                cache['records_ref'][0] = get_all_systems()
+                cache['rebuild_fn']()
+                return
+        except Exception:
+            pass
+        del tab._systemy_tab_cache  # type: ignore[attr-defined]
+
     for widget in tab.winfo_children():
         widget.destroy()
-    
-    init_db()
-    records = get_all_systems()
-    headers = ["", "ID", "Nazwa systemu", "Typ", "System główny", "Typ suplementu", "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena"]
-    
-    # Przygotuj hierarchiczne dane do wyświetlenia
+
+    records_ref: List[List[Any]] = [get_all_systems()]  # type: ignore
+
+    _HEADERS = ["", "ID", "Nazwa systemu", "Typ", "System główny", "Typ suplementu",
+                "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena"]
+    # col: 0=sym, 1=ID, 2=nazwa, 3=typ, 4=sys_gl, 5=typ_supl,
+    #      6=wydawca, 7=fiz, 8=pdf, 9=vtt, 10=jezyk, 11=status, 12=cena
+
+    bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
+    fg_top = "#e0e0e0" if dark_mode else "#212121"
+    FONT   = ("Segoe UI", scale_font_size(10))
+    _mf      = tkfont.Font(family="Segoe UI", size=scale_font_size(10))
+    _mf_bold = tkfont.Font(family="Segoe UI", size=scale_font_size(10), weight="bold")
+
+    # ── Hierarchia i stan ─────────────────────────────────────────────────
     from collections import OrderedDict
-    main_systems: OrderedDict[Any, Any] = OrderedDict()  # type: ignore # Słownik podręczników głównych zachowujący kolejność
-    supplements: Dict[Any, List[Any]] = {}   # Słownik suplementów grupowanych po system_glowny_id
-    orphaned_supplements: List[Any] = []  # Suplementy bez przypisanego systemu głównego
-    
-    # Grupuj systemy
-    for rec in records:
-        if rec[2] == "Podręcznik Główny":
-            main_systems[rec[0]] = rec
-        elif rec[2] == "Suplement":
-            parent_id = rec[3]  # system_glowny_id
-            if parent_id and parent_id in main_systems.keys():
-                if parent_id not in supplements:
-                    supplements[parent_id] = []
-                supplements[parent_id].append(rec) # type: ignore
-            else:
-                orphaned_supplements.append(rec) # type: ignore
-    
-    # Stan rozwinięcia dla każdego podręcznika głównego
+    main_systems: OrderedDict[Any, Any] = OrderedDict()
+    supplements: Dict[Any, List[Any]] = {}
+    orphaned_supplements: List[Any] = []
     expanded_state: Dict[Any, bool] = {}
-    # Aktualny kierunek sortowania (używany przez build_hierarchical_data)
     current_sort_reverse: List[bool] = [active_sort_systemy.get("reverse", False)]
-    
-    def build_hierarchical_data() -> List[List[Any]]:  # type: ignore
-        """Buduje hierarchiczne dane na podstawie stanu rozwinięcia"""
+    _table: List[Optional[CTkDataTable]] = [None]
+
+    def _apply_record_filters(recs: List[Any]) -> List[Any]:
+        result = []
+        for rec in recs:
+            if active_filters_systemy.get('typ', 'Wszystkie') not in ('Wszystkie', rec[2]):
+                continue
+            if active_filters_systemy.get('wydawca', 'Wszystkie') not in ('Wszystkie', rec[5] or ''):
+                continue
+            pf = active_filters_systemy.get('posiadanie', 'Wszystkie')
+            if pf == 'Fizyczny' and not rec[6]:             continue
+            if pf == 'PDF' and not rec[7]:                  continue
+            if pf == 'Fizyczny i PDF' and not (rec[6] and rec[7]): continue
+            if pf == 'Żadne' and (rec[6] or rec[7]):        continue
+            sf = active_filters_systemy.get('status', 'Wszystkie')
+            if sf != 'Wszystkie' and sf not in (rec[10] or ''): continue
+            wf = active_filters_systemy.get('waluta', 'Wszystkie')
+            if wf != 'Wszystkie' and wf not in (rec[11] or ''): continue
+            jf = active_filters_systemy.get('jezyk', 'Wszystkie')
+            if jf not in ('Wszystkie', rec[9] or ''):        continue
+            result.append(rec)
+        return result  # type: ignore[return-value]
+
+    def _rebuild_groups() -> None:
         nonlocal main_systems, supplements, orphaned_supplements
-        data: List[List[Any]] = []
-        
-        # Pobierz listę kluczy w aktualnej kolejności
-        main_keys = list(main_systems.keys())
-        
-        # Dodaj podręczniki główne i ich suplementy w aktualnej kolejności
-        for main_id in main_keys:
-            rec = main_systems[main_id]
-            
-            # Sprawdź czy ten podręcznik główny ma suplementy
-            has_supplements = main_id in supplements
-            supplements_count = len(supplements.get(main_id, []))
-            expand_symbol = "[-]" if expanded_state.get(main_id, False) else "[+]" if has_supplements else "   "
-            
-            # Dodaj podręcznik główny
-            system_name = rec[1] or ""
-            if has_supplements:
-                system_name += f" ({supplements_count} supl.)"
-            
-            row: List[Any] = [
-                expand_symbol,
-                str(rec[0]),  # ID
-                system_name,  # Nazwa z liczbą suplementów
-                rec[2] or "",  # Typ
-                "",  # System główny (puste dla podręczników głównych)
-                "",  # Typ suplementu (puste dla podręczników głównych)
-                rec[5] or "",  # Wydawca (nazwa)
-                "Tak" if rec[6] else "Nie",  # Fizyczny
-                "Tak" if rec[7] else "Nie",  # PDF
-                rec[8] or "",  # VTT
-                rec[9] or "",  # Język
-                rec[10] or "",  # Status (sformowany w get_all_systems)
-                rec[11] or ""  # Cena (zakupu lub sprzedaży)
-            ]
-            data.append(row)
-            
-            # Jeśli rozwinięty, dodaj suplementy
-            if expanded_state.get(main_id, False) and main_id in supplements:
-                for supp_rec in sorted(supplements[main_id], key=lambda x: x[1] or ""):  # Sortuj po nazwie
-                    # Znajdź nazwę systemu głównego
-                    main_system_name = main_systems[main_id][1] if main_id in main_systems else ""
-                    
-                    supp_row: List[Any] = [
-                        "   →",  # Symbol suplementu
-                        str(supp_rec[0]),  # ID
-                        "  " + (supp_rec[1] or ""),  # Nazwa z wcięciem
-                        supp_rec[2] or "",  # Typ
-                        main_system_name,  # System główny
-                        supp_rec[4] or "",  # Typ suplementu
-                        supp_rec[5] or "",  # Wydawca (nazwa)
-                        "Tak" if supp_rec[6] else "Nie",  # Fizyczny
-                        "Tak" if supp_rec[7] else "Nie",  # PDF
-                        supp_rec[8] or "",  # VTT
-                        supp_rec[9] or "",  # Język
-                        supp_rec[10] or "",  # Status
-                        supp_rec[11] or ""  # Cena
-                    ]
-                    data.append(supp_row)
-        
-        # Dodaj osierocone suplementy na końcu
-        for rec in sorted(orphaned_supplements, key=lambda r: (r[1] or '').lower(), reverse=current_sort_reverse[0]):
-            # Znajdź nazwę systemu głównego jeśli istnieje
-            main_system_name = ""
-            if rec[3]:  # system_glowny_id
-                with sqlite3.connect(DB_FILE) as conn:
-                    c = conn.cursor()
-                    c.execute("SELECT nazwa FROM systemy_rpg WHERE id = ?", (rec[3],))
-                    result = c.fetchone()
-                    if result:
-                        main_system_name = result[0]
-            elif rec[12]:  # system_glowny_nazwa_custom - jeśli nie ma ID, użyj custom nazwy
-                main_system_name = rec[12]
-            
-            row: List[Any] = [
-                "   !",  # Symbol problemowego suplementu
-                str(rec[0]),  # ID
-                rec[1] or "",  # Nazwa
-                rec[2] or "",  # Typ
-                main_system_name,  # System główny
-                rec[4] or "",  # Typ suplementu
-                rec[5] or "",  # Wydawca (nazwa)
-                "Tak" if rec[6] else "Nie",  # Fizyczny
-                "Tak" if rec[7] else "Nie",  # PDF
-                rec[8] or "",  # VTT
-                rec[9] or "",  # Język
-                rec[10] or "",  # Status
-                rec[11] or ""  # Cena
-            ]
-            data.append(row)
-        
-        return data
-    
-    data = build_hierarchical_data()
-
-    sheet = tksheet.Sheet(tab,
-        data=data,  # type: ignore
-        headers=headers,
-        show_x_scrollbar=True,
-        show_y_scrollbar=True,
-        width=1200,
-        height=600)
-    
-    # Automatyczne dopasowanie szerokości kolumn do zawartości lub nagłówka
-    for col in range(len(headers)):
-        if col == 0:  # Kolumna rozwijania
-            sheet.column_width(column=col, width=40)
-        else:
-            max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
-            width_px = max(80, min(400, int(max_content * 9 + 24)))
-            sheet.column_width(column=col, width=width_px)
-    
-    # Skalowanie fontów
-    sheet.set_options(
-        font=("Segoe UI", scale_font_size(10), "normal"),
-        header_font=("Segoe UI", scale_font_size(10), "bold")
-    )  # type: ignore
-    
-    # Wycentrowanie kolumn ID, Fizyczny, PDF
-    sheet.align_columns(columns=[1, 7, 8], align="center")
-    
-    def apply_row_colors():
-        """Aplikuje kolory wierszy w zależności od typu"""
-        for r, row in enumerate(data):
-            typ = row[3] if len(row) > 3 else ""  # Kolumna "Typ"
-            expand_symbol = row[0] if len(row) > 0 else ""
-            status = row[11] if len(row) > 11 else ""  # Kolumna "Status"
-            
-            # Sprawdź czy status kolekcji zawiera "Na sprzedaż"
-            na_sprzedaz = "Na sprzedaż" in status
-            # Sprawdź nowe statusy
-            nieposiadane = "Nieposiadane" in status
-            do_kupienia = "Do kupienia" in status
-            
-            if na_sprzedaz:
-                # Czerwone tło dla elementów na sprzedaż (nadpisuje inne kolory)
-                if dark_mode:
-                    bg_color = "#660000"  # Ciemnoczerwony
-                    fg_color = "#ffcccc"  # Jasnoczerowny tekst
-                else:
-                    bg_color = "#ff6666"  # Czerwony
-                    fg_color = "#ffffff"  # Biały tekst
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-            elif nieposiadane:
-                # Szare tło dla nieposiadanych
-                if dark_mode:
-                    bg_color = "#3a3a3a"  # Ciemnoszary
-                    fg_color = "#b0b0b0"  # Jasnoszary tekst
-                else:
-                    bg_color = "#d3d3d3"  # Jasnoszary
-                    fg_color = "#505050"  # Ciemnoszary tekst
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-            elif do_kupienia:
-                # Fioletowe/różowe tło dla elementów do kupienia
-                if dark_mode:
-                    bg_color = "#4a1a4a"  # Ciemny fiolet
-                    fg_color = "#e6b3e6"  # Jasny różowy tekst
-                else:
-                    bg_color = "#e6b3ff"  # Jasny fiolet
-                    fg_color = "#4a004a"  # Ciemny fiolet tekst
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-            elif typ == "Podręcznik Główny":
-                # Sprawdź czy ten podręcznik główny ma suplementy
-                try:
-                    int(row[1])  # ID z drugiej kolumny (sprawdza czy to poprawne ID)
-                    has_supplements = expand_symbol in ["[+]", "[-]"]  # Ma symbol rozwijania
-                except (ValueError, IndexError):
-                    has_supplements = False
-                
-                if has_supplements:
-                    # Bardzo wyraziste kolory dla podręczników głównych z suplementami
-                    if dark_mode:
-                        bg_color = "#5d4e00"  # Intensywny ciemny złoty/brązowy
-                        fg_color = "#ffd700"  # Jaskrawy złoty tekst
-                    else:
-                        bg_color = "#ffa500"  # Jaskrawy pomarańczowy
-                        fg_color = "#4d2d00"  # Bardzo ciemny brązowy tekst
-                else:
-                    # Subtelniejsze kolory dla podręczników głównych bez suplementów
-                    if dark_mode:
-                        bg_color = "#1a3d1a"  # Zwykły ciemnozielony
-                        fg_color = "#90ee90"  # Jasnozielony tekst
-                    else:
-                        bg_color = "#d4edda"  # Zwykły jasnozielony
-                        fg_color = "#155724"  # Ciemnozielony tekst
-                
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-                    
-            elif typ == "Suplement":
-                # Subtelniejsze kolory dla suplementów
-                if dark_mode:
-                    bg_color = "#1a2a3d"  # Ciemnoniebieski
-                    fg_color = "#87ceeb"  # Jasnoniebieski tekst
-                else:
-                    bg_color = "#f0f8ff"  # Bardzo jasnoniebieski
-                    fg_color = "#2c5282"  # Niebieski tekst
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-                
-            # Wyróżnij osierocone suplementy
-            elif expand_symbol == "   !":
-                if dark_mode:
-                    bg_color = "#3d1a1a"  # Ciemnoczerwony
-                    fg_color = "#ffb3b3"  # Jasnoczerowny tekst
-                else:
-                    bg_color = "#ffe6e6"  # Jasnoczerowny
-                    fg_color = "#8b0000"  # Ciemnoczerwony tekst
-                sheet.highlight_rows(rows=r, bg=bg_color, fg=fg_color)
-    
-    apply_row_colors()
-    
-    def on_cell_select(event: Any) -> None:  # type: ignore
-        """Obsługuje wybór komórki - rozwijanie/zwijanie"""
-        nonlocal data, expanded_state
-        try:
-            selected = sheet.get_currently_selected()
-            if selected and len(selected) >= 2:
-                r, c = selected[:2]  # type: ignore
-                if c == 0 and r < len(data):  # Kliknięto w kolumnę rozwijania
-                    expand_symbol = data[r][0]
-                    if expand_symbol in ["[+]", "[-]"]:
-                        # Znajdź ID podręcznika głównego
-                        main_system_id = None
-                        try:
-                            main_system_id = int(data[r][1])  # ID z drugiej kolumny
-                        except (ValueError, IndexError):
-                            return
-                        
-                        # Przełącz stan rozwinięcia
-                        expanded_state[main_system_id] = not expanded_state.get(main_system_id, False)
-                        
-                        # Przebuduj dane i odśwież tabelę
-                        data = build_hierarchical_data()
-                        sheet.set_sheet_data(data)  # type: ignore
-                        
-                        # Ponownie zastosuj kolory
-                        apply_row_colors()
-                        
-                        # Ponownie ustaw szerokości kolumn
-                        for col in range(len(headers)):
-                            if col == 0:
-                                sheet.column_width(column=col, width=40)
-                            else:
-                                max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
-                                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                                sheet.column_width(column=col, width=width_px)
-                        
-                        sheet.refresh()
-        except Exception:
-            pass  # Zignoruj błędy podczas obsługi kliknięć
-    
-    # Bind wyboru komórek
-    sheet.extra_bindings("cell_select", on_cell_select)  # type: ignore
-    
-    # Włącz obsługę zaznaczania i interakcji
-    sheet.enable_bindings((
-        "single_select",
-        "row_select", 
-        "column_select",
-        "arrowkeys",
-        "right_click_popup_menu",
-        "rc_select",
-        "copy",
-        "cut",
-        "paste",
-        "delete",
-        "undo",
-        "edit_cell",
-        "column_header_click"
-    ))  # type: ignore
-    
-    # Panel sortowania nad tabelą - dostosowany do hierarchii
-    sort_frame = tk.Frame(tab)
-    sort_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-    sort_label = tk.Label(sort_frame, text="Sortuj podręczniki główne po:")
-    sort_label.pack(side=tk.LEFT, padx=(0, 6))
-    # Opcje sortowania dostosowane do hierarchii
-    sort_options = ["ID", "Nazwa systemu", "Wydawca", "Język", "Status", "Posiadanie", "Cena"]
-    sort_var = tk.StringVar(value=active_sort_systemy.get("column", sort_options[0]))
-    sort_menu = ttk.Combobox(sort_frame, textvariable=sort_var, values=sort_options, state="readonly", width=15)
-    sort_menu.pack(side=tk.LEFT)
-    
-    def do_hierarchical_sort(reverse: bool = False) -> None:
-        """Sortuje podręczniki główne zachowując hierarchię"""
-        nonlocal data, main_systems, supplements, orphaned_supplements
-        active_sort_systemy["column"] = sort_var.get()
-        active_sort_systemy["reverse"] = reverse
-        current_sort_reverse[0] = reverse
-        sort_by = sort_var.get()
-        
-        # Sortuj główne systemy na podstawie oryginalnych rekordów z bazy
-        if sort_by == "ID":  # ID - sortowanie numeryczne
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: int(main_systems[x][0]) if main_systems[x][0] else 0, 
-                                   reverse=reverse)
-        elif sort_by == "Nazwa systemu":  # Nazwa
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: (main_systems[x][1] or '').lower(), 
-                                   reverse=reverse)
-        elif sort_by == "Wydawca":  # Wydawca (indeks 5 w oryginalnych rekordach)
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: (main_systems[x][5] or '').lower(), 
-                                   reverse=reverse)
-        elif sort_by == "Język":  # Język (indeks 9 w oryginalnych rekordach)
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: (main_systems[x][9] or '').lower(), 
-                                   reverse=reverse)
-        elif sort_by == "Status":  # Status (indeks 10 w oryginalnych rekordach - status połączony)
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: (main_systems[x][10] or '').lower(), 
-                                   reverse=reverse)
-        elif sort_by == "Posiadanie":  # Posiadanie (fizyczny + pdf, indeks 6 i 7)
-            def posiadanie_key(x: Any) -> str:
-                rec = main_systems[x]
-                if rec[6] and rec[7]:  # Fizyczny i PDF
-                    return "1"
-                elif rec[6]:  # Tylko fizyczny
-                    return "2"
-                elif rec[7]:  # Tylko PDF
-                    return "3"
-                else:  # Żadne
-                    return "4"
-            sorted_main_ids = sorted(main_systems.keys(), key=posiadanie_key, reverse=reverse)
-        elif sort_by == "Cena":  # Cena (indeks 11 - sformatowana cena jako string)
-            def cena_key(x: Any) -> float:
-                rec = main_systems[x]
-                cena_str = rec[11] if rec[11] else ""  # Sformatowana cena np. "123.45 PLN"
-                if cena_str:
-                    # Wyciągnij liczbę z początku stringa
-                    try:
-                        return float(cena_str.split()[0])
-                    except (ValueError, IndexError):
-                        return 0.0
-                return 0.0
-            sorted_main_ids = sorted(main_systems.keys(), key=cena_key, reverse=reverse)
-        else:  # Domyślnie sortuj po ID
-            sorted_main_ids = sorted(main_systems.keys(), 
-                                   key=lambda x: int(main_systems[x][0]) if main_systems[x][0] else 0, 
-                                   reverse=reverse)
-        
-        # Przebuduj main_systems w odpowiedniej kolejności (używając OrderedDict)
-        from collections import OrderedDict
-        temp_main_systems: OrderedDict[Any, Any] = OrderedDict()  # type: ignore
-        for main_id in sorted_main_ids:
-            temp_main_systems[main_id] = main_systems[main_id]
-        
-        # Zastąp main_systems nowym słownikiem w odpowiedniej kolejności  
+        filtered = _apply_record_filters(records_ref[0])
         main_systems.clear()
-        for k, v in temp_main_systems.items():
-            main_systems[k] = v
-        
-        # Przebuduj hierarchiczne dane
-        data = build_hierarchical_data()
-        sheet.set_sheet_data(data)  # type: ignore
-        apply_row_colors()
-        
-        # Ponownie ustaw szerokości kolumn
-        for col in range(len(headers)):
-            if col == 0:
-                sheet.column_width(column=col, width=40)
-            else:
-                max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])  # type: ignore
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=col, width=width_px)
-        
-        sheet.refresh()
-    
-    sort_asc_btn = ttk.Button(sort_frame, text="Rosnąco", command=lambda: do_hierarchical_sort(False))
-    sort_asc_btn.pack(side=tk.LEFT, padx=4)
-    sort_desc_btn = ttk.Button(sort_frame, text="Malejąco", command=lambda: do_hierarchical_sort(True))
-    sort_desc_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przywroć sortowanie z poprzedniej sesji
-    if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
-        do_hierarchical_sort(active_sort_systemy.get("reverse", False))
-
-    # Separator
-    separator = ttk.Separator(sort_frame, orient=tk.VERTICAL)
-    separator.pack(side=tk.LEFT, padx=10, fill=tk.Y)
-    
-    # Filtrowanie
-    filter_label = tk.Label(sort_frame, text="Filtruj:")
-    filter_label.pack(side=tk.LEFT, padx=(0, 6))
-    
-    def open_filter_dialog() -> None:
-        """Otwiera okno dialogowe filtrowania"""
-        dialog = tk.Toplevel(tab)
-        dialog.title("Filtruj systemy RPG")
-        dialog.transient(tab.winfo_toplevel())
-        
-        if dark_mode:
-            apply_dark_theme_to_dialog(dialog)
-        
-        # Centrowanie okna (bezpieczna geometria)
-        apply_safe_geometry(dialog, tab.winfo_toplevel(), 400, 450)
-        
-        main_frame = tk.Frame(dialog)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-        
-        # Filtr Typu
-        tk.Label(main_frame, text="Typ:").grid(row=0, column=0, sticky="w", pady=5)
-        typ_var = tk.StringVar(value=active_filters_systemy.get('typ', 'Wszystkie'))
-        typ_values = ['Wszystkie', 'Podręcznik Główny', 'Suplement']
-        typ_combo = ttk.Combobox(main_frame, textvariable=typ_var, values=typ_values, state="readonly", width=25)
-        typ_combo.grid(row=0, column=1, sticky="ew", pady=5)
-        
-        # Filtr Wydawcy
-        tk.Label(main_frame, text="Wydawca:").grid(row=1, column=0, sticky="w", pady=5)
-        wydawca_var = tk.StringVar(value=active_filters_systemy.get('wydawca', 'Wszystkie'))
-        
-        # Pobierz unikalnych wydawców z danych
-        wydawcy: set[str] = set()
-        for row in data:
-            if row[6]:  # Wydawca
-                wydawcy.add(row[6])
-        wydawca_values = ['Wszystkie'] + sorted(list(wydawcy))
-        wydawca_combo = ttk.Combobox(main_frame, textvariable=wydawca_var, values=wydawca_values, state="readonly", width=25)
-        wydawca_combo.grid(row=1, column=1, sticky="ew", pady=5)
-        
-        # Filtr Posiadania
-        tk.Label(main_frame, text="Posiadanie:").grid(row=2, column=0, sticky="w", pady=5)
-        posiadanie_var = tk.StringVar(value=active_filters_systemy.get('posiadanie', 'Wszystkie'))
-        posiadanie_values = ['Wszystkie', 'Fizyczny', 'PDF', 'Fizyczny i PDF', 'Żadne']
-        posiadanie_combo = ttk.Combobox(main_frame, textvariable=posiadanie_var, values=posiadanie_values, state="readonly", width=25)
-        posiadanie_combo.grid(row=2, column=1, sticky="ew", pady=5)
-        
-        # Filtr Języka
-        tk.Label(main_frame, text="Język:").grid(row=3, column=0, sticky="w", pady=5)
-        jezyk_var = tk.StringVar(value=active_filters_systemy.get('jezyk', 'Wszystkie'))
-        
-        # Pobierz unikalne języki z danych
-        jezyki: set[str] = set()
-        for row in data:
-            if row[9]:  # Język
-                jezyki.add(row[9])
-        jezyk_values = ['Wszystkie'] + sorted(list(jezyki))
-        jezyk_combo = ttk.Combobox(main_frame, textvariable=jezyk_var, values=jezyk_values, state="readonly", width=25)
-        jezyk_combo.grid(row=3, column=1, sticky="ew", pady=5)
-        
-        # Filtr Statusu
-        tk.Label(main_frame, text="Status:").grid(row=4, column=0, sticky="w", pady=5)
-        status_var = tk.StringVar(value=active_filters_systemy.get('status', 'Wszystkie'))
-        
-        # Lista możliwych statusów (zgodna z wartościami w combobox)
-        status_values = ['Wszystkie', 'Grane', 'Nie grane', 
-                        'W kolekcji', 'Na sprzedaż', 'Sprzedane', 
-                        'Nieposiadane', 'Do kupienia']
-        status_combo = ttk.Combobox(main_frame, textvariable=status_var, values=status_values, state="readonly", width=25)
-        status_combo.grid(row=4, column=1, sticky="ew", pady=5)
-        
-        # Filtr Waluty
-        tk.Label(main_frame, text="Waluta:").grid(row=5, column=0, sticky="w", pady=5)
-        waluta_var = tk.StringVar(value=active_filters_systemy.get('waluta', 'Wszystkie'))
-        
-        # Lista możliwych walut
-        waluta_values = ['Wszystkie', 'PLN', 'USD', 'EUR', 'GBP']
-        waluta_combo = ttk.Combobox(main_frame, textvariable=waluta_var, values=waluta_values, state="readonly", width=25)
-        waluta_combo.grid(row=5, column=1, sticky="ew", pady=5)
-        
-        main_frame.columnconfigure(1, weight=1)
-        
-        # Przyciski
-        btn_frame = tk.Frame(dialog)
-        btn_frame.pack(fill=tk.X, padx=20, pady=(0, 20))
-        
-        def apply_filters() -> None:
-            """Aplikuje filtry"""
-            nonlocal data, main_systems, supplements, orphaned_supplements
-            active_filters_systemy['typ'] = typ_var.get()
-            active_filters_systemy['wydawca'] = wydawca_var.get()
-            active_filters_systemy['posiadanie'] = posiadanie_var.get()
-            active_filters_systemy['jezyk'] = jezyk_var.get()
-            active_filters_systemy['status'] = status_var.get()
-            active_filters_systemy['waluta'] = waluta_var.get()
-            
-            # Pobierz oryginalne rekordy z bazy dla filtrowania
-            all_records = get_all_systems()
-            
-            # Filtruj rekordy na poziomie bazy danych
-            filtered_main_systems: OrderedDict[Any, Any] = OrderedDict()  # type: ignore
-            filtered_supplements: Dict[Any, List[Any]] = {}
-            filtered_orphaned_supplements: List[Any] = []
-            
-            for rec in all_records:
-                # Filtr Typu
-                if active_filters_systemy['typ'] != 'Wszystkie':
-                    if rec[2] != active_filters_systemy['typ']:
-                        continue
-                
-                # Filtr Wydawcy
-                if active_filters_systemy['wydawca'] != 'Wszystkie':
-                    if rec[5] != active_filters_systemy['wydawca']:
-                        continue
-                
-                # Filtr Posiadania (rec[6] to fizyczny, rec[7] to pdf)
-                if active_filters_systemy['posiadanie'] == 'Fizyczny':
-                    if not rec[6]:
-                        continue
-                elif active_filters_systemy['posiadanie'] == 'PDF':
-                    if not rec[7]:
-                        continue
-                elif active_filters_systemy['posiadanie'] == 'Fizyczny i PDF':
-                    if not (rec[6] and rec[7]):
-                        continue
-                elif active_filters_systemy['posiadanie'] == 'Żadne':
-                    if rec[6] or rec[7]:
-                        continue
-                
-                # Filtr Języka
-                if active_filters_systemy['jezyk'] != 'Wszystkie':
-                    if rec[9] != active_filters_systemy['jezyk']:
-                        continue
-                
-                # Filtr Statusu (rec[10] to sformowany status)
-                if active_filters_systemy['status'] != 'Wszystkie':
-                    if active_filters_systemy['status'] not in (rec[10] or ''):
-                        continue
-                
-                # Filtr Waluty (rec[11] to sformatowana cena np. "123.45 PLN")
-                if active_filters_systemy['waluta'] != 'Wszystkie':
-                    cena_str = rec[11] if rec[11] else ""
-                    if active_filters_systemy['waluta'] not in cena_str:
-                        continue
-                
-                # Dodaj do odpowiednich grup
-                if rec[2] == "Podręcznik Główny":
-                    filtered_main_systems[rec[0]] = rec
-                elif rec[2] == "Suplement":
-                    if rec[3]:  # system_glowny_id
-                        if rec[3] not in filtered_supplements:
-                            filtered_supplements[rec[3]] = []
-                        filtered_supplements[rec[3]].append(rec)
-                    else:
-                        filtered_orphaned_supplements.append(rec)
-            
-            # Zaktualizuj globalne zmienne
-            main_systems = filtered_main_systems
-            supplements = filtered_supplements
-            orphaned_supplements = filtered_orphaned_supplements
-            
-            # Przebuduj hierarchiczne dane
-            data = build_hierarchical_data()
-            sheet.set_sheet_data(data)  # type: ignore
-            apply_row_colors()
-            
-            # Ponownie ustaw szerokości kolumn
-            for col in range(len(headers)):
-                if col == 0:
-                    sheet.column_width(column=col, width=40)
+        supplements.clear()
+        orphaned_supplements.clear()
+        for rec in filtered:
+            if rec[2] == "Podręcznik Główny":
+                main_systems[rec[0]] = rec
+            elif rec[2] == "Suplement":
+                pid = rec[3]
+                if pid and pid in main_systems:
+                    supplements.setdefault(pid, []).append(rec)
                 else:
-                    max_content = max([len(str(row[col])) for row in data] + [len(headers[col])]) if data else len(headers[col])
-                    width_px = max(80, min(400, int(max_content * 9 + 24)))
-                    sheet.column_width(column=col, width=width_px)
-            
-            sheet.refresh()
-            
-            # Przywróć sortowanie po filtrowaniu
-            if active_sort_systemy.get("column", "ID") != "ID" or current_sort_reverse[0]:
-                do_hierarchical_sort(current_sort_reverse[0])
-            
-            # Aktualizuj tekst przycisku
-            count = 0
-            if active_filters_systemy.get('typ') != 'Wszystkie':
-                count += 1
-            if active_filters_systemy.get('wydawca') != 'Wszystkie':
-                count += 1
-            if active_filters_systemy.get('posiadanie') != 'Wszystkie':
-                count += 1
-            if active_filters_systemy.get('jezyk') != 'Wszystkie':
-                count += 1
-            if active_filters_systemy.get('status') != 'Wszystkie':
-                count += 1
-            if active_filters_systemy.get('waluta') != 'Wszystkie':
-                count += 1
-            
-            if count > 0:
-                filter_btn.configure(text=f"Filtruj ({count})")
-            else:
-                filter_btn.configure(text="Filtruj")
-            
-            dialog.destroy()
-        
-        def reset_filters() -> None:
-            """Resetuje wszystkie filtry"""
-            nonlocal data, records, main_systems, supplements, orphaned_supplements
-            active_filters_systemy.clear()
-            # Przeładuj wszystkie dane z bazy
-            records = get_all_systems()
-            
-            # Zresetuj grupy
-            main_systems.clear()
-            supplements.clear()
-            orphaned_supplements.clear()
-            
-            for rec in records:
-                if rec[2] == "Podręcznik Główny":
-                    main_systems[rec[0]] = rec
-                elif rec[2] == "Suplement":
-                    if rec[3]:
-                        if rec[3] not in supplements:
-                            supplements[rec[3]] = []
-                        supplements[rec[3]].append(rec)
-                    else:
-                        orphaned_supplements.append(rec)
-            
-            # Przebuduj hierarchiczne dane
-            data = build_hierarchical_data()
-            sheet.set_sheet_data(data)  # type: ignore
-            apply_row_colors()
-            
-            # Ponownie ustaw szerokości kolumn
-            for col in range(len(headers)):
-                if col == 0:
-                    sheet.column_width(column=col, width=40)
-                else:
-                    max_content = max([len(str(row[col])) for row in data] + [len(headers[col])])
-                    width_px = max(80, min(400, int(max_content * 9 + 24)))
-                    sheet.column_width(column=col, width=width_px)
-            
-            sheet.refresh()
-            
-            # Przywróć sortowanie po zresetowaniu filtrów
-            if active_sort_systemy.get("column", "ID") != "ID" or current_sort_reverse[0]:
-                do_hierarchical_sort(current_sort_reverse[0])
-            
-            filter_btn.configure(text="Filtruj")
-            dialog.destroy()
-        
-        ttk.Button(btn_frame, text="Zastosuj", command=apply_filters).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(btn_frame, text="Resetuj", command=reset_filters).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Anuluj", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
-    
-    filter_btn = ttk.Button(sort_frame, text="Filtruj", command=open_filter_dialog)
-    filter_btn.pack(side=tk.LEFT, padx=4)
-    
-    # Przesuń tabelę w dół (row=1)
-    sheet.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
-    tab.rowconfigure(1, weight=1)
-    tab.columnconfigure(0, weight=1)
-    
-    # Menu kontekstowe - dostosowane do hierarchii
-    menu = tk.Menu(tab, tearoff=0)
-    
-    def context_edit(row_idx: int) -> None:
-        """Edytuje system o podanym indeksie wiersza"""
-        try:
-            logger.debug("context_edit: row_idx=%d, len(data)=%d", row_idx, len(data))
+                    orphaned_supplements.append(rec)
 
-            if row_idx >= len(data):
-                logger.warning("context_edit: row_idx=%d >= len(data)=%d – pominięto", row_idx, len(data))
-                return
-
-            row = data[row_idx]
-            logger.debug("context_edit: wiersz nr %d, zawartość=%r", row_idx, row)
-
-            if len(row) < 2:
-                logger.warning("context_edit: wiersz ma za mało kolumn (%d)", len(row))
-                return
-
-            system_id = row[1]  # ID z drugiej kolumny
-            logger.info(
-                "context_edit: otwieranie edycji system_id=%r, typ=%r, nazwa=%r",
-                system_id,
-                row[3] if len(row) > 3 else '?',
-                row[2] if len(row) > 2 else '?'
-            )
-
-            if system_id:
-                open_edit_system_dialog(tab, [str(system_id)], refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
-            else:
-                logger.warning("context_edit: system_id jest pusty dla wiersza %d", row_idx)
-        except Exception as e:
-            logger.exception("context_edit: nieoczekiwany wyjątek")
-            traceback.print_exc()
-            messagebox.showerror("Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab)  # type: ignore
-    
-    def context_delete(row_idx: int) -> None:
-        """Usuwa system o podanym indeksie wiersza"""
-        try:
-            if row_idx >= len(data):
-                return
-
-            row = data[row_idx]
-            if len(row) < 4:
-                return
-
-            system_id = row[1]  # ID z drugiej kolumny
-            system_name = row[2]  # Nazwa z trzeciej kolumny
-            system_type = row[3]  # Typ z czwartej kolumny
-
-            # Sprawdź czy to podręcznik główny czy suplement
-            is_main_system = (system_type == "Podręcznik Główny")
-
-            # Dla podręczników głównych usuń licznik suplementów z nazwy
-            if is_main_system and " (" in system_name and " supl.)" in system_name:
-                system_name = system_name.split(" (")[0]
-
-            if system_id and system_name:
-                # Sprawdź czy podręcznik główny ma suplementy
-                warning_msg = f"Czy na pewno chcesz usunąć system: {system_name}?"
-                if is_main_system and int(system_id) in supplements:
-                    supp_count = len(supplements[int(system_id)])
-                    warning_msg += f"\n\nUWAGA: Ten podręcznik główny ma {supp_count} suplementów, które również zostaną usunięte!"
-
-                if messagebox.askyesno("Usuń system RPG", warning_msg, parent=tab):  # type: ignore
+    def _build_hierarchical_data() -> List[List[Any]]:
+        data_h: List[List[Any]] = []
+        for main_id in main_systems:
+            rec = main_systems[main_id]
+            has_supps = main_id in supplements
+            scnt = len(supplements.get(main_id, []))
+            symbol = "[-]" if expanded_state.get(main_id) else ("[+]" if has_supps else "   ")
+            name = (rec[1] or "") + (f" ({scnt} supl.)" if has_supps else "")
+            row: List[Any] = [
+                symbol, str(rec[0]), name, rec[2] or "", "",
+                "", rec[5] or "",
+                "Tak" if rec[6] else "Nie", "Tak" if rec[7] else "Nie",
+                rec[8] or "", rec[9] or "", rec[10] or "", rec[11] or "",
+            ]
+            data_h.append(row)
+            if expanded_state.get(main_id) and main_id in supplements:
+                for sr in sorted(supplements[main_id], key=lambda x: x[1] or ""):
+                    mn = main_systems[main_id][1] if main_id in main_systems else ""
+                    sr_row: List[Any] = [
+                        "   →", str(sr[0]), "  " + (sr[1] or ""), sr[2] or "",
+                        mn, sr[4] or "", sr[5] or "",
+                        "Tak" if sr[6] else "Nie", "Tak" if sr[7] else "Nie",
+                        sr[8] or "", sr[9] or "", sr[10] or "", sr[11] or "",
+                    ]
+                    data_h.append(sr_row)
+        for rec in sorted(orphaned_supplements,
+                          key=lambda r: (r[1] or '').lower(),
+                          reverse=current_sort_reverse[0]):
+            mn = ""
+            if rec[3]:
+                try:
                     with sqlite3.connect(DB_FILE) as conn:
-                        c = conn.cursor()
-                        if is_main_system:
-                            c.execute("DELETE FROM systemy_rpg WHERE system_glowny_id = ?", (system_id,))
-                        c.execute("DELETE FROM systemy_rpg WHERE id = ?", (system_id,))
+                        row_r = conn.cursor().execute(
+                            "SELECT nazwa FROM systemy_rpg WHERE id=?", (rec[3],)
+                        ).fetchone()
+                        if row_r:
+                            mn = row_r[0]
+                except sqlite3.Error:
+                    pass
+            elif rec[12]:
+                mn = rec[12]
+            oph_row: List[Any] = [
+                "   !", str(rec[0]), rec[1] or "", rec[2] or "",
+                mn, rec[4] or "", rec[5] or "",
+                "Tak" if rec[6] else "Nie", "Tak" if rec[7] else "Nie",
+                rec[8] or "", rec[9] or "", rec[10] or "", rec[11] or "",
+            ]
+            data_h.append(oph_row)
+        return data_h
+
+    displayed_data: List[List[Any]] = []
+
+    def _do_sort_main_systems(reverse: bool) -> None:
+        sort_by = sort_var.get()
+
+        def _key(x: Any) -> Any:
+            if sort_by == "Nazwa systemu":
+                return (main_systems[x][1] or '').lower()
+            elif sort_by == "Wydawca":
+                return (main_systems[x][5] or '').lower()
+            elif sort_by == "Język":
+                return (main_systems[x][9] or '').lower()
+            elif sort_by == "Status":
+                return (main_systems[x][10] or '').lower()
+            elif sort_by == "Posiadanie":
+                r = main_systems[x]
+                if r[6] and r[7]: return "1"
+                elif r[6]:        return "2"
+                elif r[7]:        return "3"
+                return "4"
+            elif sort_by == "Cena":
+                s = main_systems[x][11] or ""
+                try:    return float(s.split()[0])
+                except: return 0.0
+            else:  # ID (default)
+                try:    return int(main_systems[x][0])
+                except: return 0
+
+        sorted_ids = sorted(main_systems.keys(), key=_key, reverse=reverse)
+        new_ms: OrderedDict[Any, Any] = OrderedDict((k, main_systems[k]) for k in sorted_ids)
+        main_systems.clear()
+        main_systems.update(new_ms)
+
+    def _apply_and_draw() -> None:
+        nonlocal displayed_data
+        _rebuild_groups()
+        _do_sort_main_systems(current_sort_reverse[0])
+        active_sort_systemy["column"]  = sort_var.get()
+        active_sort_systemy["reverse"] = current_sort_reverse[0]
+        displayed_data = _build_hierarchical_data()
+        if _table[0] is not None:
+            _table[0].set_data(displayed_data)
+        _refresh_filter_btn()
+
+    def _rebuild_fn() -> None:
+        _apply_and_draw()
+
+    def _refresh_filter_btn() -> None:
+        active = sum(1 for v in active_filters_systemy.values() if v != 'Wszystkie')
+        filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
+
+    # ── Kolorowanie wierszy ──────────────────────────────────────────────
+    def _row_color(i: int, row: List[Any]) -> Any:  # type: ignore[return]
+        symbol = row[0] if row else ""
+        typ    = row[3] if len(row) > 3 else ""
+        status = row[11] if len(row) > 11 else ""
+        if "Na sprzedaż" in status:
+            return ("#660000" if dark_mode else "#ff6666",
+                    "#ffcccc" if dark_mode else "#ffffff")
+        if "Nieposiadane" in status:
+            return ("#3a3a3a" if dark_mode else "#d3d3d3",
+                    "#b0b0b0" if dark_mode else "#505050")
+        if "Do kupienia" in status:
+            return ("#4a1a4a" if dark_mode else "#e6b3ff",
+                    "#e6b3e6" if dark_mode else "#4a004a")
+        if typ == "Podręcznik Główny":
+            if symbol in ("[+]", "[-]"):
+                return ("#5d4e00" if dark_mode else "#ffa500",
+                        "#ffd700" if dark_mode else "#4d2d00")
+            return ("#1a3d1a" if dark_mode else "#d4edda",
+                    "#90ee90" if dark_mode else "#155724")
+        if typ == "Suplement":
+            return ("#1a2a3d" if dark_mode else "#f0f8ff",
+                    "#87ceeb" if dark_mode else "#2c5282")
+        if symbol == "   !":
+            return ("#3d1a1a" if dark_mode else "#ffe6e6",
+                    "#ffb3b3" if dark_mode else "#8b0000")
+        return None
+
+    # ── Callbacki tabeli ─────────────────────────────────────────────────
+    def _systemy_refresh(**_kw: Any) -> None:
+        fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+
+    def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        sid = row_data[1] if len(row_data) > 1 else ""
+        if sid:
+            try:
+                open_edit_system_dialog(tab, [str(sid)],
+                                        refresh_callback=_systemy_refresh)
+            except Exception as e:
+                logger.exception("_on_edit: błąd otwierania edycji")
+                messagebox.showerror("Błąd edycji",
+                                     f"Nie można otworzyć okna edycji:\n{e}", parent=tab)
+
+    def _on_cell_click(row_idx: int, col_idx: int, row_data: List[Any]) -> None:
+        if col_idx != 0:
+            return
+        symbol = row_data[0] if row_data else ""
+        if symbol not in ("[+]", "[-]"):
+            return
+        try:
+            import time as _t
+            _ts_click = _t.perf_counter()
+            main_id = int(row_data[1])
+            is_expanding = not expanded_state.get(main_id, False)
+            expanded_state[main_id] = is_expanding
+            if _table[0] is None:
+                return
+
+            if is_expanding:
+                # Pobierz tylko wiersze suplementów dla tego systemu
+                supp_rows: List[List[Any]] = []
+                for sr in sorted(supplements.get(main_id, []),
+                                  key=lambda x: x[1] or ""):
+                    mn = main_systems[main_id][1] if main_id in main_systems else ""
+                    supp_rows.append([
+                        "   \u2192", str(sr[0]), "  " + (sr[1] or ""), sr[2] or "",
+                        mn, sr[4] or "", sr[5] or "",
+                        "Tak" if sr[6] else "Nie", "Tak" if sr[7] else "Nie",
+                        sr[8] or "", sr[9] or "", sr[10] or "", sr[11] or "",
+                    ])
+                _table[0].toggle_expand(str(main_id), True, supp_rows)
+            else:
+                _table[0].toggle_expand(str(main_id), False)
+
+            _ts_done = _t.perf_counter()
+            def _after_render(_ts: float = _ts_click, _td: float = _ts_done) -> None:
+                logger.debug(
+                    "[toggle_expand fast] expand=%s  elapsed=%.1f ms  render=%.1f ms  TOTAL=%.1f ms",
+                    is_expanding, (_td - _ts) * 1000,
+                    (_t.perf_counter() - _td) * 1000,
+                    (_t.perf_counter() - _ts) * 1000,
+                )
+            tab.after(0, _after_render)
+        except (ValueError, IndexError):
+            pass
+
+    def _on_sort(col_idx: int) -> None:
+        col_map = {
+            1: "ID", 2: "Nazwa systemu", 6: "Wydawca",
+            10: "Język", 11: "Status", 12: "Cena",
+        }
+        sort_name = col_map.get(col_idx)
+        if not sort_name:
+            return
+        if active_sort_systemy.get("column") == sort_name:
+            rev = not active_sort_systemy.get("reverse", False)
+        else:
+            rev = False
+        current_sort_reverse[0] = rev
+        active_sort_systemy["column"]  = sort_name
+        active_sort_systemy["reverse"] = rev
+        sort_var.set(sort_name)
+        _do_sort_main_systems(rev)
+        if _table[0] is not None:
+            _table[0].set_data(_build_hierarchical_data())
+
+    def _on_right_click(row_idx: int, row_data: List[Any], event: Any) -> None:
+        symbol = row_data[0] if row_data else ""
+        sid    = row_data[1] if len(row_data) > 1 else ""
+        sname  = row_data[2] if len(row_data) > 2 else ""
+        stype  = row_data[3] if len(row_data) > 3 else ""
+        clean_name = sname.split(" (")[0] if (" (" in sname and " supl.)" in sname) else sname
+
+        def _edit() -> None:
+            _on_edit(row_idx, row_data)
+
+        def _delete() -> None:
+            if not sid:
+                return
+            is_main = (stype == "Podręcznik Główny")
+            warn = f"Czy na pewno chcesz usunąć system: {clean_name}?"
+            sid_int: Optional[int] = None
+            try:
+                sid_int = int(sid)
+                if is_main and sid_int in supplements:
+                    cnt = len(supplements[sid_int])
+                    warn += (f"\n\nUWAGA: Ten podręcznik główny ma {cnt} suplementów,"
+                             " które również zostaną usunięte!")
+            except ValueError:
+                pass
+            if messagebox.askyesno("Usuń system RPG", warn, parent=tab):
+                try:
+                    with sqlite3.connect(DB_FILE) as conn:
+                        cur = conn.cursor()
+                        if is_main and sid_int is not None:
+                            cur.execute(
+                                "DELETE FROM systemy_rpg WHERE system_glowny_id=?",
+                                (sid_int,))
+                        cur.execute("DELETE FROM systemy_rpg WHERE id=?", (sid,))
                         conn.commit()
                     fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
-        except Exception as e:
-            logger.exception("context_delete: nieoczekiwany wyjątek")
-            print(f"Błąd podczas usuwania: {e}")
-    
-    def context_add_supplement(row_idx: int) -> None:
-        """Dodaje suplement do podręcznika głównego o podanym indeksie wiersza"""
-        try:
-            if row_idx >= len(data):
-                return
+                except sqlite3.Error as e:
+                    messagebox.showerror("Błąd bazy danych",
+                                         f"Nie udało się usunąć:\n{e}", parent=tab)
 
-            row = data[row_idx]
-            if len(row) < 4:
-                return
+        def _toggle() -> None:
+            _on_cell_click(row_idx, 0, row_data)
 
-            system_id = row[1]  # ID z drugiej kolumny
-            system_name = row[2]  # Nazwa z trzeciej kolumny
-            system_type = row[3]  # Typ z czwartej kolumny
+        def _add_supp() -> None:
+            if sid:
+                dodaj_suplement_do_systemu(
+                    tab.winfo_toplevel(), int(sid), clean_name,
+                    refresh_callback=_systemy_refresh)
 
-            # Sprawdź czy to podręcznik główny
-            if system_type != "Podręcznik Główny":
-                return
+        ctx = tk.Menu(tab, tearoff=0)
+        ctx.add_command(label="Edytuj", command=_edit)
+        if stype == "Podręcznik Główny":
+            ctx.add_command(label="Dodaj suplement do podręcznika głównego",
+                            command=_add_supp)
+            if symbol in ("[+]", "[-]"):
+                ctx.add_command(
+                    label="Zwiń" if symbol == "[-]" else "Rozwiń",
+                    command=_toggle)
+        ctx.add_separator()
+        ctx.add_command(label="Usuń", command=_delete)
+        ctx.tk_popup(event.x_root, event.y_root)
+        ctx.grab_release()
 
-            # Usuń licznik suplementów z nazwy jeśli istnieje
-            if " (" in system_name and " supl.)" in system_name:
-                clean_system_name = system_name.split(" (")[0]
-            else:
-                clean_system_name = system_name
+    # ── Obliczanie szerokości kolumn ──────────────────────────────────────
+    def _compute_widths(rows: List[List[Any]]) -> List[int]:
+        if not rows:
+            return [34, 44, 200, 130, 160, 160, 160, 60, 52, 100, 58, 200, 100]
+        pad = 20
 
-            if system_id:
-                # Otwórz okno dodawania suplementu z predefiniowanym systemem głównym
-                dodaj_suplement_do_systemu(tab.winfo_toplevel(), int(system_id), clean_system_name,
-                                          refresh_callback=lambda **kwargs: fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)))  # type: ignore
-        except Exception as e:
-            logger.exception("context_add_supplement: nieoczekiwany wyjątek")
-            print(f"Błąd podczas dodawania suplementu: {e}")
-    
-    # Utwórz menu kontekstowe
-    menu = tk.Menu(tab, tearoff=0)
-    
-    def show_context_menu(event: tk.Event) -> None:  # type: ignore
-        """Wyświetla menu kontekstowe dostosowane do typu systemu"""
-        r = sheet.identify_row(event)
-        c = sheet.identify_column(event)
-        if r is not None and c is not None:
-            sheet.set_currently_selected(r, c)  # type: ignore
+        def _w(ci: int, hdr: str, max_w: int, min_w: int = 60) -> int:
+            v = max([_mf.measure(str(r[ci])) for r in rows
+                     if len(r) > ci and r[ci]] or [0])
+            return min(max(max(v, _mf_bold.measure(hdr)) + pad, min_w), max_w)
 
-            if r < len(data) and len(data[r]) > 3:
-                # Przechwytujemy r w domyślnych wartościach argumentów — gwarantuje
-                # poprawny indeks niezależnie od stanu selekcji w momencie kliknięcia opcji
-                captured_r: int = int(r)
-                system_type = data[captured_r][3]
-                logger.debug(
-                    "show_context_menu: row=%d, system_type=%r, symbol=%r",
-                    captured_r, system_type,
-                    data[captured_r][0] if data[captured_r] else '?'
-                )
+        return [
+            34,
+            44,
+            _w(2,  "Nazwa systemu",  360, 100),
+            _w(3,  "Typ",            160, 80),
+            _w(4,  "System główny",  260, 80),
+            _w(5,  "Typ suplementu", 220, 80),
+            _w(6,  "Wydawca",        220, 80),
+            _w(7,  "Fizyczny",        70, 60),
+            _w(8,  "PDF",             52, 50),
+            _w(9,  "VTT",            120, 60),
+            _w(10, "Język",           60, 50),
+            _w(11, "Status",         200, 90),
+            _w(12, "Cena",           130, 60),
+        ]
 
-                menu.delete(0, 'end')
-                menu.add_command(
-                    label="Edytuj",
-                    command=lambda row_idx=captured_r: context_edit(row_idx)  # type: ignore
-                )
+    # ── Górny pasek ──────────────────────────────────────────────────────
+    top_bar = tk.Frame(tab, bg=bg_top)
+    top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
+    tk.Label(top_bar, text="Sortuj:", bg=bg_top, fg=fg_top,
+             font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    sort_options = ["ID", "Nazwa systemu", "Wydawca", "Język",
+                    "Status", "Posiadanie", "Cena"]
+    sort_var = tk.StringVar(value=active_sort_systemy.get("column", "ID"))
+    ttk.Combobox(
+        top_bar, textvariable=sort_var, values=sort_options,
+        state="readonly", width=14,
+    ).pack(side=tk.LEFT)
 
-                if system_type == "Podręcznik Główny":
-                    menu.add_command(
-                        label="Dodaj suplement do podręcznika głównego",
-                        command=lambda row_idx=captured_r: context_add_supplement(row_idx)  # type: ignore
-                    )
+    def _sort_asc() -> None:
+        current_sort_reverse[0] = False
+        active_sort_systemy["column"]  = sort_var.get()
+        active_sort_systemy["reverse"] = False
+        _do_sort_main_systems(False)
+        if _table[0] is not None:
+            _table[0].set_data(_build_hierarchical_data())
 
-                menu.add_separator()
-                menu.add_command(
-                    label="Usuń",
-                    command=lambda row_idx=captured_r: context_delete(row_idx)  # type: ignore
-                )
+    def _sort_desc() -> None:
+        current_sort_reverse[0] = True
+        active_sort_systemy["column"]  = sort_var.get()
+        active_sort_systemy["reverse"] = True
+        _do_sort_main_systems(True)
+        if _table[0] is not None:
+            _table[0].set_data(_build_hierarchical_data())
 
-                menu.tk_popup(event.x_root, event.y_root)  # type: ignore
-    
-    sheet.bind("<Button-3>", show_context_menu)  # type: ignore
-    
-    # Tryb ciemny
-    if dark_mode:
-        sheet.set_options(theme="dark")  # type: ignore
-    
-    # Automatycznie aplikuj filtry jeśli są aktywne
-    if active_filters_systemy:
-        # Pobierz oryginalne rekordy z bazy dla filtrowania
-        all_records = get_all_systems()
-        
-        # Filtruj rekordy na poziomie bazy danych
-        filtered_main_systems: OrderedDict[Any, Any] = OrderedDict()  # type: ignore
-        filtered_supplements: Dict[Any, List[Any]] = {}
-        filtered_orphaned_supplements: List[Any] = []
-        
-        for rec in all_records:
-            # Filtr Typu
-            if active_filters_systemy.get('typ', 'Wszystkie') != 'Wszystkie':
-                if rec[2] != active_filters_systemy['typ']:
-                    continue
-            
-            # Filtr Wydawcy
-            if active_filters_systemy.get('wydawca', 'Wszystkie') != 'Wszystkie':
-                if rec[5] != active_filters_systemy['wydawca']:
-                    continue
-            
-            # Filtr Posiadania (rec[6] to fizyczny, rec[7] to pdf)
-            posiadanie_filter = active_filters_systemy.get('posiadanie', 'Wszystkie')
-            if posiadanie_filter == 'Fizyczny':
-                if not rec[6]:
-                    continue
-            elif posiadanie_filter == 'PDF':
-                if not rec[7]:
-                    continue
-            elif posiadanie_filter == 'Fizyczny i PDF':
-                if not (rec[6] and rec[7]):
-                    continue
-            elif posiadanie_filter == 'Żadne':
-                if rec[6] or rec[7]:
-                    continue
-            
-            # Filtr Języka
-            if active_filters_systemy.get('jezyk', 'Wszystkie') != 'Wszystkie':
-                if rec[9] != active_filters_systemy['jezyk']:
-                    continue
-            
-            # Filtr Statusu (rec[10] to sformowany status)
-            if active_filters_systemy.get('status', 'Wszystkie') != 'Wszystkie':
-                if active_filters_systemy['status'] not in (rec[10] or ''):
-                    continue
-            
-            # Filtr Waluty (rec[11] to sformatowana cena np. "123.45 PLN")
-            if active_filters_systemy.get('waluta', 'Wszystkie') != 'Wszystkie':
-                cena_str = rec[11] if rec[11] else ""
-                if active_filters_systemy['waluta'] not in cena_str:
-                    continue
-            
-            # Dodaj do odpowiednich grup
-            if rec[2] == "Podręcznik Główny":
-                filtered_main_systems[rec[0]] = rec
-            elif rec[2] == "Suplement":
-                if rec[3]:  # system_glowny_id
-                    if rec[3] not in filtered_supplements:
-                        filtered_supplements[rec[3]] = []
-                    filtered_supplements[rec[3]].append(rec)
-                else:
-                    filtered_orphaned_supplements.append(rec)
-        
-        # Zaktualizuj globalne zmienne
-        main_systems = filtered_main_systems
-        supplements = filtered_supplements
-        orphaned_supplements = filtered_orphaned_supplements
-        
-        # Przebuduj hierarchiczne dane
-        data = build_hierarchical_data()
-        sheet.set_sheet_data(data)  # type: ignore
-        apply_row_colors()
-        
-        # Ponownie ustaw szerokości kolumn
-        for col in range(len(headers)):
-            if col == 0:
-                sheet.column_width(column=col, width=40)
-            else:
-                max_content = max([len(str(row[col])) for row in data] + [len(headers[col])]) if data else len(headers[col])
-                width_px = max(80, min(400, int(max_content * 9 + 24)))
-                sheet.column_width(column=col, width=width_px)
-        
-        sheet.refresh()
-        
-        # Przywróć sortowanie po auto-filtrowaniu na starcie
-        if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
-            do_hierarchical_sort(active_sort_systemy.get("reverse", False))
-        
-        # Aktualizuj tekst przycisku
-        count = 0
-        if active_filters_systemy.get('typ') != 'Wszystkie':
-            count += 1
-        if active_filters_systemy.get('wydawca') != 'Wszystkie':
-            count += 1
-        if active_filters_systemy.get('posiadanie') != 'Wszystkie':
-            count += 1
-        if active_filters_systemy.get('jezyk') != 'Wszystkie':
-            count += 1
-        if active_filters_systemy.get('status') != 'Wszystkie':
-            count += 1
-        if active_filters_systemy.get('waluta') != 'Wszystkie':
-            count += 1
-        if count > 0:
-            filter_btn.configure(text=f"Filtruj ({count})")
+    ttk.Button(top_bar, text="Rosnąco",  command=_sort_asc ).pack(side=tk.LEFT, padx=4)
+    ttk.Button(top_bar, text="Malejąco", command=_sort_desc).pack(side=tk.LEFT, padx=4)
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top,
+             font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    filter_btn = ttk.Button(top_bar, text="Filtruj",
+                            command=lambda: _open_filter())
+    filter_btn.pack(side=tk.LEFT, padx=4)
+
+    # ── Tabela ───────────────────────────────────────────────────────────
+    _rebuild_groups()
+    if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
+        _do_sort_main_systems(active_sort_systemy.get("reverse", False))
+    initial_data = _build_hierarchical_data()
+
+    tbl = CTkDataTable(
+        tab,
+        headers=_HEADERS,
+        col_widths=_compute_widths(initial_data),
+        data=[],
+        edit_callback=_on_edit,
+        id_col=1,
+        row_color_fn=_row_color,
+        center_cols=[1, 7, 8, 10],
+        dark_mode=dark_mode,
+        sort_callback=_on_sort,
+        right_click_callback=_on_right_click,
+        cell_click_callback=_on_cell_click,
+        show_row_numbers=True,
+    )
+    tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+    tab.rowconfigure(1, weight=1)
+    tab.columnconfigure(0, weight=1)
+    _table[0] = tbl
+
+    tab._systemy_tab_cache = {  # type: ignore[attr-defined]
+        'records_ref': records_ref,
+        'rebuild_fn':  _rebuild_fn,
+        'table_ref':   tbl,
+        'dark_mode':   dark_mode,
+    }
+
+    # ── Dialog filtrowania ────────────────────────────────────────────────
+    def _open_filter() -> None:
+        dlg = ctk.CTkToplevel(tab)
+        dlg.title("Filtruj systemy RPG")
+        dlg.transient(tab.winfo_toplevel())
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 420, 380)
+
+        mf = ctk.CTkFrame(dlg)
+        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        cur = records_ref[0]
+        rows_cfg = [
+            ("Typ:",        'typ',      ['Wszystkie', 'Podręcznik Główny', 'Suplement']),
+            ("Wydawca:",    'wydawca',  ['Wszystkie'] + sorted({str(r[5]) for r in cur if r[5]})),
+            ("Posiadanie:", 'posiadanie', ['Wszystkie', 'Fizyczny', 'PDF', 'Fizyczny i PDF', 'Żadne']),
+            ("Język:",      'jezyk',    ['Wszystkie'] + sorted({str(r[9]) for r in cur if r[9]})),
+            ("Status:",     'status',   ['Wszystkie', 'Grane', 'Nie grane', 'W kolekcji',
+                                         'Na sprzedaż', 'Sprzedane', 'Nieposiadane', 'Do kupienia']),
+            ("Waluta:",     'waluta',   ['Wszystkie', 'PLN', 'USD', 'EUR', 'GBP']),
+        ]
+        vars_: Dict[str, tk.StringVar] = {}
+        for ri, (label, key, vals) in enumerate(rows_cfg):
+            ctk.CTkLabel(mf, text=label).grid(row=ri, column=0, sticky="w", pady=8)
+            v = tk.StringVar(value=active_filters_systemy.get(key, 'Wszystkie'))
+            vars_[key] = v
+            ttk.Combobox(mf, textvariable=v, values=vals, width=24,
+                         state="readonly").grid(row=ri, column=1, sticky="ew",
+                                                pady=8, padx=(10, 0))
+        mf.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(mf, fg_color="transparent")
+        bf.grid(row=len(rows_cfg), column=0, columnspan=2, pady=(20, 0))
+
+        def _apply() -> None:
+            for key, v in vars_.items():
+                active_filters_systemy[key] = v.get()
+            _apply_and_draw()
+            dlg.destroy()
+
+        def _reset() -> None:
+            active_filters_systemy.clear()
+            _apply_and_draw()
+            dlg.destroy()
+
+        ctk.CTkButton(bf, text="Zastosuj", command=_apply,
+                      fg_color="#2E7D32", hover_color="#1B5E20",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Resetuj", command=_reset,
+                      fg_color="#1976D2", hover_color="#1565C0",
+                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(bf, text="Anuluj", command=dlg.destroy,
+                      fg_color="#666666", hover_color="#555555",
+                      width=90).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(300, lambda: dlg.winfo_exists() and (
+            dlg.deiconify(), dlg.lift(), dlg.focus_force()))
+
+    # ── Pierwsze wypełnienie ─────────────────────────────────────────────
+    displayed_data = initial_data
+    tbl.set_data(initial_data)
+    _refresh_filter_btn()
 
 def usun_zaznaczony_system(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
-    """Usuwa zaznaczony system RPG z tabeli i bazy danych"""
-    sheet = None
-    for widget in tab.winfo_children():
-        if isinstance(widget, tksheet.Sheet):
-            sheet = widget
-            break
-    if sheet is None:
+    """Usuwa zaznaczony system RPG – deleguje do menu kontekstowego tabeli."""
+    cache = getattr(tab, '_systemy_tab_cache', None)
+    tbl: Optional[CTkDataTable] = cache.get('table_ref') if cache else None
+    if tbl is None:
         messagebox.showerror("Błąd", "Nie znaleziono tabeli systemów RPG.", parent=tab)  # type: ignore
         return
-    sel = sheet.get_currently_selected()
-    if not sel or len(sel) < 2:
+    row_data = tbl.get_selected()
+    if row_data is None:
         messagebox.showinfo("Brak wyboru", "Zaznacz system do usunięcia w tabeli.", parent=tab)  # type: ignore
         return
-    r, _ = sel[:2]  # type: ignore
-    values = sheet.get_row_data(r)  # type: ignore
-    if len(values) < 2:
+    system_id = row_data[1] if len(row_data) > 1 else None
+    system_name = row_data[2] if len(row_data) > 2 else ""
+    if system_name and " (" in system_name and " supl.)" in system_name:
+        system_name = system_name.split(" (")[0]
+    if not system_id:
         return
-    
-    if messagebox.askyesno("Usuń system RPG", f"Czy na pewno chcesz usunąć system: {values[1]}?", parent=tab):  # type: ignore
+    if messagebox.askyesno("Usuń system RPG", f"Czy na pewno chcesz usunąć system: {system_name}?", parent=tab):  # type: ignore
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
-            c.execute("DELETE FROM systemy_rpg WHERE id=?", (values[0],))
+            c.execute("DELETE FROM systemy_rpg WHERE id=?", (system_id,))
             conn.commit()
-        
+        fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
         if refresh_callback:
             refresh_callback(dark_mode=get_dark_mode_from_tab(tab))
 

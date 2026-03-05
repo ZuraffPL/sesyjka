@@ -131,19 +131,16 @@ def get_all_players() -> List[Tuple[int, str]]:
         return []
 
 def get_all_sessions() -> List[Tuple[Any, ...]]:
-    """Pobiera wszystkie sesje RPG z bazy"""
+    """Pobiera wszystkie sesje RPG z bazy (zoptymalizowane – bulk queries)."""
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        # Sprawdź czy tabela istnieje
         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sesje_rpg'")
         if not c.fetchone():
             return []
-        
         c.execute("SELECT COUNT(*) FROM sesje_rpg")
         if c.fetchone()[0] == 0:
             return []
-        
-        # Pobierz sesje z LEFT JOIN do systemów i graczy
+
         c.execute("""
             SELECT s.id, s.data_sesji, s.system_id, s.liczba_graczy, s.mg_id,
                    s.kampania, s.jednostrzal, s.tytul_kampanii, s.tytul_przygody
@@ -151,80 +148,63 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
             ORDER BY s.data_sesji ASC, s.id ASC
         """)
         sessions = c.fetchall()
-    
-    # Dla każdej sesji pobierz nazwy systemów i MG z innych baz
+
+        # Pobierz wszystkich graczy z sesji jednym zapytaniem
+        c.execute("SELECT sesja_id, gracz_id FROM sesje_gracze")
+        sesja_gracze_rows = c.fetchall()
+
+    # Słownik: sesja_id -> [gracz_id, ...]
+    sesja_gracze_map: Dict[int, List[int]] = {}
+    for sesja_id, gracz_id in sesja_gracze_rows:
+        sesja_gracze_map.setdefault(sesja_id, []).append(gracz_id)
+
+    # Pobierz wszystkie systemy jednym zapytaniem
+    systems_map: Dict[int, str] = {}
+    try:
+        with sqlite3.connect(get_db_path("systemy_rpg.db")) as sys_conn:
+            sys_conn.row_factory = None
+            sc = sys_conn.cursor()
+            sc.execute("SELECT id, nazwa FROM systemy_rpg")
+            systems_map = {row[0]: row[1] for row in sc.fetchall()}
+    except sqlite3.Error:
+        pass
+
+    # Pobierz wszystkich graczy jednym zapytaniem
+    players_map: Dict[int, str] = {}
+    try:
+        with sqlite3.connect(get_db_path("gracze.db")) as gracze_conn:
+            gracze_conn.row_factory = None
+            gc = gracze_conn.cursor()
+            gc.execute("SELECT id, nick FROM gracze")
+            players_map = {row[0]: row[1] for row in gc.fetchall()}
+    except sqlite3.Error:
+        pass
+
     result = []
     for session in sessions:
-        try:
-            # Pobierz nazwę systemu
-            with sqlite3.connect(get_db_path("systemy_rpg.db")) as sys_conn:
-                sys_cursor = sys_conn.cursor()
-                sys_cursor.execute("SELECT nazwa FROM systemy_rpg WHERE id = ?", (session[2],))
-                system_result = sys_cursor.fetchone()
-                system_nazwa = system_result[0] if system_result else f"System ID {session[2]}"
-        except sqlite3.Error:
-            system_nazwa = f"System ID {session[2]}"
-        
-        try:
-            # Pobierz nick MG
-            with sqlite3.connect(get_db_path("gracze.db")) as gracze_conn:
-                gracze_cursor = gracze_conn.cursor()
-                gracze_cursor.execute("SELECT nick FROM gracze WHERE id = ?", (session[4],))
-                mg_result = gracze_cursor.fetchone()
-                mg_nick = mg_result[0] if mg_result else f"Gracz ID {session[4]}"
-        except sqlite3.Error:
-            mg_nick = f"Gracz ID {session[4]}"
-        
-        # Pobierz graczy z sesji
-        try:
-            with sqlite3.connect(DB_FILE) as conn:
-                c = conn.cursor()
-                c.execute("SELECT gracz_id FROM sesje_gracze WHERE sesja_id = ?", (session[0],))
-                gracz_ids = [row[0] for row in c.fetchall()]
-                
-                # Pobierz nicki graczy
-                gracze_names = []
-                for gracz_id in gracz_ids:
-                    try:
-                        with sqlite3.connect(get_db_path("gracze.db")) as gracze_conn:
-                            gracze_cursor = gracze_conn.cursor()
-                            gracze_cursor.execute("SELECT nick FROM gracze WHERE id = ?", (gracz_id,))
-                            gracz_result = gracze_cursor.fetchone()
-                            if gracz_result:
-                                gracze_names.append(gracz_result[0]) # type: ignore
-                    except sqlite3.Error:
-                        gracze_names.append(f"Gracz ID {gracz_id}") # type: ignore
-                
-                gracze_str = ", ".join(gracze_names) if gracze_names else "" # type: ignore
-        except sqlite3.Error:
-            gracze_str = ""
-        
-        # Określ typ sesji
+        sid, data_sesji, system_id, _lb_graczy, mg_id, kampania, jednostrzal, tytul_kampanii, tytul_przygody = session
+
+        system_nazwa = systems_map.get(system_id, f"System ID {system_id}")
+        mg_nick      = players_map.get(mg_id, f"Gracz ID {mg_id}")
+
+        gracz_ids    = sesja_gracze_map.get(sid, [])
+        gracze_str   = ", ".join(players_map.get(gid, f"Gracz ID {gid}") for gid in gracz_ids)
+
         typ_sesji = ""
-        if session[5]:  # kampania
+        if kampania:
             typ_sesji = "Kampania"
-            if session[7]:  # tytul_kampanii
-                typ_sesji += f": {session[7]}"
-        elif session[6]:  # jednostrzal
+            if tytul_kampanii:
+                typ_sesji += f": {tytul_kampanii}"
+            if tytul_przygody:
+                typ_sesji += f" / {tytul_przygody}"
+        elif jednostrzal:
             typ_sesji = "Jednostrzał"
-            if session[8]:  # tytul_przygody
-                typ_sesji += f": {session[8]}"
-        
-        # Jeśli są oba tytuły i jest to kampania, dodaj również tytuł przygody
-        if session[5] and session[7] and session[8]:  # kampania z tytułem kampanii i tytułem przygody
-            typ_sesji += f" / {session[8]}"
-        
-        # Format: ID, Data, System, Typ sesji, MG, Gracze
-        result.append(( # type: ignore
-            session[0],          # ID
-            session[1],          # Data sesji
-            system_nazwa,        # Nazwa systemu
-            typ_sesji,          # Typ sesji z tytułem
-            mg_nick,            # Nick MG
-            gracze_str          # Lista graczy
-        ))
-    
-    return result # type: ignore
+            if tytul_przygody:
+                typ_sesji += f": {tytul_przygody}"
+
+        result.append((sid, data_sesji, system_nazwa, typ_sesji, mg_nick, gracze_str))  # type: ignore
+
+    return result  # type: ignore
 
 # Funkcja dodaj_sesje_rpg została przeniesiona do sesje_rpg_dialogs.py
 def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:

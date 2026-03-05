@@ -45,6 +45,34 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     # Historia wersji
     version_history = [ # type: ignore
         {
+            "version": "0.3.26",
+            "date": "05.03.2026",
+            "changes": [
+                "⚡ OPTYMALIZACJA EXPAND/COLLAPSE SUPLEMENTÓW:°",
+                "",
+                "✅ CTKTABLE.PY — METODA toggle_expand():",
+                "  • Nowa metoda toggle_expand(parent_id,",
+                "    expand, child_rows) — omija _build_rows",
+                "  • pack(after=...) / pack_forget() zamiast",
+                "    przebudowy całej tabeli",
+                "  • Złożoność O(k) gdzie k = liczba suplementów,",
+                "    niezależna od rozmiaru tabeli",
+                "  • _cell_labels na każdej ramce wiersza —",
+                "    aktualizacja symbolu [+]/[-] jednym",
+                "    Label.configure() bez destroy/create",
+                "  • Pula ramek (_row_pool) reużywana przy",
+                "    ponownym rozwinięciu (zero widget create)",
+                "",
+                "⚡ WYNIKI POMIARÓW:",
+                "  • Pierwsze rozwinięcie: ~450 ms → ~5 ms",
+                "  • Zwinięcie / re-rozwinięcie: ~120 ms → ~2 ms",
+                "",
+                "✅ SYSTEMY_RPG.PY:",
+                "  • _on_cell_click — toggle_expand zamiast",
+                "    set_data_patch + _build_hierarchical_data()",
+            ],
+        },
+        {
             "version": "0.3.25",
             "date": "04.03.2026",
             "changes": [

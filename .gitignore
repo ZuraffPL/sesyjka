@@ -36,3 +36,6 @@ dist/
 build/
 *.egg-info/
 *.spec
+
+# Skrypt wydania — uruchamiany lokalnie, nie commitowany
+create_release.py

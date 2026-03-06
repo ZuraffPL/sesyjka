@@ -373,6 +373,11 @@ class CTkDataTable(tk.Frame):
         # ── szybka ścieżka: dane bez zmian → nic nie rób ─────────────────
         cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
         if cached is not None and cached == row:
+            # Lp.: zawsze bezwzględna numeracja – aktualizuj nawet przy cache-hit
+            if self._show_row_num:
+                lbl = getattr(rf, '_row_num_lbl', None)
+                if lbl is not None:
+                    lbl.configure(text=str(i + 1))
             return
         rf._cached_row = list(row)  # type: ignore[attr-defined]
         # Zniszcz tylko dzieci (Label/Button) – Frame zostaje
@@ -411,6 +416,11 @@ class CTkDataTable(tk.Frame):
                 # Idealne trafienie: dane bez zmian → tylko pack(), zero tworzenia widgetów
                 rf.pack(fill=tk.X)
                 self._row_frames.append(rf)
+                # Lp.: zawsze bezwzględna numeracja – aktualizuj nawet przy cache-hit
+                if self._show_row_num:
+                    lbl = getattr(rf, '_row_num_lbl', None)
+                    if lbl is not None:
+                        lbl.configure(text=str(i + 1))
                 return
             # Reuse ramki, ale odśwież zawartość (zniszcz stare dzieci)
             for ch in rf.winfo_children():
@@ -496,6 +506,7 @@ class CTkDataTable(tk.Frame):
             num_lbl.bind("<Enter>", _on_enter)
             num_lbl.bind("<Leave>", _on_leave)
             num_lbl.bind("<Button-1>", _on_click)
+            rf._row_num_lbl = num_lbl  # type: ignore[attr-defined]
             if self._rc_cb is not None:
                 ri_, rd_ = i, list(row)
                 num_lbl.bind(
@@ -688,6 +699,13 @@ class CTkDataTable(tk.Frame):
                     self._row_pool[key] = rf_child
             del self._row_frames[parent_idx + 1 : end]
             del self._data[parent_idx + 1 : end]
+
+        # Lp.: przenumeruj wszystkie ramki od parent_idx wzwyż
+        if self._show_row_num:
+            for seq, rf in enumerate(self._row_frames[parent_idx:], start=parent_idx + 1):
+                lbl = getattr(rf, '_row_num_lbl', None)
+                if lbl is not None:
+                    lbl.configure(text=str(seq))
 
         _t1 = _time.perf_counter()
         _log.debug(

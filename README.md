@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.26-blue)
+![Version](https://img.shields.io/badge/version-0.3.27-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.26-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.27-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.26.exe`
+4. Uruchom `Sesyjka-v0.3.27.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.26.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.26.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.27.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.27.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -185,6 +185,13 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.27 (08.03.2026)
+- ➕ **Przycisk „Dodaj gracza"** w dialogach wyboru graczy i MG sesji — bez zamykania okna, lista odświeżana natychmiast, zakładka Gracze aktualizowana automatycznie
+- 🔧 **Refaktor dialogów wyboru** `sesje_rpg_dialogs.py`: `CTkToplevel` + `CTkScrollableFrame` + `CTkCheckBox` + `CTkRadioButton` zamiast `tk.Toplevel` + `Canvas`/`Scrollbar`/`ttk` — usunięto ręczne bindowanie scrolla i `apply_dark_theme_to_dialog()`
+- 🎨 **Wyrównano kolory tekstu**: `text_color_disabled` checkboxów = `text_color` — zablokowane opcje wyglądają spójnie z radiobutonami MG
+- 🔄 **Przełącznik „Rozwiń wszystkie"** w `systemy_rpg.py`: `CTkSwitch` w pasku górnym, stan zapamiętywany w `settings.json` i przywracany przy starcie
+- 🐛 **Kolumna Lp.**: zawsze pokazuje numerację bezwzględną niezależnie od aktywnych filtrów
 
 ### v0.3.26 (05.03.2026)
 - 🔧 **Migracja** `systemy_rpg.py`: tabela z `tksheet` na `CTkDataTable` — hierarchia główne/suplementy, expand/collapse `[+]`/`[-]`, 13 kolumn, filtry, sort, kolorowanie, menu PPM

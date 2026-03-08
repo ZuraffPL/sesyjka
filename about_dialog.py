@@ -6,7 +6,7 @@ import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.26"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.27"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     

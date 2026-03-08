@@ -39,3 +39,4 @@ build/
 
 # Skrypt wydania — uruchamiany lokalnie, nie commitowany
 create_release.py
+create_release.prompt.md

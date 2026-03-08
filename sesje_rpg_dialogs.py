@@ -327,6 +327,10 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             players.clear()
             players.extend(new_players)
             _rebuild_checkboxes()
+            # Odśwież zakładkę Gracze w głównym oknie
+            if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
+                import gracze as _gracze_mod
+                _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
 
         def _open_add_player() -> None:
             import gracze as _gracze
@@ -857,6 +861,10 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             players.clear()
             players.extend(new_players)
             _rebuild_checkboxes_edit()
+            # Odśwież zakładkę Gracze w głównym oknie
+            if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
+                import gracze as _gracze_mod
+                _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
 
         def _open_add_player_edit() -> None:
             import gracze as _gracze

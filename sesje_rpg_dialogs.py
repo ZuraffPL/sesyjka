@@ -430,44 +430,65 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         
         # Radiobuttony dla MG
         mg_var = tk.IntVar(value=selected_mg_id)
-        
-        for i, (player_id, player_nick) in enumerate(players):
-            rb = ttk.Radiobutton(mg_scrollable_frame, text=f"{player_nick} (ID: {player_id})", 
-                                variable=mg_var, value=player_id)
-            rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            # Bind rolki myszki do każdego radiobutona
-            rb.bind("<MouseWheel>", on_mousewheel_mg_add)
-        
+        mg_radiobuttons: List[ttk.Radiobutton] = []
+
+        def _rebuild_mg_radiobuttons() -> None:
+            for w in mg_scrollable_frame.winfo_children():
+                w.destroy()
+            mg_radiobuttons.clear()
+            for i, (player_id, player_nick) in enumerate(players):
+                rb = ttk.Radiobutton(mg_scrollable_frame,
+                                     text=f"{player_nick} (ID: {player_id})",
+                                     variable=mg_var, value=player_id)
+                rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                rb.bind("<MouseWheel>", on_mousewheel_mg_add)
+                mg_radiobuttons.append(rb)
+            mg_scrollable_frame.update_idletasks()
+            mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
+
+        _rebuild_mg_radiobuttons()
+
         mg_canvas.grid(row=0, column=0, sticky="nsew")
         mg_scrollbar.grid(row=0, column=1, sticky="ns")
-        
+
         # Przyciski
         buttons_frame = tk.Frame(mg_dialog)
         buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
-        buttons_frame.columnconfigure(0, weight=1)
-        
-        def save_mg_selection():
+
+        def _after_add_player_mg(**_kw: Any) -> None:
+            new_players = get_all_players()
+            players.clear()
+            players.extend(new_players)
+            _rebuild_mg_radiobuttons()
+            if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
+                import gracze as _gracze_mod
+                _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
+
+        def _open_add_player_mg() -> None:
+            import gracze as _gracze
+            _gracze.dodaj_gracza(mg_dialog, refresh_callback=_after_add_player_mg)
+
+        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg)
+        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        def save_mg_selection() -> None:
             selected_id = mg_var.get()
-            
             if selected_id == 0:
                 messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=mg_dialog)
                 return
-            
-            # Sprawdź czy MG nie jest w graczach
             if selected_id in selected_players_list:
                 messagebox.showerror("Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=mg_dialog)
                 return
-            
             nonlocal selected_mg_id
             selected_mg_id = selected_id
             update_selected_mg_display()
             mg_dialog.destroy()
-        
+
         save_mg_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_mg_selection)
-        save_mg_btn.grid(row=0, column=0, padx=(0, 5), sticky="e")
-        
+        save_mg_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
+
         cancel_mg_btn = ttk.Button(buttons_frame, text="Anuluj", command=mg_dialog.destroy)
-        cancel_mg_btn.grid(row=0, column=1, padx=(5, 0), sticky="w")
+        cancel_mg_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
     
     choose_mg_btn = ctk.CTkButton(mg_frame, text="Wybierz MG...", 
                                   command=open_mg_selection, width=140)
@@ -974,44 +995,65 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         
         # Radiobuttony dla MG
         mg_var = tk.IntVar(value=selected_mg_id)
-        
-        for i, (player_id, player_nick) in enumerate(players):
-            rb = ttk.Radiobutton(mg_scrollable_frame, text=f"{player_nick} (ID: {player_id})", 
-                                variable=mg_var, value=player_id)
-            rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            # Bind rolki myszki do każdego radiobutona
-            rb.bind("<MouseWheel>", on_mousewheel_mg_edit)
-        
+        mg_radiobuttons_edit: List[ttk.Radiobutton] = []
+
+        def _rebuild_mg_radiobuttons_edit() -> None:
+            for w in mg_scrollable_frame.winfo_children():
+                w.destroy()
+            mg_radiobuttons_edit.clear()
+            for i, (player_id, player_nick) in enumerate(players):
+                rb = ttk.Radiobutton(mg_scrollable_frame,
+                                     text=f"{player_nick} (ID: {player_id})",
+                                     variable=mg_var, value=player_id)
+                rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                rb.bind("<MouseWheel>", on_mousewheel_mg_edit)
+                mg_radiobuttons_edit.append(rb)
+            mg_scrollable_frame.update_idletasks()
+            mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
+
+        _rebuild_mg_radiobuttons_edit()
+
         mg_canvas.grid(row=0, column=0, sticky="nsew")
         mg_scrollbar.grid(row=0, column=1, sticky="ns")
-        
+
         # Przyciski
         buttons_frame = tk.Frame(mg_dialog)
         buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
-        buttons_frame.columnconfigure(0, weight=1)
-        
-        def save_mg_selection():
+
+        def _after_add_player_mg_edit(**_kw: Any) -> None:
+            new_players = get_all_players()
+            players.clear()
+            players.extend(new_players)
+            _rebuild_mg_radiobuttons_edit()
+            if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
+                import gracze as _gracze_mod
+                _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
+
+        def _open_add_player_mg_edit() -> None:
+            import gracze as _gracze
+            _gracze.dodaj_gracza(mg_dialog, refresh_callback=_after_add_player_mg_edit)
+
+        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg_edit)
+        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        def save_mg_selection() -> None:
             selected_id = mg_var.get()
-            
             if selected_id == 0:
                 messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=mg_dialog)
                 return
-            
-            # Sprawdź czy MG nie jest w graczach
             if selected_id in selected_players_list:
                 messagebox.showerror("Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=mg_dialog)
                 return
-            
             nonlocal selected_mg_id
             selected_mg_id = selected_id
             update_selected_mg_display()
             mg_dialog.destroy()
-        
+
         save_mg_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_mg_selection)
-        save_mg_btn.grid(row=0, column=0, padx=(0, 5), sticky="e")
-        
+        save_mg_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
+
         cancel_mg_btn = ttk.Button(buttons_frame, text="Anuluj", command=mg_dialog.destroy)
-        cancel_mg_btn.grid(row=0, column=1, padx=(5, 0), sticky="w")
+        cancel_mg_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
     
     choose_mg_btn = ctk.CTkButton(mg_frame, text="Wybierz MG...", 
                                   command=open_mg_selection, width=140)

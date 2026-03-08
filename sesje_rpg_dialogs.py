@@ -275,6 +275,8 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
                 cb = ctk.CTkCheckBox(scroll_frame,
                                      text=f"{player_nick} (ID: {player_id})",
                                      variable=var,
+                                     text_color=("gray10", "#DCE4EE"),
+                                     text_color_disabled=("gray10", "#DCE4EE"),
                                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
                 cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb
@@ -778,6 +780,8 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
                 cb = ctk.CTkCheckBox(scroll_frame_edit,
                                      text=f"{player_nick} (ID: {player_id})",
                                      variable=var,
+                                     text_color=("gray10", "#DCE4EE"),
+                                     text_color_disabled=("gray10", "#DCE4EE"),
                                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
                 cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb

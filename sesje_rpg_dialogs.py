@@ -277,75 +277,83 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         # Checkboxy dla graczy
         player_vars: Dict[int, tk.BooleanVar] = {}
         player_checkboxes: Dict[int, ttk.Checkbutton] = {}
-        
-        for i, (player_id, player_nick) in enumerate(players):
-            var = tk.BooleanVar(value=player_id in selected_players_list)
-            player_vars[player_id] = var
-            cb = ttk.Checkbutton(players_scrollable_frame, text=f"{player_nick} (ID: {player_id})", variable=var)
-            cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            player_checkboxes[player_id] = cb
-            # Bind rolki myszki do każdego checkboxa
-            cb.bind("<MouseWheel>", on_mousewheel_players)
-        
-        players_canvas.grid(row=0, column=0, sticky="nsew")
-        players_scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        def validate_players_selection():
-            selected = sum(1 for var in player_vars.values() if var.get())
-            max_players = int(liczba_var.get())
-            
-            if selected > max_players:
-                # Odznacz nadmiarowych graczy
+
+        def validate_players_selection() -> None:
+            selected = sum(1 for v in player_vars.values() if v.get())
+            max_p = int(liczba_var.get())
+            if selected > max_p:
                 count = 0
-                for player_id, var in player_vars.items():
-                    if var.get():
+                for pid, v in player_vars.items():
+                    if v.get():
                         count += 1
-                        if count > max_players:
-                            var.set(False)
-            
-            # Aktualizuj stan checkboxów
-            count = sum(1 for var in player_vars.values() if var.get())
-            for player_id, cb in player_checkboxes.items():
-                if not player_vars[player_id].get() and count >= max_players:
+                        if count > max_p:
+                            v.set(False)
+            count = sum(1 for v in player_vars.values() if v.get())
+            for pid, cb in player_checkboxes.items():
+                if not player_vars[pid].get() and count >= max_p:
                     cb.config(state="disabled")
                 else:
                     cb.config(state="normal")
-        
-        # Bind zmiany checkboxów
-        for var in player_vars.values():
-            var.trace("w", lambda *args: validate_players_selection())
-        
+
+        def _rebuild_checkboxes() -> None:
+            for w in players_scrollable_frame.winfo_children():
+                w.destroy()
+            player_vars.clear()
+            player_checkboxes.clear()
+            for i, (player_id, player_nick) in enumerate(players):
+                var = tk.BooleanVar(value=player_id in selected_players_list)
+                player_vars[player_id] = var
+                cb = ttk.Checkbutton(players_scrollable_frame,
+                                     text=f"{player_nick} (ID: {player_id})", variable=var)
+                cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                player_checkboxes[player_id] = cb
+                cb.bind("<MouseWheel>", on_mousewheel_players)
+                var.trace("w", lambda *args: validate_players_selection())
+            players_scrollable_frame.update_idletasks()
+            players_canvas.configure(scrollregion=players_canvas.bbox("all"))
+            validate_players_selection()
+
+        _rebuild_checkboxes()
+
+        players_canvas.grid(row=0, column=0, sticky="nsew")
+        players_scrollbar.grid(row=0, column=1, sticky="ns")
+
         # Przyciski
         buttons_frame = tk.Frame(players_dialog)
         buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
-        buttons_frame.columnconfigure(0, weight=1)
-        
-        def save_players_selection():
-            selected = [pid for pid, var in player_vars.items() if var.get()]
+
+        def _after_add_player(**_kw: Any) -> None:
+            new_players = get_all_players()
+            players.clear()
+            players.extend(new_players)
+            _rebuild_checkboxes()
+
+        def _open_add_player() -> None:
+            import gracze as _gracze
+            _gracze.dodaj_gracza(players_dialog, refresh_callback=_after_add_player)
+
+        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player)
+        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        def save_players_selection() -> None:
+            selected = [pid for pid, v in player_vars.items() if v.get()]
             expected_count = int(liczba_var.get())
-            
             if len(selected) != expected_count:
                 messagebox.showerror("Błąd", f"Wybierz dokładnie {expected_count} graczy.", parent=players_dialog)
                 return
-            
-            # Sprawdź czy MG nie jest w graczach
             if selected_mg_id in selected:
                 messagebox.showerror("Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=players_dialog)
                 return
-            
             selected_players_list.clear()
             selected_players_list.extend(selected)
             update_selected_players_display()
             players_dialog.destroy()
-        
+
         save_players_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_players_selection)
-        save_players_btn.grid(row=0, column=0, padx=(0, 5), sticky="e")
-        
+        save_players_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
+
         cancel_players_btn = ttk.Button(buttons_frame, text="Anuluj", command=players_dialog.destroy)
-        cancel_players_btn.grid(row=0, column=1, padx=(5, 0), sticky="w")
-        
-        # Wywołaj walidację na start
-        validate_players_selection()
+        cancel_players_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
     
     choose_players_btn = ctk.CTkButton(players_frame, text="Wybierz graczy...", 
                                        command=open_players_selection, width=140)
@@ -805,70 +813,79 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         # Checkboxy dla graczy
         player_vars_local: Dict[int, tk.BooleanVar] = {}
         player_checkboxes: Dict[int, ttk.Checkbutton] = {}
-        
-        for i, (player_id, player_nick) in enumerate(players):
-            var = tk.BooleanVar(value=player_id in selected_players_list)
-            player_vars_local[player_id] = var
-            cb = ttk.Checkbutton(players_scrollable_frame, text=f"{player_nick} (ID: {player_id})", variable=var)
-            cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-            player_checkboxes[player_id] = cb
-            # Bind rolki myszki do każdego checkboxa
-            cb.bind("<MouseWheel>", on_mousewheel_players)
-        
-        players_canvas.grid(row=0, column=0, sticky="nsew")
-        players_scrollbar.grid(row=0, column=1, sticky="ns")
-        
-        def update_count_and_validate():
-            selected_count = sum(1 for var in player_vars_local.values() if var.get())
+
+        def update_count_and_validate() -> None:
+            selected_count = sum(1 for v in player_vars_local.values() if v.get())
             count_label.config(text=f"Wybrano: {selected_count}/{max_players}")
-            
-            # Jeśli osiągnięto limit, zablokuj pozostałe checkboxy
             if selected_count >= max_players:
-                for player_id, cb in player_checkboxes.items():
-                    if not player_vars_local[player_id].get():
+                for pid, cb in player_checkboxes.items():
+                    if not player_vars_local[pid].get():
                         cb.config(state="disabled")
             else:
                 for cb in player_checkboxes.values():
                     cb.config(state="normal")
-        
-        # Bind zmiany checkboxów
-        for var in player_vars_local.values():
-            var.trace("w", lambda *args: update_count_and_validate())
-        
-        # Inicjalna aktualizacja
-        update_count_and_validate()
-        
+
+        def _rebuild_checkboxes_edit() -> None:
+            for w in players_scrollable_frame.winfo_children():
+                w.destroy()
+            player_vars_local.clear()
+            player_checkboxes.clear()
+            for i, (player_id, player_nick) in enumerate(players):
+                var = tk.BooleanVar(value=player_id in selected_players_list)
+                player_vars_local[player_id] = var
+                cb = ttk.Checkbutton(players_scrollable_frame,
+                                     text=f"{player_nick} (ID: {player_id})", variable=var)
+                cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                player_checkboxes[player_id] = cb
+                cb.bind("<MouseWheel>", on_mousewheel_players)
+                var.trace("w", lambda *args: update_count_and_validate())
+            players_scrollable_frame.update_idletasks()
+            players_canvas.configure(scrollregion=players_canvas.bbox("all"))
+            update_count_and_validate()
+
+        _rebuild_checkboxes_edit()
+
+        players_canvas.grid(row=0, column=0, sticky="nsew")
+        players_scrollbar.grid(row=0, column=1, sticky="ns")
+
         # Przyciski
         buttons_frame = tk.Frame(players_dialog)
         buttons_frame.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
-        buttons_frame.columnconfigure(0, weight=1)
-        
-        def save_players_selection():
-            selected_ids = [pid for pid, var in player_vars_local.items() if var.get()]
-            
+
+        def _after_add_player_edit(**_kw: Any) -> None:
+            new_players = get_all_players()
+            players.clear()
+            players.extend(new_players)
+            _rebuild_checkboxes_edit()
+
+        def _open_add_player_edit() -> None:
+            import gracze as _gracze
+            _gracze.dodaj_gracza(players_dialog, refresh_callback=_after_add_player_edit)
+
+        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_edit)
+        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+
+        def save_players_selection() -> None:
+            selected_ids = [pid for pid, v in player_vars_local.items() if v.get()]
             if len(selected_ids) > max_players:
                 messagebox.showerror("Błąd", f"Wybierz maksymalnie {max_players} graczy.", parent=players_dialog)
                 return
-            
             if len(selected_ids) == 0:
                 messagebox.showerror("Błąd", "Wybierz co najmniej jednego gracza.", parent=players_dialog)
                 return
-            
-            # Sprawdź czy żaden z graczy nie jest MG
             if selected_mg_id in selected_ids:
                 messagebox.showerror("Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=players_dialog)
                 return
-            
             selected_players_list.clear()
             selected_players_list.extend(selected_ids)
             update_selected_players_display()
             players_dialog.destroy()
-        
+
         save_players_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_players_selection)
-        save_players_btn.grid(row=0, column=0, padx=(0, 5), sticky="e")
-        
+        save_players_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
+
         cancel_players_btn = ttk.Button(buttons_frame, text="Anuluj", command=players_dialog.destroy)
-        cancel_players_btn.grid(row=0, column=1, padx=(5, 0), sticky="w")
+        cancel_players_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
     
     choose_players_btn = ctk.CTkButton(players_frame, text="Wybierz graczy...", 
                                        command=open_players_selection, width=140)

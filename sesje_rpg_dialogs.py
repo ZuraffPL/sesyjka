@@ -228,55 +228,27 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
     
     def open_players_selection():
         # Okno wyboru graczy
-        players_dialog = tk.Toplevel(dialog)
+        players_dialog = ctk.CTkToplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
         players_dialog.resizable(True, True)
-        
-        # Zastosuj tryb ciemny jeśli aktywny
-        root = dialog.winfo_toplevel()
-        if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
-            apply_dark_theme_to_dialog(players_dialog)
-        
-        apply_safe_geometry(players_dialog, dialog, 400, 500)
-        
+        apply_safe_geometry(players_dialog, dialog, 420, 520)
+
         players_dialog.columnconfigure(0, weight=1)
         players_dialog.rowconfigure(1, weight=1)
-        
-        # Etykieta informacyjna
+
         max_players = int(liczba_var.get())
-        info_label = tk.Label(players_dialog, text=f"Wybierz dokładnie {max_players} graczy:")
-        info_label.grid(row=0, column=0, pady=10, padx=10, sticky="w")
-        
-        # Frame z scrollbarem dla checkboxów
-        players_canvas_frame = tk.Frame(players_dialog)
-        players_canvas_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        players_canvas_frame.columnconfigure(0, weight=1)
-        players_canvas_frame.rowconfigure(0, weight=1)
-        
-        players_canvas = tk.Canvas(players_canvas_frame)
-        players_scrollbar = ttk.Scrollbar(players_canvas_frame, orient="vertical", command=players_canvas.yview) # type: ignore
-        players_scrollable_frame = ttk.Frame(players_canvas)
-        
-        players_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: players_canvas.configure(scrollregion=players_canvas.bbox("all"))
-        )
-        
-        players_canvas.create_window((0, 0), window=players_scrollable_frame, anchor="nw")
-        players_canvas.configure(yscrollcommand=players_scrollbar.set)
-        
-        # Obsługa rolki myszki dla przewijania
-        def on_mousewheel_players(event):
-            players_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Bind rolki myszki do canvas i wszystkich jego dzieci
-        players_canvas.bind("<MouseWheel>", on_mousewheel_players)
-        players_scrollable_frame.bind("<MouseWheel>", on_mousewheel_players)
-        
-        # Checkboxy dla graczy
+        ctk.CTkLabel(players_dialog,
+                     text=f"Wybierz dokładnie {max_players} graczy:",
+                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
+                     ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
+
+        scroll_frame = ctk.CTkScrollableFrame(players_dialog)
+        scroll_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        scroll_frame.columnconfigure(0, weight=1)
+
         player_vars: Dict[int, tk.BooleanVar] = {}
-        player_checkboxes: Dict[int, ttk.Checkbutton] = {}
+        player_checkboxes: Dict[int, ctk.CTkCheckBox] = {}
 
         def validate_players_selection() -> None:
             selected = sum(1 for v in player_vars.values() if v.get())
@@ -290,44 +262,36 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
                             v.set(False)
             count = sum(1 for v in player_vars.values() if v.get())
             for pid, cb in player_checkboxes.items():
-                if not player_vars[pid].get() and count >= max_p:
-                    cb.config(state="disabled")
-                else:
-                    cb.config(state="normal")
+                cb.configure(state="disabled" if (not player_vars[pid].get() and count >= max_p) else "normal")
 
         def _rebuild_checkboxes() -> None:
-            for w in players_scrollable_frame.winfo_children():
+            for w in scroll_frame.winfo_children():
                 w.destroy()
             player_vars.clear()
             player_checkboxes.clear()
             for i, (player_id, player_nick) in enumerate(players):
                 var = tk.BooleanVar(value=player_id in selected_players_list)
                 player_vars[player_id] = var
-                cb = ttk.Checkbutton(players_scrollable_frame,
-                                     text=f"{player_nick} (ID: {player_id})", variable=var)
-                cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                cb = ctk.CTkCheckBox(scroll_frame,
+                                     text=f"{player_nick} (ID: {player_id})",
+                                     variable=var,
+                                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+                cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb
-                cb.bind("<MouseWheel>", on_mousewheel_players)
                 var.trace("w", lambda *args: validate_players_selection())
-            players_scrollable_frame.update_idletasks()
-            players_canvas.configure(scrollregion=players_canvas.bbox("all"))
             validate_players_selection()
 
         _rebuild_checkboxes()
 
-        players_canvas.grid(row=0, column=0, sticky="nsew")
-        players_scrollbar.grid(row=0, column=1, sticky="ns")
-
-        # Przyciski
-        buttons_frame = tk.Frame(players_dialog)
-        buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
+        buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
+        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player(**_kw: Any) -> None:
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
             _rebuild_checkboxes()
-            # Odśwież zakładkę Gracze w głównym oknie
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
                 _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
@@ -336,8 +300,10 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             import gracze as _gracze
             _gracze.dodaj_gracza(players_dialog, refresh_callback=_after_add_player)
 
-        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player)
-        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        ctk.CTkButton(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player,
+                      width=120, fg_color="#1976D2", hover_color="#1565C0",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
             selected = [pid for pid, v in player_vars.items() if v.get()]
@@ -353,11 +319,14 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             update_selected_players_display()
             players_dialog.destroy()
 
-        save_players_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_players_selection)
-        save_players_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
-
-        cancel_players_btn = ttk.Button(buttons_frame, text="Anuluj", command=players_dialog.destroy)
-        cancel_players_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
+        ctk.CTkButton(buttons_frame, text="Zapisz wybór", command=save_players_selection,
+                      width=110, fg_color="#2E7D32", hover_color="#1B5E20",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=2, padx=(0, 6), sticky="e")
+        ctk.CTkButton(buttons_frame, text="Anuluj", command=players_dialog.destroy,
+                      width=80, fg_color="#666666", hover_color="#555555",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=3, sticky="e")
     
     choose_players_btn = ctk.CTkButton(players_frame, text="Wybierz graczy...", 
                                        command=open_players_selection, width=140)
@@ -388,72 +357,45 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
     
     def open_mg_selection():
         # Okno wyboru MG
-        mg_dialog = tk.Toplevel(dialog)
+        mg_dialog = ctk.CTkToplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
         mg_dialog.resizable(True, True)
-        
-        apply_safe_geometry(mg_dialog, dialog, 400, 500)
-        
+
+        apply_safe_geometry(mg_dialog, dialog, 420, 500)
+
         mg_dialog.columnconfigure(0, weight=1)
         mg_dialog.rowconfigure(1, weight=1)
-        
-        # Etykieta informacyjna
-        info_label = tk.Label(mg_dialog, text="Wybierz Mistrza Gry:")
-        info_label.grid(row=0, column=0, pady=10, padx=10, sticky="w")
-        
-        # Frame z scrollbarem dla radiobuttonów
-        mg_canvas_frame = tk.Frame(mg_dialog)
-        mg_canvas_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        mg_canvas_frame.columnconfigure(0, weight=1)
-        mg_canvas_frame.rowconfigure(0, weight=1)
-        
-        mg_canvas = tk.Canvas(mg_canvas_frame)
-        mg_scrollbar = ttk.Scrollbar(mg_canvas_frame, orient="vertical", command=mg_canvas.yview)
-        mg_scrollable_frame = ttk.Frame(mg_canvas)
-        
-        mg_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
-        )
-        
-        mg_canvas.create_window((0, 0), window=mg_scrollable_frame, anchor="nw")
-        mg_canvas.configure(yscrollcommand=mg_scrollbar.set)
-        
-        # Obsługa rolki myszki dla przewijania MG
-        def on_mousewheel_mg_add(event):
-            mg_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Bind rolki myszki do canvas i wszystkich jego dzieci
-        mg_canvas.bind("<MouseWheel>", on_mousewheel_mg_add)
-        mg_scrollable_frame.bind("<MouseWheel>", on_mousewheel_mg_add)
-        
-        # Radiobuttony dla MG
+
+        ctk.CTkLabel(mg_dialog,
+                     text="Wybierz Mistrza Gry:",
+                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
+                     ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
+
+        mg_scroll_frame = ctk.CTkScrollableFrame(mg_dialog)
+        mg_scroll_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_scroll_frame.columnconfigure(0, weight=1)
+
         mg_var = tk.IntVar(value=selected_mg_id)
-        mg_radiobuttons: List[ttk.Radiobutton] = []
+        mg_radiobuttons: List[ctk.CTkRadioButton] = []
 
         def _rebuild_mg_radiobuttons() -> None:
-            for w in mg_scrollable_frame.winfo_children():
+            for w in mg_scroll_frame.winfo_children():
                 w.destroy()
             mg_radiobuttons.clear()
             for i, (player_id, player_nick) in enumerate(players):
-                rb = ttk.Radiobutton(mg_scrollable_frame,
-                                     text=f"{player_nick} (ID: {player_id})",
-                                     variable=mg_var, value=player_id)
-                rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-                rb.bind("<MouseWheel>", on_mousewheel_mg_add)
+                rb = ctk.CTkRadioButton(mg_scroll_frame,
+                                        text=f"{player_nick} (ID: {player_id})",
+                                        variable=mg_var, value=player_id,
+                                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+                rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 mg_radiobuttons.append(rb)
-            mg_scrollable_frame.update_idletasks()
-            mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
 
         _rebuild_mg_radiobuttons()
 
-        mg_canvas.grid(row=0, column=0, sticky="nsew")
-        mg_scrollbar.grid(row=0, column=1, sticky="ns")
-
-        # Przyciski
-        buttons_frame = tk.Frame(mg_dialog)
-        buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
+        buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
+        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_mg(**_kw: Any) -> None:
             new_players = get_all_players()
@@ -468,8 +410,10 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             import gracze as _gracze
             _gracze.dodaj_gracza(mg_dialog, refresh_callback=_after_add_player_mg)
 
-        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg)
-        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        ctk.CTkButton(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg,
+                      width=120, fg_color="#1976D2", hover_color="#1565C0",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_mg_selection() -> None:
             selected_id = mg_var.get()
@@ -484,17 +428,20 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             update_selected_mg_display()
             mg_dialog.destroy()
 
-        save_mg_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_mg_selection)
-        save_mg_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
+        ctk.CTkButton(buttons_frame, text="Zapisz wybór", command=save_mg_selection,
+                      width=110, fg_color="#2E7D32", hover_color="#1B5E20",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=2, padx=(0, 6), sticky="e")
+        ctk.CTkButton(buttons_frame, text="Anuluj", command=mg_dialog.destroy,
+                      width=80, fg_color="#666666", hover_color="#555555",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=3, sticky="e")
 
-        cancel_mg_btn = ttk.Button(buttons_frame, text="Anuluj", command=mg_dialog.destroy)
-        cancel_mg_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
-    
-    choose_mg_btn = ctk.CTkButton(mg_frame, text="Wybierz MG...", 
+    choose_mg_btn = ctk.CTkButton(mg_frame, text="Wybierz MG...",
                                   command=open_mg_selection, width=140)
     choose_mg_btn.grid(row=0, column=1)
     row += 1
-    
+
     # Typ sesji
     ctk.CTkLabel(main_frame, text="Typ sesji *:").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
     typ_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
@@ -785,104 +732,69 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
     
     def open_players_selection():
         # Okno wyboru graczy
-        players_dialog = tk.Toplevel(dialog)
+        players_dialog = ctk.CTkToplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
         players_dialog.resizable(True, True)
-        
-        # Zastosuj tryb ciemny jeśli aktywny
-        root = dialog.winfo_toplevel()
-        if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
-            apply_dark_theme_to_dialog(players_dialog)
-        
-        apply_safe_geometry(players_dialog, dialog, 450, 600)
-        
+        apply_safe_geometry(players_dialog, dialog, 420, 540)
+
         players_dialog.columnconfigure(0, weight=1)
-        players_dialog.rowconfigure(2, weight=1)
-        
-        # Etykieta informacyjna
+        players_dialog.rowconfigure(1, weight=1)
+
         max_players = int(liczba_var.get())
-        info_label = tk.Label(players_dialog, text=f"Wybierz maksymalnie {max_players} graczy:")
-        info_label.grid(row=0, column=0, pady=10, padx=10, sticky="w")
-        
-        # Licznik wybranych graczy
-        count_label = tk.Label(players_dialog, text="")
-        count_label.grid(row=1, column=0, pady=(0, 10), padx=10, sticky="w")
-        
-        # Frame z scrollbarem dla checkboxów
-        players_canvas_frame = tk.Frame(players_dialog)
-        players_canvas_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        players_canvas_frame.columnconfigure(0, weight=1)
-        players_canvas_frame.rowconfigure(0, weight=1)
-        
-        players_canvas = tk.Canvas(players_canvas_frame)
-        players_scrollbar = ttk.Scrollbar(players_canvas_frame, orient="vertical", command=players_canvas.yview)
-        players_scrollable_frame = ttk.Frame(players_canvas)
-        
-        players_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: players_canvas.configure(scrollregion=players_canvas.bbox("all"))
-        )
-        
-        players_canvas.create_window((0, 0), window=players_scrollable_frame, anchor="nw")
-        players_canvas.configure(yscrollcommand=players_scrollbar.set)
-        
-        # Obsługa rolki myszki dla przewijania
-        def on_mousewheel_players(event):
-            players_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Bind rolki myszki do canvas i wszystkich jego dzieci
-        players_canvas.bind("<MouseWheel>", on_mousewheel_players)
-        players_scrollable_frame.bind("<MouseWheel>", on_mousewheel_players)
-        
-        # Checkboxy dla graczy
+        hdr_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
+        hdr_frame.grid(row=0, column=0, pady=(12, 4), padx=14, sticky="ew")
+        hdr_frame.columnconfigure(1, weight=1)
+        ctk.CTkLabel(hdr_frame,
+                     text=f"Wybierz maksymalnie {max_players} graczy:",
+                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
+                     ).grid(row=0, column=0, sticky="w")
+        count_label_var = tk.StringVar(value="")
+        ctk.CTkLabel(hdr_frame, textvariable=count_label_var,
+                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                     ).grid(row=0, column=1, padx=(12, 0), sticky="w")
+
+        scroll_frame_edit = ctk.CTkScrollableFrame(players_dialog)
+        scroll_frame_edit.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        scroll_frame_edit.columnconfigure(0, weight=1)
+
         player_vars_local: Dict[int, tk.BooleanVar] = {}
-        player_checkboxes: Dict[int, ttk.Checkbutton] = {}
+        player_checkboxes: Dict[int, ctk.CTkCheckBox] = {}
 
         def update_count_and_validate() -> None:
             selected_count = sum(1 for v in player_vars_local.values() if v.get())
-            count_label.config(text=f"Wybrano: {selected_count}/{max_players}")
-            if selected_count >= max_players:
-                for pid, cb in player_checkboxes.items():
-                    if not player_vars_local[pid].get():
-                        cb.config(state="disabled")
-            else:
-                for cb in player_checkboxes.values():
-                    cb.config(state="normal")
+            count_label_var.set(f"Wybrano: {selected_count}/{max_players}")
+            for pid, cb in player_checkboxes.items():
+                cb.configure(state="disabled" if (not player_vars_local[pid].get() and selected_count >= max_players) else "normal")
 
         def _rebuild_checkboxes_edit() -> None:
-            for w in players_scrollable_frame.winfo_children():
+            for w in scroll_frame_edit.winfo_children():
                 w.destroy()
             player_vars_local.clear()
             player_checkboxes.clear()
             for i, (player_id, player_nick) in enumerate(players):
                 var = tk.BooleanVar(value=player_id in selected_players_list)
                 player_vars_local[player_id] = var
-                cb = ttk.Checkbutton(players_scrollable_frame,
-                                     text=f"{player_nick} (ID: {player_id})", variable=var)
-                cb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
+                cb = ctk.CTkCheckBox(scroll_frame_edit,
+                                     text=f"{player_nick} (ID: {player_id})",
+                                     variable=var,
+                                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+                cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb
-                cb.bind("<MouseWheel>", on_mousewheel_players)
                 var.trace("w", lambda *args: update_count_and_validate())
-            players_scrollable_frame.update_idletasks()
-            players_canvas.configure(scrollregion=players_canvas.bbox("all"))
             update_count_and_validate()
 
         _rebuild_checkboxes_edit()
 
-        players_canvas.grid(row=0, column=0, sticky="nsew")
-        players_scrollbar.grid(row=0, column=1, sticky="ns")
-
-        # Przyciski
-        buttons_frame = tk.Frame(players_dialog)
-        buttons_frame.grid(row=3, column=0, pady=10, padx=10, sticky="ew")
+        buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
+        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_edit(**_kw: Any) -> None:
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
             _rebuild_checkboxes_edit()
-            # Odśwież zakładkę Gracze w głównym oknie
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
                 _gracze_mod.fill_gracze_tab(parent.tabs["Gracze"], dark_mode=parent.dark_mode)  # type: ignore
@@ -891,8 +803,10 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             import gracze as _gracze
             _gracze.dodaj_gracza(players_dialog, refresh_callback=_after_add_player_edit)
 
-        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_edit)
-        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        ctk.CTkButton(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_edit,
+                      width=120, fg_color="#1976D2", hover_color="#1565C0",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
             selected_ids = [pid for pid, v in player_vars_local.items() if v.get()]
@@ -910,11 +824,14 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             update_selected_players_display()
             players_dialog.destroy()
 
-        save_players_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_players_selection)
-        save_players_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
-
-        cancel_players_btn = ttk.Button(buttons_frame, text="Anuluj", command=players_dialog.destroy)
-        cancel_players_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
+        ctk.CTkButton(buttons_frame, text="Zapisz wybór", command=save_players_selection,
+                      width=110, fg_color="#2E7D32", hover_color="#1B5E20",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=2, padx=(0, 6), sticky="e")
+        ctk.CTkButton(buttons_frame, text="Anuluj", command=players_dialog.destroy,
+                      width=80, fg_color="#666666", hover_color="#555555",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=3, sticky="e")
     
     choose_players_btn = ctk.CTkButton(players_frame, text="Wybierz graczy...", 
                                        command=open_players_selection, width=140)
@@ -948,77 +865,45 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
     
     def open_mg_selection():
         # Okno wyboru MG
-        mg_dialog = tk.Toplevel(dialog)
+        mg_dialog = ctk.CTkToplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
         mg_dialog.resizable(True, True)
-        
-        # Zastosuj tryb ciemny jeśli aktywny
-        root = dialog.winfo_toplevel()
-        if hasattr(root, 'dark_mode') and getattr(root, 'dark_mode', False):
-            apply_dark_theme_to_dialog(mg_dialog)
-        
-        apply_safe_geometry(mg_dialog, dialog, 400, 500)
-        
+
+        apply_safe_geometry(mg_dialog, dialog, 420, 500)
+
         mg_dialog.columnconfigure(0, weight=1)
         mg_dialog.rowconfigure(1, weight=1)
-        
-        # Etykieta informacyjna
-        info_label = tk.Label(mg_dialog, text="Wybierz Mistrza Gry:")
-        info_label.grid(row=0, column=0, pady=10, padx=10, sticky="w")
-        
-        # Frame z scrollbarem dla radiobuttonów
-        mg_canvas_frame = tk.Frame(mg_dialog)
-        mg_canvas_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        mg_canvas_frame.columnconfigure(0, weight=1)
-        mg_canvas_frame.rowconfigure(0, weight=1)
-        
-        mg_canvas = tk.Canvas(mg_canvas_frame)
-        mg_scrollbar = ttk.Scrollbar(mg_canvas_frame, orient="vertical", command=mg_canvas.yview)
-        mg_scrollable_frame = ttk.Frame(mg_canvas)
-        
-        mg_scrollable_frame.bind(
-            "<Configure>",
-            lambda e: mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
-        )
-        
-        mg_canvas.create_window((0, 0), window=mg_scrollable_frame, anchor="nw")
-        mg_canvas.configure(yscrollcommand=mg_scrollbar.set)
-        
-        # Obsługa rolki myszki dla przewijania MG
-        def on_mousewheel_mg_edit(event):
-            mg_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
-        # Bind rolki myszki do canvas i wszystkich jego dzieci
-        mg_canvas.bind("<MouseWheel>", on_mousewheel_mg_edit)
-        mg_scrollable_frame.bind("<MouseWheel>", on_mousewheel_mg_edit)
-        
-        # Radiobuttony dla MG
+
+        ctk.CTkLabel(mg_dialog,
+                     text="Wybierz Mistrza Gry:",
+                     font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
+                     ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
+
+        mg_scroll_frame_edit = ctk.CTkScrollableFrame(mg_dialog)
+        mg_scroll_frame_edit.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_scroll_frame_edit.columnconfigure(0, weight=1)
+
         mg_var = tk.IntVar(value=selected_mg_id)
-        mg_radiobuttons_edit: List[ttk.Radiobutton] = []
+        mg_radiobuttons_edit: List[ctk.CTkRadioButton] = []
 
         def _rebuild_mg_radiobuttons_edit() -> None:
-            for w in mg_scrollable_frame.winfo_children():
+            for w in mg_scroll_frame_edit.winfo_children():
                 w.destroy()
             mg_radiobuttons_edit.clear()
             for i, (player_id, player_nick) in enumerate(players):
-                rb = ttk.Radiobutton(mg_scrollable_frame,
-                                     text=f"{player_nick} (ID: {player_id})",
-                                     variable=mg_var, value=player_id)
-                rb.grid(row=i, column=0, sticky="w", padx=5, pady=2)
-                rb.bind("<MouseWheel>", on_mousewheel_mg_edit)
+                rb = ctk.CTkRadioButton(mg_scroll_frame_edit,
+                                        text=f"{player_nick} (ID: {player_id})",
+                                        variable=mg_var, value=player_id,
+                                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+                rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 mg_radiobuttons_edit.append(rb)
-            mg_scrollable_frame.update_idletasks()
-            mg_canvas.configure(scrollregion=mg_canvas.bbox("all"))
 
         _rebuild_mg_radiobuttons_edit()
 
-        mg_canvas.grid(row=0, column=0, sticky="nsew")
-        mg_scrollbar.grid(row=0, column=1, sticky="ns")
-
-        # Przyciski
-        buttons_frame = tk.Frame(mg_dialog)
-        buttons_frame.grid(row=2, column=0, pady=10, padx=10, sticky="ew")
+        buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
+        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_mg_edit(**_kw: Any) -> None:
             new_players = get_all_players()
@@ -1033,8 +918,10 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             import gracze as _gracze
             _gracze.dodaj_gracza(mg_dialog, refresh_callback=_after_add_player_mg_edit)
 
-        add_player_btn = ttk.Button(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg_edit)
-        add_player_btn.grid(row=0, column=0, padx=(0, 10), sticky="w")
+        ctk.CTkButton(buttons_frame, text="➕ Dodaj gracza", command=_open_add_player_mg_edit,
+                      width=120, fg_color="#1976D2", hover_color="#1565C0",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_mg_selection() -> None:
             selected_id = mg_var.get()
@@ -1049,11 +936,14 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             update_selected_mg_display()
             mg_dialog.destroy()
 
-        save_mg_btn = ttk.Button(buttons_frame, text="Zapisz wybór", command=save_mg_selection)
-        save_mg_btn.grid(row=0, column=1, padx=(0, 5), sticky="e")
-
-        cancel_mg_btn = ttk.Button(buttons_frame, text="Anuluj", command=mg_dialog.destroy)
-        cancel_mg_btn.grid(row=0, column=2, padx=(5, 0), sticky="w")
+        ctk.CTkButton(buttons_frame, text="Zapisz wybór", command=save_mg_selection,
+                      width=110, fg_color="#2E7D32", hover_color="#1B5E20",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=2, padx=(0, 6), sticky="e")
+        ctk.CTkButton(buttons_frame, text="Anuluj", command=mg_dialog.destroy,
+                      width=80, fg_color="#666666", hover_color="#555555",
+                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
+                      ).grid(row=0, column=3, sticky="e")
     
     choose_mg_btn = ctk.CTkButton(mg_frame, text="Wybierz MG...", 
                                   command=open_mg_selection, width=140)

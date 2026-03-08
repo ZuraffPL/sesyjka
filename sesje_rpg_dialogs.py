@@ -235,7 +235,7 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         apply_safe_geometry(players_dialog, dialog, 420, 520)
 
         players_dialog.columnconfigure(0, weight=1)
-        players_dialog.rowconfigure(1, weight=1)
+        players_dialog.rowconfigure(2, weight=1)
 
         max_players = int(liczba_var.get())
         ctk.CTkLabel(players_dialog,
@@ -243,8 +243,15 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
                      ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
 
+        search_var = tk.StringVar()
+        search_entry = ctk.CTkEntry(players_dialog, textvariable=search_var,
+                                    placeholder_text="🔍 Szukaj gracza...",
+                                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+        search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
+        search_entry.focus()
+
         scroll_frame = ctk.CTkScrollableFrame(players_dialog)
-        scroll_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         scroll_frame.columnconfigure(0, weight=1)
 
         player_vars: Dict[int, tk.BooleanVar] = {}
@@ -264,6 +271,19 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
             for pid, cb in player_checkboxes.items():
                 cb.configure(state="disabled" if (not player_vars[pid].get() and count >= max_p) else "normal")
 
+        def _apply_filter(*_args: Any) -> None:
+            query = search_var.get().lower()
+            row_idx = 0
+            for player_id, player_nick in players:
+                if player_id not in player_checkboxes:
+                    continue
+                cb = player_checkboxes[player_id]
+                if query in player_nick.lower():
+                    cb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
+                    row_idx += 1
+                else:
+                    cb.grid_remove()
+
         def _rebuild_checkboxes() -> None:
             for w in scroll_frame.winfo_children():
                 w.destroy()
@@ -281,12 +301,13 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
                 cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb
                 var.trace("w", lambda *args: validate_players_selection())
-            validate_players_selection()
+            _apply_filter()
 
+        search_var.trace("w", _apply_filter)
         _rebuild_checkboxes()
 
         buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
-        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
         buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player(**_kw: Any) -> None:
@@ -367,24 +388,46 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
         apply_safe_geometry(mg_dialog, dialog, 420, 500)
 
         mg_dialog.columnconfigure(0, weight=1)
-        mg_dialog.rowconfigure(1, weight=1)
+        mg_dialog.rowconfigure(2, weight=1)
 
         ctk.CTkLabel(mg_dialog,
                      text="Wybierz Mistrza Gry:",
                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
                      ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
 
+        mg_search_var = tk.StringVar()
+        mg_search_entry = ctk.CTkEntry(mg_dialog, textvariable=mg_search_var,
+                                       placeholder_text="🔍 Szukaj gracza...",
+                                       font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+        mg_search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
+        mg_search_entry.focus()
+
         mg_scroll_frame = ctk.CTkScrollableFrame(mg_dialog)
-        mg_scroll_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         mg_scroll_frame.columnconfigure(0, weight=1)
 
         mg_var = tk.IntVar(value=selected_mg_id)
         mg_radiobuttons: List[ctk.CTkRadioButton] = []
+        _mg_rb_map: Dict[int, ctk.CTkRadioButton] = {}
+
+        def _apply_mg_filter(*_args: Any) -> None:
+            query = mg_search_var.get().lower()
+            row_idx = 0
+            for player_id, player_nick in players:
+                if player_id not in _mg_rb_map:
+                    continue
+                rb = _mg_rb_map[player_id]
+                if query in player_nick.lower():
+                    rb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
+                    row_idx += 1
+                else:
+                    rb.grid_remove()
 
         def _rebuild_mg_radiobuttons() -> None:
             for w in mg_scroll_frame.winfo_children():
                 w.destroy()
             mg_radiobuttons.clear()
+            _mg_rb_map.clear()
             for i, (player_id, player_nick) in enumerate(players):
                 rb = ctk.CTkRadioButton(mg_scroll_frame,
                                         text=f"{player_nick} (ID: {player_id})",
@@ -392,11 +435,14 @@ def dodaj_sesje_rpg(parent: Optional[tk.Tk] = None, refresh_callback: Optional[C
                                         font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
                 rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 mg_radiobuttons.append(rb)
+                _mg_rb_map[player_id] = rb
+            _apply_mg_filter()
 
+        mg_search_var.trace("w", _apply_mg_filter)
         _rebuild_mg_radiobuttons()
 
         buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
-        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
         buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_mg(**_kw: Any) -> None:
@@ -741,7 +787,7 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         apply_safe_geometry(players_dialog, dialog, 420, 540)
 
         players_dialog.columnconfigure(0, weight=1)
-        players_dialog.rowconfigure(1, weight=1)
+        players_dialog.rowconfigure(2, weight=1)
 
         max_players = int(liczba_var.get())
         hdr_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
@@ -756,8 +802,15 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11))
                      ).grid(row=0, column=1, padx=(12, 0), sticky="w")
 
+        search_var_edit = tk.StringVar()
+        search_entry_edit = ctk.CTkEntry(players_dialog, textvariable=search_var_edit,
+                                         placeholder_text="🔍 Szukaj gracza...",
+                                         font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+        search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
+        search_entry_edit.focus()
+
         scroll_frame_edit = ctk.CTkScrollableFrame(players_dialog)
-        scroll_frame_edit.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         scroll_frame_edit.columnconfigure(0, weight=1)
 
         player_vars_local: Dict[int, tk.BooleanVar] = {}
@@ -768,6 +821,19 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
             count_label_var.set(f"Wybrano: {selected_count}/{max_players}")
             for pid, cb in player_checkboxes.items():
                 cb.configure(state="disabled" if (not player_vars_local[pid].get() and selected_count >= max_players) else "normal")
+
+        def _apply_filter_edit(*_args: Any) -> None:
+            query = search_var_edit.get().lower()
+            row_idx = 0
+            for player_id, player_nick in players:
+                if player_id not in player_checkboxes:
+                    continue
+                cb = player_checkboxes[player_id]
+                if query in player_nick.lower():
+                    cb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
+                    row_idx += 1
+                else:
+                    cb.grid_remove()
 
         def _rebuild_checkboxes_edit() -> None:
             for w in scroll_frame_edit.winfo_children():
@@ -786,12 +852,13 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
                 cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 player_checkboxes[player_id] = cb
                 var.trace("w", lambda *args: update_count_and_validate())
-            update_count_and_validate()
+            _apply_filter_edit()
 
+        search_var_edit.trace("w", _apply_filter_edit)
         _rebuild_checkboxes_edit()
 
         buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
-        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
         buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_edit(**_kw: Any) -> None:
@@ -877,24 +944,46 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
         apply_safe_geometry(mg_dialog, dialog, 420, 500)
 
         mg_dialog.columnconfigure(0, weight=1)
-        mg_dialog.rowconfigure(1, weight=1)
+        mg_dialog.rowconfigure(2, weight=1)
 
         ctk.CTkLabel(mg_dialog,
                      text="Wybierz Mistrza Gry:",
                      font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12))
                      ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
 
+        mg_search_var_edit = tk.StringVar()
+        mg_search_entry_edit = ctk.CTkEntry(mg_dialog, textvariable=mg_search_var_edit,
+                                            placeholder_text="🔍 Szukaj gracza...",
+                                            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
+        mg_search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
+        mg_search_entry_edit.focus()
+
         mg_scroll_frame_edit = ctk.CTkScrollableFrame(mg_dialog)
-        mg_scroll_frame_edit.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         mg_scroll_frame_edit.columnconfigure(0, weight=1)
 
         mg_var = tk.IntVar(value=selected_mg_id)
         mg_radiobuttons_edit: List[ctk.CTkRadioButton] = []
+        _mg_rb_map_edit: Dict[int, ctk.CTkRadioButton] = {}
+
+        def _apply_mg_filter_edit(*_args: Any) -> None:
+            query = mg_search_var_edit.get().lower()
+            row_idx = 0
+            for player_id, player_nick in players:
+                if player_id not in _mg_rb_map_edit:
+                    continue
+                rb = _mg_rb_map_edit[player_id]
+                if query in player_nick.lower():
+                    rb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
+                    row_idx += 1
+                else:
+                    rb.grid_remove()
 
         def _rebuild_mg_radiobuttons_edit() -> None:
             for w in mg_scroll_frame_edit.winfo_children():
                 w.destroy()
             mg_radiobuttons_edit.clear()
+            _mg_rb_map_edit.clear()
             for i, (player_id, player_nick) in enumerate(players):
                 rb = ctk.CTkRadioButton(mg_scroll_frame_edit,
                                         text=f"{player_nick} (ID: {player_id})",
@@ -902,11 +991,14 @@ def open_edit_session_dialog(parent: tk.Widget, values: Sequence[Any], refresh_c
                                         font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)))
                 rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
                 mg_radiobuttons_edit.append(rb)
+                _mg_rb_map_edit[player_id] = rb
+            _apply_mg_filter_edit()
 
+        mg_search_var_edit.trace("w", _apply_mg_filter_edit)
         _rebuild_mg_radiobuttons_edit()
 
         buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
-        buttons_frame.grid(row=2, column=0, pady=(4, 12), padx=12, sticky="ew")
+        buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
         buttons_frame.columnconfigure(1, weight=1)
 
         def _after_add_player_mg_edit(**_kw: Any) -> None:

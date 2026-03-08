@@ -3,7 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, apply_dark_titlebar
+import logging
+_log = logging.getLogger("apphistory")
 
 def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     """
@@ -13,8 +15,17 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         parent: Okno rodzicielskie
         app_name: Nazwa aplikacji
     """
-    # Utwórz okno modalnie
-    dialog = ctk.CTkToplevel(parent) # type: ignore
+    _dark: bool = getattr(parent, 'dark_mode', False)  # type: ignore[arg-type]
+    _log.debug("show_version_history_dialog: dark_mode=%s", _dark)
+
+    # Ustaw tryb wyglądu CTk PRZED stworzeniem dialogu — widgety CTk biorą kolor
+    # z ctk.get_appearance_mode() w momencie __init__, więc może być zły jeśli coś go zmieniło.
+    _log.debug("show_version_history_dialog: ctk.get_appearance_mode() przed stworzeniem = %s", ctk.get_appearance_mode())
+    ctk.set_appearance_mode("dark" if _dark else "light")
+
+    # Utwórz CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
+    dialog = create_ctk_toplevel(parent)
+    _log.debug("show_version_history_dialog: dialog utworzony: %s", dialog)
     dialog.title("Historia wersji")
     dialog.resizable(True, True)
     dialog.transient(parent) # type: ignore
@@ -1264,10 +1275,19 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     close_button.pack(side=tk.RIGHT)
     
     # Obsługa klawisza Escape
-    dialog.bind('<Escape>', lambda e: dialog.destroy())
+    dialog.bind('<Escape>', lambda e: dialog.destroy())  # type: ignore[misc]
     
-    # Ustaw focus na przycisk zamknij (z opóźnieniem, by okno zdążyło się wyrenderować)
+    # Ustaw ciemny titlebar przez DWM API (bez withdraw/update) i focus po wyrenderowaniu
+    _log.debug("show_version_history_dialog: rejestruję after(), _dark=%s", _dark)
+    if _dark:
+        dialog.after(50, lambda: apply_dark_titlebar(dialog))
     dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
     
     # Zaczekaj aż okno zostanie zamknięte
+    _log.debug("show_version_history_dialog: wait_window start")
     dialog.wait_window()
+    _log.debug("show_version_history_dialog: wait_window koniec, przywracam tryb wyglądu")
+    # Przywróć tryb wyglądu na wypadek gdyby coś go zmieniło podczas wyświetlania dialogu
+    if hasattr(parent, 'dark_mode'):  # type: ignore[arg-type]
+        _log.debug("show_version_history_dialog: set_appearance_mode -> %s", 'dark' if parent.dark_mode else 'light')  # type: ignore[arg-type]
+        ctk.set_appearance_mode("dark" if parent.dark_mode else "light")  # type: ignore[arg-type]

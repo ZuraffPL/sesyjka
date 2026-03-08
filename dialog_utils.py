@@ -2,9 +2,133 @@
 Narzędzia do bezpiecznego zarządzania rozmiarami okien dialogowych.
 Zabezpiecza przed wychodzeniem dialogów poza ekran przy wysokim skalowaniu DPI.
 """
+import sys
+import ctypes
 import tkinter as tk
 from typing import Tuple, Any
 import customtkinter as ctk  # type: ignore
+import logging
+import os
+from logging.handlers import RotatingFileHandler
+
+# --- Debug log do pliku (max 2 MB, 1 kopia zapasowa) ---
+_log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug_sesyjka.log")
+_root_logger = logging.getLogger()
+if not _root_logger.handlers:
+    _handler = RotatingFileHandler(
+        _log_path, maxBytes=2 * 1024 * 1024, backupCount=1, encoding="utf-8"
+    )
+    _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    _root_logger.addHandler(_handler)
+    _root_logger.setLevel(logging.DEBUG)
+    # Wycisz logowanie matplotlib (tysiące wpisów findfont)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
+_log = logging.getLogger("dialog_utils")
+
+
+# --- Monkey-patch: przechwytuj KAŻDĄ zmianę trybu wyglądu z pełnym stacktrace ---
+import traceback as _tb
+from customtkinter.windows.widgets.appearance_mode.appearance_mode_tracker import AppearanceModeTracker as _AMT  # type: ignore
+
+_orig_set_am = _AMT.set_appearance_mode.__func__  # type: ignore[attr-defined]
+_orig_update = _AMT.update.__func__  # type: ignore[attr-defined]
+
+@classmethod  # type: ignore[misc]
+def _patched_set_am(cls, mode_string: str) -> None:  # type: ignore
+    old_mode = cls.appearance_mode  # type: ignore[attr-defined]
+    old_set_by = cls.appearance_mode_set_by  # type: ignore[attr-defined]
+    _log.debug("[TRACKER] set_appearance_mode('%s') [was: mode=%s, set_by=%s]\n%s",  # type: ignore[arg-type]
+               mode_string, old_mode, old_set_by,  # type: ignore[arg-type]
+               ''.join(_tb.format_stack()[-5:-1]))
+    _orig_set_am(cls, mode_string)  # type: ignore[arg-type]
+    if cls.appearance_mode != old_mode:  # type: ignore[attr-defined]
+        _log.debug("[TRACKER] → mode ZMIENIONY: %s → %s", old_mode, cls.appearance_mode)  # type: ignore[arg-type]
+
+@classmethod  # type: ignore[misc]
+def _patched_update(cls) -> None:  # type: ignore
+    old_mode = cls.appearance_mode  # type: ignore[attr-defined]
+    _orig_update(cls)  # type: ignore[arg-type]
+    if cls.appearance_mode != old_mode:  # type: ignore[attr-defined]
+        _log.debug("[TRACKER] update() → mode ZMIENIONY: %s → %s (set_by=%s)",  # type: ignore[arg-type]
+                   old_mode, cls.appearance_mode, cls.appearance_mode_set_by)  # type: ignore[attr-defined, arg-type]
+
+_AMT.set_appearance_mode = _patched_set_am  # type: ignore[assignment]
+_AMT.update = _patched_update  # type: ignore[assignment]
+_log.debug("[TRACKER] monkey-patch zainstalowany")
+
+
+def _log_ctk_mode(label: str) -> None:
+    """Loguje aktualny stan AppearanceModeTracker — do diagnozowania problemu z trybem."""
+    try:
+        from customtkinter.windows.widgets.appearance_mode.appearance_mode_tracker import AppearanceModeTracker  # type: ignore
+        _log.debug("  [MODE] %s → appearance_mode=%s (%s), set_by=%s",
+                   label,
+                   AppearanceModeTracker.appearance_mode,
+                   "Dark" if AppearanceModeTracker.appearance_mode == 1 else "Light",
+                   AppearanceModeTracker.appearance_mode_set_by)
+    except Exception as exc:
+        _log.debug("  [MODE] %s → błąd odczytu: %s", label, exc)
+
+
+def create_ctk_toplevel(parent: Any) -> Any:  # type: ignore
+    """
+    Tworzy CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
+    który na Windows resetuje tryb wyglądu i powoduje flicker rodzica.
+
+    CTkToplevel._windows_set_titlebar_color() woła super().update() podczas
+    inicjalizacji, co płucze WSZYSTKIE zdarzenia aplikacji i może:
+      - nadpisywać _state_before z 'normal' na 'withdrawn' przy drugim wołaniu
+      - permanentnie ukrywać okno (revert widzi stan 'withdrawn' i zostawia)
+      - resetować tryb wyglądu CTk do jasnego
+
+    Rozwiązanie: tymczasowo wyłącz manipulację paska tytułu na czas __init__
+    (przez flagę klasową i natychmiastowe przełączenie na instancyjną).
+    Ciemny titlebar jest ustawiany później przez apply_dark_titlebar().
+    """
+    _win = sys.platform.startswith("win")
+    _log.debug("create_ctk_toplevel: start, platform_win=%s", _win)
+    _log_ctk_mode("przed create_ctk_toplevel")
+    if _win:
+        class_flag_before = getattr(ctk.CTkToplevel, '_deactivate_windows_window_header_manipulation', False)  # type: ignore
+        _log.debug("  class flag przed __init__: %s -> ustawiam True", class_flag_before)
+        # Wyłącz mechanizm dla WSZYSTKICH instancji na czas __init__
+        ctk.CTkToplevel._deactivate_windows_window_header_manipulation = True  # type: ignore
+    dialog = ctk.CTkToplevel(parent)  # type: ignore
+    if _win:
+        # Przywróć flagę klasową i ustaw instancyjną, by blokować późniejsze wołania
+        # (resizable(), _set_appearance_mode()) na tym konkretnym oknie
+        ctk.CTkToplevel._deactivate_windows_window_header_manipulation = False  # type: ignore
+        dialog._deactivate_windows_window_header_manipulation = True  # type: ignore
+        _log.debug("  class flag przywrócona: False; instance flag: %s",
+                   getattr(dialog, '_deactivate_windows_window_header_manipulation', '?'))
+    _log_ctk_mode("po CTkToplevel.__init__")
+    _log.debug("  dialog fg_color = %s", dialog.cget("fg_color"))  # type: ignore[misc]
+    _log.debug("create_ctk_toplevel: gotowe, dialog=%s", dialog)
+    return dialog  # type: ignore
+
+
+def apply_dark_titlebar(dialog: Any) -> None:  # type: ignore
+    """
+    Ustawia ciemny pasek tytułu przez Windows DWM API bez withdraw/update.
+    Wywołuj przez dialog.after(50, ...) po pełnym wyrenderowaniu okna.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    if not dialog.winfo_exists():
+        _log.debug("apply_dark_titlebar: dialog już nie istnieje, skip")
+        return
+    try:
+        hwnd = ctypes.windll.user32.GetParent(dialog.winfo_id())  # type: ignore
+        _log.debug("apply_dark_titlebar: hwnd=%s", hwnd)
+        DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore
+            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(ctypes.c_int(1)), ctypes.sizeof(ctypes.c_int(1))
+        )
+        _log.debug("apply_dark_titlebar: sukces")
+    except Exception as exc:
+        _log.error("apply_dark_titlebar: błąd — %s", exc)
 
 
 def get_screen_size(widget: Any) -> Tuple[int, int]:

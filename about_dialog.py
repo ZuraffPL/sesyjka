@@ -4,7 +4,9 @@ from tkinter import ttk
 import webbrowser
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, apply_dark_titlebar  # type: ignore[attr-defined]
+import logging
+_log = logging.getLogger("about_dialog")
 
 def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.27"): # type: ignore
     """
@@ -15,8 +17,19 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.27"): # type:
         app_name: Nazwa aplikacji
         app_version: Wersja aplikacji
     """
-    # Utwórz okno modalnie
-    dialog = ctk.CTkToplevel(parent) # type: ignore
+    _dark: bool = getattr(parent, 'dark_mode', False)  # type: ignore[arg-type]
+    _log.debug("show_about_dialog: dark_mode=%s", _dark)
+
+    # Ustaw tryb wyglądu CTk PRZED stworzeniem dialogu — widgety CTk biorą kolor
+    # z ctk.get_appearance_mode() w momencie __init__, więc może być zły jeśli coś go zmieniło.
+    _log.debug("show_about_dialog: ctk.get_appearance_mode() przed stworzeniem = %s", ctk.get_appearance_mode())
+    ctk.set_appearance_mode("dark" if _dark else "light")
+    _log.debug("show_about_dialog: ctk.get_appearance_mode() po set = %s", ctk.get_appearance_mode())
+
+    # Utwórz CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
+    dialog = create_ctk_toplevel(parent)
+    _log.debug("show_about_dialog: dialog utworzony: %s, fg_color z dialogu = %s",
+               dialog, dialog.cget("fg_color"))
     dialog.title("O programie")
     dialog.resizable(True, True)
     dialog.transient(parent) # type: ignore
@@ -65,11 +78,15 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.27"): # type:
     
     # Treść z opisem funkcjonalności
     # Pobierz info o skalowaniu do wyświetlenia w sekcji "O programie"
+    # UWAGA: importujemy z __main__ (nie z "main"), bo main.py uruchomiony
+    # jako python main.py jest w sys.modules jako "__main__". Import "from main import..."
+    # wykonałby main.py od nowa, w tym ctk.set_appearance_mode("light") z linii 23.
     try:
-        from main import current_dpi_scale, detected_screen_width, detected_screen_height
-        _dpi_scale = current_dpi_scale
-        _screen_w = detected_screen_width
-        _screen_h = detected_screen_height
+        import sys as _sys
+        _main_mod = _sys.modules.get("__main__")
+        _dpi_scale = getattr(_main_mod, 'current_dpi_scale', 1.0)
+        _screen_w = getattr(_main_mod, 'detected_screen_width', dialog.winfo_screenwidth())
+        _screen_h = getattr(_main_mod, 'detected_screen_height', dialog.winfo_screenheight())
     except Exception:
         _dpi_scale = 1.0
         _screen_w = dialog.winfo_screenwidth()
@@ -221,10 +238,35 @@ DODATKOWE FUNKCJE:
     close_button.pack(side=tk.RIGHT, pady=(10, 0))
     
     # Obsługa klawisza Escape
-    dialog.bind('<Escape>', lambda e: dialog.destroy())
+    dialog.bind('<Escape>', lambda e: dialog.destroy())  # type: ignore[misc]
     
-    # Ustaw focus na przycisk zamknij (z opóźnieniem, by okno zdążyło się wyrenderować)
+    # Ustaw ciemny titlebar przez DWM API (bez withdraw/update) i focus po wyrenderowaniu
+    _log.debug("show_about_dialog: rejestruję after(), _dark=%s", _dark)
+    if _dark:
+        dialog.after(50, lambda: apply_dark_titlebar(dialog))
+
+    def _debug_after_render():
+        if dialog.winfo_exists():
+            bg = dialog.winfo_rgb(dialog.cget("background")) if dialog.winfo_exists() else "?"
+            _log.debug("show_about_dialog [after render]: dialog bg=%s, ctk_mode=%s, bg_rgb=%s",
+                       dialog.cget("background"), ctk.get_appearance_mode(), bg)
+            for child in dialog.winfo_children():
+                try:
+                    try:
+                        child_bg = child.cget('fg_color')  # type: ignore[union-attr]
+                    except Exception:
+                        child_bg = '?'
+                    _log.debug("  child %s: fg_color=%s", child, child_bg)
+                except Exception:
+                    pass
+    dialog.after(200, _debug_after_render)
     dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
     
     # Zaczekaj aż okno zostanie zamknięte
+    _log.debug("show_about_dialog: wait_window start")
     dialog.wait_window()
+    _log.debug("show_about_dialog: wait_window koniec, przywracam tryb wyglądu")
+    # Przywróć tryb wyglądu na wypadek gdyby coś go zmieniło podczas wyświetlania dialogu
+    if hasattr(parent, 'dark_mode'):  # type: ignore[arg-type]
+        _log.debug("show_about_dialog: set_appearance_mode -> %s", 'dark' if parent.dark_mode else 'light')  # type: ignore[arg-type]
+        ctk.set_appearance_mode("dark" if parent.dark_mode else "light")  # type: ignore[arg-type]

@@ -18,6 +18,7 @@ def _get_settings_path() -> str:
 _DEFAULT_SETTINGS: Dict[str, Any] = {
     "dark_mode": False,
     "font_scale": 1.0,
+    "all_expanded_systemy": False,
     "window": {
         "width": 1800,
         "height": 920,

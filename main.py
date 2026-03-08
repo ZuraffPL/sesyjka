@@ -566,6 +566,7 @@ if __name__ == "__main__":
     # Wczytaj tryb i skalowanie czcionek
     _initial_dark_mode = bool(_saved.get("dark_mode", False))
     font_scaling.set_font_scale_factor(float(_saved.get("font_scale", 1.0)))
+    systemy_rpg.all_expanded_systemy = bool(_saved.get("all_expanded_systemy", False))
     
     # Wczytaj geometrię okna (tylko rozmiar)
     _win = _saved.get("window", {})
@@ -585,6 +586,7 @@ if __name__ == "__main__":
         _to_save = {
             "dark_mode": app.dark_mode,
             "font_scale": font_scaling.get_font_scale_factor(),
+            "all_expanded_systemy": systemy_rpg.all_expanded_systemy,
             "window": app.saved_geometry if app.saved_geometry else {
                 "width":  START_WIDTH,
                 "height": START_HEIGHT,

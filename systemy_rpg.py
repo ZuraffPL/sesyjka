@@ -43,6 +43,8 @@ logger = _setup_logger()
 active_filters_systemy: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
+# Stan przełącznika rozwiń/zwiń wszystkie suplementy
+all_expanded_systemy: bool = False
 
 def init_db() -> None:
     """Inicjalizuje bazę danych systemów RPG"""
@@ -836,6 +838,9 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     def _apply_and_draw() -> None:
         nonlocal displayed_data
         _rebuild_groups()
+        if all_expanded_systemy:
+            for mid in main_systems:
+                expanded_state[mid] = True
         _do_sort_main_systems(current_sort_reverse[0])
         active_sort_systemy["column"]  = sort_var.get()
         active_sort_systemy["reverse"] = current_sort_reverse[0]
@@ -1084,8 +1089,38 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
                             command=lambda: _open_filter())
     filter_btn.pack(side=tk.LEFT, padx=4)
 
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+
+    expand_var = tk.BooleanVar(value=all_expanded_systemy)
+
+    def _on_toggle_expand_all() -> None:
+        global all_expanded_systemy
+        all_expanded_systemy = bool(expand_var.get())
+        if all_expanded_systemy:
+            for mid in main_systems:
+                expanded_state[mid] = True
+        else:
+            expanded_state.clear()
+        if _table[0] is not None:
+            _table[0].set_data(_build_hierarchical_data())
+
+    expand_switch = ctk.CTkSwitch(
+        top_bar,
+        text="Rozwiń wszystkie",
+        variable=expand_var,
+        command=_on_toggle_expand_all,
+        onvalue=True,
+        offvalue=False,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10)),
+        width=50,
+    )
+    expand_switch.pack(side=tk.LEFT, padx=4)
+
     # ── Tabela ───────────────────────────────────────────────────────────
     _rebuild_groups()
+    if all_expanded_systemy:
+        for mid in main_systems:
+            expanded_state[mid] = True
     if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get("reverse", False):
         _do_sort_main_systems(active_sort_systemy.get("reverse", False))
     initial_data = _build_hierarchical_data()

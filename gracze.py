@@ -332,11 +332,18 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     FONT   = ("Segoe UI", scale_font_size(10))
     displayed_data: List[List[Any]] = []
     _table: List[Optional[CTkDataTable]] = [None]
+    search_var: tk.StringVar = tk.StringVar()
 
     # ── Filtry + sortowanie ──────────────────────────────────────────────────
     def _apply_and_draw() -> None:
         nonlocal displayed_data
         filtered: List[List[Any]] = list(data_ref[0])
+
+        phrase = search_var.get().strip().lower()
+        if phrase:
+            filtered = [r for r in filtered if
+                        phrase in (str(r[1]) or '').lower() or
+                        phrase in (str(r[2]) or '').lower()]
 
         # Filtr płci
         if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
@@ -416,6 +423,12 @@ def fill_gracze_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # type: ig
     tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
     filter_btn = ttk.Button(top_bar, text="Filtruj", command=lambda: _open_filter())
     filter_btn.pack(side=tk.LEFT, padx=4)
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    tk.Label(top_bar, text="Wyszukaj:", bg=bg_top, fg=fg_top,
+             font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
+    search_entry.pack(side=tk.LEFT, padx=4)
+    search_var.trace_add('write', lambda *_: _apply_and_draw())
 
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:

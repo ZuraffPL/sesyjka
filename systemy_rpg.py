@@ -714,6 +714,7 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     expanded_state: Dict[Any, bool] = {}
     current_sort_reverse: List[bool] = [active_sort_systemy.get("reverse", False)]
     _table: List[Optional[CTkDataTable]] = [None]
+    search_var: tk.StringVar = tk.StringVar()
 
     def _apply_record_filters(recs: List[Any]) -> List[Any]:
         result = []
@@ -739,17 +740,36 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     def _rebuild_groups() -> None:
         nonlocal main_systems, supplements, orphaned_supplements
         filtered = _apply_record_filters(records_ref[0])
+        phrase = search_var.get().strip().lower()
+        all_main: OrderedDict[Any, Any] = OrderedDict()
+        all_supps: Dict[Any, List[Any]] = {}
+        all_orph: List[Any] = []
+        for rec in filtered:
+            if rec[2] == "Podręcznik Główny":
+                all_main[rec[0]] = rec
+            elif rec[2] == "Suplement":
+                pid = rec[3]
+                if pid and pid in all_main:
+                    all_supps.setdefault(pid, []).append(rec)
+                else:
+                    all_orph.append(rec)
         main_systems.clear()
         supplements.clear()
         orphaned_supplements.clear()
-        for rec in filtered:
-            if rec[2] == "Podręcznik Główny":
-                main_systems[rec[0]] = rec
-            elif rec[2] == "Suplement":
-                pid = rec[3]
-                if pid and pid in main_systems:
-                    supplements.setdefault(pid, []).append(rec)
-                else:
+        if not phrase:
+            main_systems.update(all_main)
+            supplements.update(all_supps)
+            orphaned_supplements.extend(all_orph)
+        else:
+            for mid, rec in all_main.items():
+                name_match = phrase in (rec[1] or '').lower()
+                supps = all_supps.get(mid, [])
+                matching_supps = [s for s in supps if phrase in (s[1] or '').lower()]
+                if name_match or matching_supps:
+                    main_systems[mid] = rec
+                    supplements[mid] = supps if name_match else matching_supps
+            for rec in all_orph:
+                if phrase in (rec[1] or '').lower():
                     orphaned_supplements.append(rec)
 
     def _build_hierarchical_data() -> List[List[Any]]:
@@ -838,7 +858,7 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
     def _apply_and_draw() -> None:
         nonlocal displayed_data
         _rebuild_groups()
-        if all_expanded_systemy:
+        if search_var.get().strip() or all_expanded_systemy:
             for mid in main_systems:
                 expanded_state[mid] = True
         _do_sort_main_systems(current_sort_reverse[0])
@@ -1115,6 +1135,12 @@ def fill_systemy_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:  # typ
         width=50,
     )
     expand_switch.pack(side=tk.LEFT, padx=4)
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    tk.Label(top_bar, text="Wyszukaj:", bg=bg_top, fg=fg_top,
+             font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
+    search_entry.pack(side=tk.LEFT, padx=4)
+    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
 
     # ── Tabela ───────────────────────────────────────────────────────────
     _rebuild_groups()

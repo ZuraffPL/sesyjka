@@ -1302,7 +1302,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
             font=('Segoe UI', scale_font_size(11)),
             justify=tk.LEFT,
             anchor='nw',
-            wraplength=540,
+            wraplength=510,
             background=frame_bg,
             foreground="#dce4ee" if _dark else "#1a1a1a",
         )

@@ -368,7 +368,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
              font=FONT).pack(side=tk.LEFT, padx=(0, 4))
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
-    search_var.trace_add('write', lambda *_: _apply_and_draw())
+    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
 
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:

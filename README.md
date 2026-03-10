@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.27-blue)
+![Version](https://img.shields.io/badge/version-0.3.28-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.27-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.28-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.27.exe`
+4. Uruchom `Sesyjka-v0.3.28.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.27.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.27.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.28.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.28.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -185,6 +185,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.28 (10.03.2026)
+- 🔍 **Wyszukiwanie na żywo** we wszystkich zakładkach: pole „Wyszukaj" w górnym pasku Graczy, Sesji RPG, Wydawców i Systemów RPG — filtrowanie w czasie rzeczywistym
+- 🔍 **Wyszukiwanie w dialogach** wyboru graczy i MG (dodaj/edytuj sesję): pole `🔍 Szukaj gracza…` z natychmiastowym filtrowaniem listy checkboxów i radiobutonów
+- 🐛 **Naprawa dark mode flash**: `create_ctk_toplevel()` w `dialog_utils.py` eliminuje flicker trybu ciemnego przez wyłączenie manipulacji paskiem tytułu podczas `__init__`; `apply_dark_titlebar()` przez DWM API bez `withdraw/update`
+- 🪵 **Debug logging**: `RotatingFileHandler` (2 MB) + monkey-patch `AppearanceModeTracker` w `dialog_utils.py` — logi do `debug_sesyjka.log`
 
 ### v0.3.27 (08.03.2026)
 - ➕ **Przycisk „Dodaj gracza"** w dialogach wyboru graczy i MG sesji — bez zamykania okna, lista odświeżana natychmiast, zakładka Gracze aktualizowana automatycznie

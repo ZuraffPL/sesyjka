@@ -8,7 +8,7 @@ from dialog_utils import apply_safe_geometry, create_ctk_toplevel, apply_dark_ti
 import logging
 _log = logging.getLogger("about_dialog")
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.27"): # type: ignore
+def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.28"): # type: ignore
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
     

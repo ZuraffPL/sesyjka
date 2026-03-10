@@ -25,6 +25,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
 
     # Utwórz CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
     dialog = create_ctk_toplevel(parent)
+    dialog.withdraw()  # ukryj podczas budowania — brak flickera
     _log.debug("show_version_history_dialog: dialog utworzony: %s", dialog)
     dialog.title("Historia wersji")
     dialog.resizable(True, True)
@@ -62,7 +63,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "🔍 WYSZUKIWANIE NA ŻYWO:°",
                 "",
                 "✅ ZAKŁADKI GŁÓWNE:",
-                "  • Pole „Wyszukaj" w górnym pasku",
+                '  • Pole „Wyszukaj“ w górnym pasku',
                 "    zakładek Gracze, Sesje RPG, Wydawcy,",
                 "    Systemy RPG — filtrowanie w czasie rzeczywistym",
                 "  • Systemy RPG: wyszukiwanie uwzględnia",
@@ -72,7 +73,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "    rozwinięcie drzewa systemów",
                 "",
                 "✅ DIALOGI WYBORU GRACZY I MG:",
-                "  • Pole „🔍 Szukaj gracza…" w oknach",
+                '  • Pole „🔍 Szukaj gracza…“ w oknach',
                 "    wyboru graczy i MG (dodaj/edytuj sesję)",
                 "  • Natychmiastowe filtrowanie listy",
                 "    checkboxów i radiobutonów przy wpisywaniu",
@@ -1280,14 +1281,30 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         )
         date_label.pack(side=tk.RIGHT)
         
-        # Lista zmian
-        changes_text = "\n".join(version_info['changes']) # type: ignore
-        changes_label = ctk.CTkLabel(
+        # Lista zmian — scal linie kontynuacji (wcięcie ≥4 spacji) z poprzednią linią
+        merged: list[str] = []
+        for line in version_info['changes']:  # type: ignore
+            line = str(line)  # type: ignore[arg-type]
+            if line.startswith('    ') and merged and merged[-1].strip():
+                merged[-1] = merged[-1].rstrip() + ' ' + line.strip()
+            else:
+                merged.append(line)
+        changes_text = "\n".join(merged)
+        # tk.Label (nie CTkLabel) — poprawnie dopasowuje wysokość przy wraplength
+        raw_bg = version_frame.cget("fg_color")  # type: ignore[misc]
+        if isinstance(raw_bg, (list, tuple)):
+            frame_bg: str = str(raw_bg[1] if _dark else raw_bg[0])  # type: ignore[index]
+        else:
+            frame_bg = str(raw_bg)  # type: ignore[arg-type]
+        changes_label = tk.Label(
             version_frame,
             text=changes_text,
             font=('Segoe UI', scale_font_size(11)),
             justify=tk.LEFT,
-            anchor='w'
+            anchor='nw',
+            wraplength=540,
+            background=frame_bg,
+            foreground="#dce4ee" if _dark else "#1a1a1a",
         )
         changes_label.pack(fill=tk.X, padx=15, pady=(0, 10))
     
@@ -1309,12 +1326,19 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     
     # Obsługa klawisza Escape
     dialog.bind('<Escape>', lambda e: dialog.destroy())  # type: ignore[misc]
-    
-    # Ustaw ciemny titlebar przez DWM API (bez withdraw/update) i focus po wyrenderowaniu
+
+    # Pokaż okno po zbudowaniu całej zawartości — bez flickera
+    def _show_dialog() -> None:
+        if not dialog.winfo_exists():
+            return
+        dialog.deiconify()
+        if _dark:
+            apply_dark_titlebar(dialog)
+        if close_button.winfo_exists():
+            close_button.focus_set()
+
     _log.debug("show_version_history_dialog: rejestruję after(), _dark=%s", _dark)
-    if _dark:
-        dialog.after(50, lambda: apply_dark_titlebar(dialog))
-    dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
+    dialog.after(0, _show_dialog)
     
     # Zaczekaj aż okno zostanie zamknięte
     _log.debug("show_version_history_dialog: wait_window start")

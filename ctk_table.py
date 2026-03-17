@@ -12,6 +12,7 @@ Wspiera:
   • Zaznaczanie wierszy lewym kliknięciem (get_selected())
   • Tryb ciemny
 """
+
 from __future__ import annotations
 
 import tkinter as tk
@@ -22,24 +23,37 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 _log = _logging.getLogger(__name__)
+
+
 # Podłącz do istniejącego handlera sesyjka_debug.log gdy tylko jest dostępny
 def _attach_file_handler() -> None:
     try:
         from database_manager import get_app_data_dir  # type: ignore
+
         if not _log.handlers:
             _log.setLevel(_logging.DEBUG)
-            fh = _logging.FileHandler(str(get_app_data_dir() / "sesyjka_debug.log"), encoding="utf-8")
-            fh.setFormatter(_logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S"))
+            fh = _logging.FileHandler(
+                str(get_app_data_dir() / "sesyjka_debug.log"), encoding="utf-8"
+            )
+            fh.setFormatter(
+                _logging.Formatter(
+                    "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S",
+                )
+            )
             _log.addHandler(fh)
     except Exception:
-        pass
+        _log.debug(
+            "ctk_table: nie można podłączyć handlera pliku (database_manager nied.)", exc_info=True
+        )
+
+
 _attach_file_handler()
 
 try:
     from PIL import Image as _PILImage  # type: ignore
     from PIL import ImageTk as _PILImageTk  # type: ignore
+
     _pil_ok = True
 except ImportError:  # pragma: no cover
     _pil_ok = False
@@ -49,7 +63,8 @@ from font_scaling import scale_font_size
 
 # ── ikona przycisku edycji (dwa warianty: jasny/ciemny) ──────────────────────────
 _edit_photo_light: Optional[Any] = None
-_edit_photo_dark:  Optional[Any] = None
+_edit_photo_dark: Optional[Any] = None
+
 
 def _get_icon_path() -> Optional[Path]:
     """
@@ -60,11 +75,12 @@ def _get_icon_path() -> Optional[Path]:
     """
     try:
         from database_manager import get_app_data_dir
+
         p = get_app_data_dir() / 'Icons' / 'edit.png'
         if p.exists():
             return p
     except Exception:
-        pass
+        _log.debug("ctk_table: get_app_data_dir niedostępne przy szukaniu ikony", exc_info=True)
     if hasattr(_sys, '_MEIPASS'):
         p2 = Path(getattr(_sys, '_MEIPASS')) / 'Icons' / 'edit.png'
         if p2.exists():
@@ -73,6 +89,7 @@ def _get_icon_path() -> Optional[Path]:
     if p3.exists():
         return p3
     return None
+
 
 def _get_edit_photo(dark: bool = False) -> Optional[Any]:
     """Zwraca ImageTk.PhotoImage z Icons/edit.png, pokolorowaną pod tryb."""
@@ -86,8 +103,12 @@ def _get_edit_photo(dark: bool = False) -> Optional[Any]:
     if icon_path is None:
         return None
     try:
-        img = _PILImage.open(icon_path).convert("RGBA").resize(  # type: ignore
-            (16, 16), _PILImage.Resampling.LANCZOS  # type: ignore
+        img = (
+            _PILImage.open(icon_path)
+            .convert("RGBA")
+            .resize(  # type: ignore
+                (16, 16), _PILImage.Resampling.LANCZOS  # type: ignore
+            )
         )
         tint = (0x7B, 0xAA, 0xFF) if dark else (0x15, 0x58, 0xD6)
         r, g, b = tint
@@ -106,40 +127,41 @@ def _get_edit_photo(dark: bool = False) -> Optional[Any]:
     except Exception:  # pragma: no cover
         return None
 
+
 # ─── palety kolorów ────────────────────────────────────────────────────────
 _L: dict[str, str] = {
-    "bg":         "#ffffff",
-    "alt":        "#f5f5f5",
-    "hover":      "#e8f0fe",
-    "sel":        "#c2d9ff",
-    "hdr_bg":     "#e2e5ea",
-    "hdr_fg":     "#111111",
-    "hdr_hover":  "#d0d4db",
-    "row_fg":     "#1a1a1a",
-    "edit_bg":    "#e8f0fe",
+    "bg": "#ffffff",
+    "alt": "#f5f5f5",
+    "hover": "#e8f0fe",
+    "sel": "#c2d9ff",
+    "hdr_bg": "#e2e5ea",
+    "hdr_fg": "#111111",
+    "hdr_hover": "#d0d4db",
+    "row_fg": "#1a1a1a",
+    "edit_bg": "#e8f0fe",
     "edit_hover": "#b8d0f8",
-    "edit_fg":    "#1558d6",
-    "link_fg":    "#1a0dab",
+    "edit_fg": "#1558d6",
+    "link_fg": "#1a0dab",
 }
 _D: dict[str, str] = {
-    "bg":         "#1e1f22",
-    "alt":        "#252628",
-    "hover":      "#2a3a52",
-    "sel":        "#1e3a6e",
-    "hdr_bg":     "#2b2d32",
-    "hdr_fg":     "#d8d8d8",
-    "hdr_hover":  "#3a3c42",
-    "row_fg":     "#d8d8d8",
-    "edit_bg":    "#2a3a52",
+    "bg": "#1e1f22",
+    "alt": "#252628",
+    "hover": "#2a3a52",
+    "sel": "#1e3a6e",
+    "hdr_bg": "#2b2d32",
+    "hdr_fg": "#d8d8d8",
+    "hdr_hover": "#3a3c42",
+    "row_fg": "#d8d8d8",
+    "edit_bg": "#2a3a52",
     "edit_hover": "#1a3a5e",
-    "edit_fg":    "#7baaff",
-    "link_fg":    "#7baaff",
+    "edit_fg": "#7baaff",
+    "link_fg": "#7baaff",
 }
 
-_EDIT_W    = 36   # szerokość kolumny przycisku edycji (px)
-_ROW_NUM_W = 36   # szerokość kolumny numeru wiersza Lp. (px)
-_ROW_H     = 28   # wysokość wiersza danych (px)
-_HDR_H     = 30   # wysokość nagłówka (px)
+_EDIT_W = 36  # szerokość kolumny przycisku edycji (px)
+_ROW_NUM_W = 36  # szerokość kolumny numeru wiersza Lp. (px)
+_ROW_H = 28  # wysokość wiersza danych (px)
+_HDR_H = 30  # wysokość nagłówka (px)
 
 
 # ─── tooltip ───────────────────────────────────────────────────────────────
@@ -147,7 +169,7 @@ class _Tooltip:
     """Prosta dymkowa podpowiedź wyświetlana po najechaniu kursorem."""
 
     def __init__(self, widget: tk.Widget, text: str) -> None:
-        self._w    = widget
+        self._w = widget
         self._text = text
         self._win: Optional[tk.Toplevel] = None
         widget.bind("<Enter>", self._show, add="+")
@@ -162,8 +184,15 @@ class _Tooltip:
         self._win.wm_overrideredirect(True)
         self._win.wm_geometry(f"+{x}+{y}")
         tk.Label(
-            self._win, text=self._text, bg="#ffffc0", fg="#222",
-            font=("Segoe UI", 9), relief="solid", bd=1, padx=6, pady=2,
+            self._win,
+            text=self._text,
+            bg="#ffffc0",
+            fg="#222",
+            font=("Segoe UI", scale_font_size(9)),
+            relief="solid",
+            bd=1,
+            padx=6,
+            pady=2,
         ).pack()
 
     def _hide(self, _: Any = None) -> None:
@@ -234,22 +263,22 @@ class CTkDataTable(tk.Frame):
         t = _D if dark_mode else _L
         super().__init__(parent, bg=t["bg"], **kw)
 
-        self.headers          = headers
-        self.col_widths       = col_widths
-        self._data:   List[List[Any]] = list(data)
-        self._edit_cb         = edit_callback
-        self._id_col          = id_col
-        self._color_fn        = row_color_fn
-        self._link_cols       = set(link_cols or [])
-        self._center_cols     = set(center_cols or [])
-        self._sort_cb         = sort_callback
-        self._cell_cb         = cell_click_callback
-        self._rc_cb           = right_click_callback
-        self._show_row_num    = show_row_numbers
-        self._theme           = t
+        self.headers = headers
+        self.col_widths = col_widths
+        self._data: List[List[Any]] = list(data)
+        self._edit_cb = edit_callback
+        self._id_col = id_col
+        self._color_fn = row_color_fn
+        self._link_cols = set(link_cols or [])
+        self._center_cols = set(center_cols or [])
+        self._sort_cb = sort_callback
+        self._cell_cb = cell_click_callback
+        self._rc_cb = right_click_callback
+        self._show_row_num = show_row_numbers
+        self._theme = t
         self._row_frames: List[tk.Frame] = []
-        self._row_pool:   Dict[Any, tk.Frame] = {}  # ID → ukryta ramka do ponownego użycia
-        self._selected_idx:  Optional[int]       = None
+        self._row_pool: Dict[Any, tk.Frame] = {}  # ID → ukryta ramka do ponownego użycia
+        self._selected_idx: Optional[int] = None
         self._selected_data: Optional[List[Any]] = None
 
         self._build_header()
@@ -259,7 +288,7 @@ class CTkDataTable(tk.Frame):
 
     # ── nagłówek ───────────────────────────────────────────────────────────
     def _build_header(self) -> None:
-        t  = self._theme
+        t = self._theme
         hf = tk.Frame(self, bg=t["hdr_bg"], height=_HDR_H)
         hf.pack(fill=tk.X, side=tk.TOP)
         hf.pack_propagate(False)
@@ -267,17 +296,26 @@ class CTkDataTable(tk.Frame):
         x = 0
         if self._show_row_num:
             tk.Label(
-                hf, text="Lp.", bg=t["hdr_bg"], fg=t["hdr_fg"],
+                hf,
+                text="Lp.",
+                bg=t["hdr_bg"],
+                fg=t["hdr_fg"],
                 font=("Segoe UI", scale_font_size(10), "bold"),
-                anchor="center", relief="flat",
+                anchor="center",
+                relief="flat",
             ).place(x=x, y=0, width=_ROW_NUM_W, height=_HDR_H)
             x += _ROW_NUM_W
 
         for i, (h, w) in enumerate(zip(self.headers, self.col_widths)):
             lbl = tk.Label(
-                hf, text=h, bg=t["hdr_bg"], fg=t["hdr_fg"],
+                hf,
+                text=h,
+                bg=t["hdr_bg"],
+                fg=t["hdr_fg"],
                 font=("Segoe UI", scale_font_size(10), "bold"),
-                anchor="w", padx=4, relief="flat",
+                anchor="w",
+                padx=4,
+                relief="flat",
             )
             lbl.place(x=x, y=0, width=w, height=_HDR_H)
 
@@ -292,15 +330,11 @@ class CTkDataTable(tk.Frame):
 
             if i == self._id_col:
                 # Wąska pusta kolumna ✎ w nagłówku
-                tk.Label(hf, text="", bg=t["hdr_bg"]).place(
-                    x=x, y=0, width=_EDIT_W, height=_HDR_H
-                )
+                tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
                 x += _EDIT_W
 
         # Wypełnienie prawej części nagłówka za ostatnią kolumną
-        tk.Label(hf, text="", bg=t["hdr_bg"]).place(
-            x=x, y=0, relwidth=1, width=-x, height=_HDR_H
-        )
+        tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, relwidth=1, width=-x, height=_HDR_H)
 
     # ── wiersze ────────────────────────────────────────────────────────────
     def _pool_key(self, row: Optional[List[Any]]) -> Optional[Any]:
@@ -351,14 +385,20 @@ class CTkDataTable(tk.Frame):
 
         # Resetuj selekcję jeśli wypadła poza zakres
         if self._selected_idx is not None and self._selected_idx >= new_count:
-            self._selected_idx  = None
+            self._selected_idx = None
             self._selected_data = None
 
         _t1 = _time.perf_counter()
         _log.debug(
             "CTkDataTable._build_rows: rows=%d  pooled=%d  destroyed=%d  "
             "refreshed=%d  skipped=%d  added=%d(pool_hits=%d)  elapsed=%.1f ms",
-            new_count, pooled, destroyed, refreshed, skipped, added, pool_hits,
+            new_count,
+            pooled,
+            destroyed,
+            refreshed,
+            skipped,
+            added,
+            pool_hits,
             (_t1 - _t0) * 1000,
         )
 
@@ -387,11 +427,9 @@ class CTkDataTable(tk.Frame):
         rf.configure(bg=def_bg)
         self._populate_row(rf, i, row)
 
-    def _resolve_colors(
-        self, i: int, row: List[Any]
-    ) -> Tuple[str, Optional[str]]:
+    def _resolve_colors(self, i: int, row: List[Any]) -> Tuple[str, Optional[str]]:
         """Zwraca (bg, fg_override_or_None) dla wiersza."""
-        t      = self._theme
+        t = self._theme
         def_bg = t["alt"] if i % 2 else t["bg"]
         fg_ov: Optional[str] = None
 
@@ -453,9 +491,7 @@ class CTkDataTable(tk.Frame):
             if self._selected_idx != idx:
                 _repaint(f, t["hover"])
 
-        def _on_leave(
-            _e: Any, f: tk.Frame = rf, orig: str = def_bg, idx: int = i
-        ) -> None:
+        def _on_leave(_e: Any, f: tk.Frame = rf, orig: str = def_bg, idx: int = i) -> None:
             if self._selected_idx != idx:
                 _repaint(f, orig)
 
@@ -472,12 +508,12 @@ class CTkDataTable(tk.Frame):
                 and self._selected_idx != row_i
                 and self._selected_idx < len(self._row_frames)
             ):
-                old_f  = self._row_frames[self._selected_idx]
+                old_f = self._row_frames[self._selected_idx]
                 old_bg, _ = self._resolve_colors(
                     self._selected_idx, self._data[self._selected_idx]
                 )
                 _repaint(old_f, old_bg)
-            self._selected_idx  = row_i
+            self._selected_idx = row_i
             self._selected_data = row_d
             _repaint(f, t["sel"])
 
@@ -497,7 +533,9 @@ class CTkDataTable(tk.Frame):
         cell_labels: List[tk.Label] = []
         if self._show_row_num:
             num_lbl = tk.Label(
-                rf, text=str(i + 1), bg=def_bg,
+                rf,
+                text=str(i + 1),
+                bg=def_bg,
                 fg=t["hdr_fg"],
                 font=("Segoe UI", scale_font_size(9)),
                 anchor="center",
@@ -516,9 +554,9 @@ class CTkDataTable(tk.Frame):
             x += _ROW_NUM_W
 
         for j, (val, w) in enumerate(zip(row, self.col_widths)):
-            text   = str(val) if val is not None else ""
+            text = str(val) if val is not None else ""
             anchor = "center" if j in self._center_cols else "w"
-            padx   = 0 if j in self._center_cols else 4
+            padx = 0 if j in self._center_cols else 4
 
             if j in self._link_cols and text:
                 fg = t["link_fg"]
@@ -528,9 +566,13 @@ class CTkDataTable(tk.Frame):
                 fg = t["row_fg"]
 
             lbl = tk.Label(
-                rf, text=text, bg=def_bg, fg=fg,
+                rf,
+                text=text,
+                bg=def_bg,
+                fg=fg,
                 font=("Segoe UI", scale_font_size(10)),
-                anchor=anchor, padx=padx,
+                anchor=anchor,
+                padx=padx,
             )
             cell_labels.append(lbl)
             lbl.place(x=x, y=0, width=w, height=_ROW_H)
@@ -562,18 +604,21 @@ class CTkDataTable(tk.Frame):
             # ── przycisk ✎ po kolumnie id_col ─────────────────────────
             if j == self._id_col:
                 ri_, rd_ = i, list(row)
-                is_dark = (t is _D)
+                is_dark = t is _D
                 icon = _get_edit_photo(dark=is_dark)
                 btn = tk.Button(
                     rf,
                     image=icon if icon else "",  # type: ignore
                     text="" if icon else "✎",
                     compound="center",
-                    bg=t["edit_bg"], fg=t["edit_fg"],
+                    bg=t["edit_bg"],
+                    fg=t["edit_fg"],
                     activebackground=t["edit_hover"],
                     activeforeground=t["edit_fg"],
                     font=("Segoe UI", scale_font_size(11)),
-                    relief="flat", bd=0, cursor="hand2",
+                    relief="flat",
+                    bd=0,
+                    cursor="hand2",
                     command=lambda ri=ri_, rd=rd_: self._edit_cb(ri, rd),
                 )
                 if icon:
@@ -610,6 +655,7 @@ class CTkDataTable(tk.Frame):
         """Odświeża dane tabeli i przebudowuje wszystkie wiersze."""
         self._data = list(data)
         self._build_rows()
+
     def toggle_expand(
         self,
         parent_id: Any,
@@ -634,7 +680,7 @@ class CTkDataTable(tk.Frame):
             return
 
         parent_frame = self._row_frames[parent_idx]
-        new_symbol   = "[-]" if expand else "[+]"
+        new_symbol = "[-]" if expand else "[+]"
 
         # Zaktualizuj symbol nadrzędnego wiersza in-place (1 Label.configure call)
         labels: Optional[List[tk.Label]] = getattr(parent_frame, '_cell_labels', None)
@@ -643,7 +689,8 @@ class CTkDataTable(tk.Frame):
         # Uaktualnij też _cached_row i _data dla spójności
         if parent_idx < len(self._data):
             row_copy = list(self._data[parent_idx])
-            if row_copy:  row_copy[0] = new_symbol
+            if row_copy:
+                row_copy[0] = new_symbol
             self._data[parent_idx] = row_copy
         if hasattr(parent_frame, '_cached_row') and parent_frame._cached_row:  # type: ignore[attr-defined]
             parent_frame._cached_row[0] = new_symbol  # type: ignore[attr-defined]
@@ -710,10 +757,12 @@ class CTkDataTable(tk.Frame):
         _t1 = _time.perf_counter()
         _log.debug(
             "toggle_expand: parent_id=%s  expand=%s  children=%d  elapsed=%.1f ms",
-            parent_id, expand,
+            parent_id,
+            expand,
             len(child_rows) if child_rows else (end - parent_idx - 1 if not expand else 0),  # type: ignore[possibly-undefined]
             (_t1 - _t0) * 1000,
         )
+
     def set_data_patch(self, data: List[List[Any]], id_col: Optional[int] = None) -> None:
         """Szybka aktualizacja: patchuje tylko zmienione/dodane/usunięte wiersze.
 

@@ -2,6 +2,7 @@
 Narzędzia do bezpiecznego zarządzania rozmiarami okien dialogowych.
 Zabezpiecza przed wychodzeniem dialogów poza ekran przy wysokim skalowaniu DPI.
 """
+
 import sys
 import ctypes
 import tkinter as tk
@@ -34,24 +35,35 @@ from customtkinter.windows.widgets.appearance_mode.appearance_mode_tracker impor
 _orig_set_am = _AMT.set_appearance_mode.__func__  # type: ignore[attr-defined]
 _orig_update = _AMT.update.__func__  # type: ignore[attr-defined]
 
+
 @classmethod  # type: ignore[misc]
 def _patched_set_am(cls, mode_string: str) -> None:  # type: ignore
     old_mode = cls.appearance_mode  # type: ignore[attr-defined]
     old_set_by = cls.appearance_mode_set_by  # type: ignore[attr-defined]
-    _log.debug("[TRACKER] set_appearance_mode('%s') [was: mode=%s, set_by=%s]\n%s",  # type: ignore[arg-type]
-               mode_string, old_mode, old_set_by,  # type: ignore[arg-type]
-               ''.join(_tb.format_stack()[-5:-1]))
+    _log.debug(
+        "[TRACKER] set_appearance_mode('%s') [was: mode=%s, set_by=%s]\n%s",  # type: ignore[arg-type]
+        mode_string,
+        old_mode,
+        old_set_by,  # type: ignore[arg-type]
+        ''.join(_tb.format_stack()[-5:-1]),
+    )
     _orig_set_am(cls, mode_string)  # type: ignore[arg-type]
     if cls.appearance_mode != old_mode:  # type: ignore[attr-defined]
         _log.debug("[TRACKER] → mode ZMIENIONY: %s → %s", old_mode, cls.appearance_mode)  # type: ignore[arg-type]
+
 
 @classmethod  # type: ignore[misc]
 def _patched_update(cls) -> None:  # type: ignore
     old_mode = cls.appearance_mode  # type: ignore[attr-defined]
     _orig_update(cls)  # type: ignore[arg-type]
     if cls.appearance_mode != old_mode:  # type: ignore[attr-defined]
-        _log.debug("[TRACKER] update() → mode ZMIENIONY: %s → %s (set_by=%s)",  # type: ignore[arg-type]
-                   old_mode, cls.appearance_mode, cls.appearance_mode_set_by)  # type: ignore[attr-defined, arg-type]
+        _log.debug(
+            "[TRACKER] update() → mode ZMIENIONY: %s → %s (set_by=%s)",  # type: ignore[arg-type]
+            old_mode,
+            cls.appearance_mode,
+            cls.appearance_mode_set_by,
+        )  # type: ignore[attr-defined, arg-type]
+
 
 _AMT.set_appearance_mode = _patched_set_am  # type: ignore[assignment]
 _AMT.update = _patched_update  # type: ignore[assignment]
@@ -62,11 +74,14 @@ def _log_ctk_mode(label: str) -> None:
     """Loguje aktualny stan AppearanceModeTracker — do diagnozowania problemu z trybem."""
     try:
         from customtkinter.windows.widgets.appearance_mode.appearance_mode_tracker import AppearanceModeTracker  # type: ignore
-        _log.debug("  [MODE] %s → appearance_mode=%s (%s), set_by=%s",
-                   label,
-                   AppearanceModeTracker.appearance_mode,
-                   "Dark" if AppearanceModeTracker.appearance_mode == 1 else "Light",
-                   AppearanceModeTracker.appearance_mode_set_by)
+
+        _log.debug(
+            "  [MODE] %s → appearance_mode=%s (%s), set_by=%s",
+            label,
+            AppearanceModeTracker.appearance_mode,
+            "Dark" if AppearanceModeTracker.appearance_mode == 1 else "Light",
+            AppearanceModeTracker.appearance_mode_set_by,
+        )
     except Exception as exc:
         _log.debug("  [MODE] %s → błąd odczytu: %s", label, exc)
 
@@ -100,8 +115,10 @@ def create_ctk_toplevel(parent: Any) -> Any:  # type: ignore
         # (resizable(), _set_appearance_mode()) na tym konkretnym oknie
         ctk.CTkToplevel._deactivate_windows_window_header_manipulation = False  # type: ignore
         dialog._deactivate_windows_window_header_manipulation = True  # type: ignore
-        _log.debug("  class flag przywrócona: False; instance flag: %s",
-                   getattr(dialog, '_deactivate_windows_window_header_manipulation', '?'))
+        _log.debug(
+            "  class flag przywrócona: False; instance flag: %s",
+            getattr(dialog, '_deactivate_windows_window_header_manipulation', '?'),
+        )
     _log_ctk_mode("po CTkToplevel.__init__")
     _log.debug("  dialog fg_color = %s", dialog.cget("fg_color"))  # type: ignore[misc]
     _log.debug("create_ctk_toplevel: gotowe, dialog=%s", dialog)
@@ -123,8 +140,10 @@ def apply_dark_titlebar(dialog: Any) -> None:  # type: ignore
         _log.debug("apply_dark_titlebar: hwnd=%s", hwnd)
         DWMWA_USE_IMMERSIVE_DARK_MODE = 20
         ctypes.windll.dwmapi.DwmSetWindowAttribute(  # type: ignore
-            hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
-            ctypes.byref(ctypes.c_int(1)), ctypes.sizeof(ctypes.c_int(1))
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            ctypes.byref(ctypes.c_int(1)),
+            ctypes.sizeof(ctypes.c_int(1)),
         )
         _log.debug("apply_dark_titlebar: sukces")
     except Exception as exc:
@@ -147,14 +166,14 @@ def clamp_geometry(
 ) -> str:
     """
     Oblicza bezpieczną geometrię okna, która mieści się na ekranie.
-    
+
     Wartości desired_width i desired_height to bazowe wartości logiczne
     (takie same jakie przekazuje się do geometry()).
     CTk automatycznie przeskaluje je przez window_scaling.
-    
+
     Funkcja sprawdza jaki będzie faktyczny rozmiar po skalowaniu
     i jeśli nie zmieści się na ekranie — zmniejsza wartości logiczne.
-    
+
     Args:
         dialog: Okno dialogowe (CTkToplevel)
         parent: Okno nadrzędne
@@ -162,55 +181,55 @@ def clamp_geometry(
         desired_height: Pożądana wysokość bazowa (logiczna)
         margin_x: Margines boczny od krawędzi ekranu
         margin_y: Margines od góry/dołu (na pasek zadań itp.)
-    
+
     Returns:
         String geometrii, np. "950x550+100+200"
     """
     parent.update_idletasks()
-    
+
     # Pobierz łączne skalowanie CTk (custom + DPI systemu)
     try:
         total_scale = dialog._apply_window_scaling(10000) / 10000.0
     except Exception:
         total_scale = 1.0
-    
+
     # Dostępny obszar ekranu w pikselach (zgodny z winfo_screenwidth)
     screen_w, screen_h = get_screen_size(dialog)
-    
+
     # Maksymalny rozmiar fizyczny (piksele ekranu)
     max_phys_w = screen_w - margin_x * 2
     max_phys_h = screen_h - margin_y * 2
-    
+
     # Oblicz fizyczny rozmiar po skalowaniu
     phys_w = desired_width * total_scale
     phys_h = desired_height * total_scale
-    
+
     # Jeśli nie mieści się — zmniejsz wartości logiczne
     w = desired_width
     h = desired_height
-    
+
     if phys_w > max_phys_w:
         w = int(max_phys_w / total_scale)
     if phys_h > max_phys_h:
         h = int(max_phys_h / total_scale)
-    
+
     # Oblicz faktyczny rozmiar fizyczny (po korekcie)
     actual_phys_w = int(w * total_scale)
     actual_phys_h = int(h * total_scale)
-    
+
     # Wycentruj na rodzicu (pozycja nie jest skalowana przez CTk)
     parent_x = parent.winfo_rootx()
     parent_y = parent.winfo_rooty()
     parent_w = parent.winfo_width()
     parent_h = parent.winfo_height()
-    
+
     x = parent_x + (parent_w - actual_phys_w) // 2
     y = parent_y + (parent_h - actual_phys_h) // 2
-    
+
     # Upewnij się że okno nie wychodzi poza ekran
     x = max(margin_x, min(x, screen_w - actual_phys_w - margin_x))
     y = max(margin_y // 2, min(y, screen_h - actual_phys_h - margin_y))
-    
+
     geometry_str = f"{w}x{h}+{x}+{y}"
     return geometry_str
 
@@ -228,27 +247,31 @@ def apply_safe_geometry(
     """
     Ustawia geometrię okna dialogowego z zabezpieczeniem przed wychodzeniem poza ekran.
     Zwraca (faktyczna_szerokość_logiczna, faktyczna_wysokość_logiczna).
-    
+
     Jeśli pożądany rozmiar nie mieści się na ekranie po skalowaniu,
     okno jest zmniejszane i ustawia się resizable, aby użytkownik mógł
     w razie potrzeby powiększyć lub scrollować zawartość.
     """
     geo = clamp_geometry(
-        dialog, parent, desired_width, desired_height,
-        margin_x=margin_x, margin_y=margin_y,
+        dialog,
+        parent,
+        desired_width,
+        desired_height,
+        margin_x=margin_x,
+        margin_y=margin_y,
     )
     dialog.geometry(geo)
-    
+
     # Parsuj wynikowe wymiary
     size_part = geo.split("+")[0]
     parts = size_part.split("x")
     final_w = int(parts[0])
     final_h = int(parts[1])
-    
+
     # Jeśli okno zostało zmniejszone — pozwól na zmianę rozmiaru
     if final_h < desired_height or final_w < desired_width:
         dialog.resizable(True, allow_resize_height)
-    
+
     return final_w, final_h
 
 
@@ -261,7 +284,7 @@ def make_scrollable_dialog_frame(
     Tworzy scrollowalną ramkę jako główny kontener formularza w dialogu.
     Używaj zamiast zwykłego CTkFrame gdy formularz może nie zmieścić się
     na małych ekranach z wysokim skalowaniem.
-    
+
     Returns:
         CTkScrollableFrame do którego dodajesz elementy formularza
     """

@@ -1,17 +1,19 @@
-# pyright: reportUnknownMemberType=false
 import tkinter as tk
 from tkinter import ttk
 import webbrowser
+from typing import Any
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel, apply_dark_titlebar  # type: ignore[attr-defined]
 import logging
+
 _log = logging.getLogger("about_dialog")
 
-def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.28"): # type: ignore
+
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.3.30") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
-    
+
     Args:
         parent: Okno rodzicielskie
         app_name: Nazwa aplikacji
@@ -22,60 +24,60 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.28"): # type:
 
     # Ustaw tryb wyglądu CTk PRZED stworzeniem dialogu — widgety CTk biorą kolor
     # z ctk.get_appearance_mode() w momencie __init__, więc może być zły jeśli coś go zmieniło.
-    _log.debug("show_about_dialog: ctk.get_appearance_mode() przed stworzeniem = %s", ctk.get_appearance_mode())
+    _log.debug(
+        "show_about_dialog: ctk.get_appearance_mode() przed stworzeniem = %s",
+        ctk.get_appearance_mode(),
+    )
     ctk.set_appearance_mode("dark" if _dark else "light")
-    _log.debug("show_about_dialog: ctk.get_appearance_mode() po set = %s", ctk.get_appearance_mode())
+    _log.debug(
+        "show_about_dialog: ctk.get_appearance_mode() po set = %s", ctk.get_appearance_mode()
+    )
 
     # Utwórz CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
     dialog = create_ctk_toplevel(parent)
-    _log.debug("show_about_dialog: dialog utworzony: %s, fg_color z dialogu = %s",
-               dialog, dialog.cget("fg_color"))
+    _log.debug(
+        "show_about_dialog: dialog utworzony: %s, fg_color z dialogu = %s",
+        dialog,
+        dialog.cget("fg_color"),
+    )
     dialog.title("O programie")
     dialog.resizable(True, True)
-    dialog.transient(parent) # type: ignore
-    
+    dialog.transient(parent)  # type: ignore
+
     # Bezpieczna geometria (obsługuje wysokie DPI)
     apply_safe_geometry(dialog, parent, 520, 720)
-    
+
     # Główny frame
     main_frame = ctk.CTkFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    
+
     # Nazwa aplikacji (duży, pogrubiony font)
     title_label = ctk.CTkLabel(
-        main_frame,
-        text=app_name,
-        font=('Segoe UI', scale_font_size(28), 'bold')
+        main_frame, text=app_name, font=('Segoe UI', scale_font_size(28), 'bold')
     )
     title_label.pack(pady=(10, 5))
-    
+
     # Wersja
     version_label = ctk.CTkLabel(
-        main_frame,
-        text=f"Wersja {app_version}",
-        font=('Segoe UI', scale_font_size(14))
+        main_frame, text=f"Wersja {app_version}", font=('Segoe UI', scale_font_size(14))
     )
     version_label.pack(pady=(0, 15))
-    
+
     # Separator
     separator = ttk.Separator(main_frame, orient='horizontal')
     separator.pack(fill=tk.X, pady=(0, 15))
-    
+
     # Frame dla informacji
     info_frame = ctk.CTkFrame(main_frame)
     info_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-    
+
     # Scrollable text widget dla opisu funkcjonalności
     text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
     text_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-    
+
     # CTkTextbox dla tekstu
-    text_widget = ctk.CTkTextbox(
-        text_frame,
-        wrap=tk.WORD,
-        font=('Segoe UI', scale_font_size(11))
-    )
-    
+    text_widget = ctk.CTkTextbox(text_frame, wrap=tk.WORD, font=('Segoe UI', scale_font_size(11)))
+
     # Treść z opisem funkcjonalności
     # Pobierz info o skalowaniu do wyświetlenia w sekcji "O programie"
     # UWAGA: importujemy z __main__ (nie z "main"), bo main.py uruchomiony
@@ -83,6 +85,7 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.28"): # type:
     # wykonałby main.py od nowa, w tym ctk.set_appearance_mode("light") z linii 23.
     try:
         import sys as _sys
+
         _main_mod = _sys.modules.get("__main__")
         _dpi_scale = getattr(_main_mod, 'current_dpi_scale', 1.0)
         _screen_w = getattr(_main_mod, 'detected_screen_width', dialog.winfo_screenwidth())
@@ -91,7 +94,7 @@ def show_about_dialog(parent, app_name="Sesyjka", app_version="0.3.28"): # type:
         _dpi_scale = 1.0
         _screen_w = dialog.winfo_screenwidth()
         _screen_h = dialog.winfo_screenheight()
-    
+
     content = f"""AUTOR I KONTAKT:
 Autor: Marcin "Żuraff" Żurawicz
 Kontakt: https://linktr.ee/zuraffpl
@@ -188,17 +191,17 @@ DODATKOWE FUNKCJE:
 
     text_widget.insert('1.0', content)
     text_widget.configure(state='disabled')
-    
+
     text_widget.pack(fill=tk.BOTH, expand=True)
-    
+
     # Frame dla przycisków
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
     button_frame.pack(fill=tk.X)
-    
+
     # Link do strony autora
     def open_author_link():
         webbrowser.open("https://linktr.ee/zuraffpl")
-    
+
     author_button = ctk.CTkButton(
         button_frame,
         text="Strona autora",
@@ -206,14 +209,14 @@ DODATKOWE FUNKCJE:
         width=120,
         fg_color="#1976D2",
         hover_color="#1565C0",
-        command=open_author_link
+        command=open_author_link,
     )
     author_button.pack(side=tk.LEFT, pady=(10, 0))
 
     # Link do wsparcia
     def open_support_link():
         webbrowser.open("https://patronite.pl/zuraff")
-    
+
     support_button = ctk.CTkButton(
         button_frame,
         text="💖 Wesprzyj mnie",
@@ -221,7 +224,7 @@ DODATKOWE FUNKCJE:
         width=140,
         fg_color="#C62828",
         hover_color="#B71C1C",
-        command=open_support_link
+        command=open_support_link,
     )
     support_button.pack(side=tk.LEFT, pady=(10, 0), padx=(15, 0))
 
@@ -233,13 +236,13 @@ DODATKOWE FUNKCJE:
         width=100,
         fg_color="#666666",
         hover_color="#555555",
-        command=dialog.destroy
+        command=dialog.destroy,
     )
     close_button.pack(side=tk.RIGHT, pady=(10, 0))
-    
+
     # Obsługa klawisza Escape
     dialog.bind('<Escape>', lambda e: dialog.destroy())  # type: ignore[misc]
-    
+
     # Ustaw ciemny titlebar przez DWM API (bez withdraw/update) i focus po wyrenderowaniu
     _log.debug("show_about_dialog: rejestruję after(), _dark=%s", _dark)
     if _dark:
@@ -248,8 +251,12 @@ DODATKOWE FUNKCJE:
     def _debug_after_render():
         if dialog.winfo_exists():
             bg = dialog.winfo_rgb(dialog.cget("background")) if dialog.winfo_exists() else "?"
-            _log.debug("show_about_dialog [after render]: dialog bg=%s, ctk_mode=%s, bg_rgb=%s",
-                       dialog.cget("background"), ctk.get_appearance_mode(), bg)
+            _log.debug(
+                "show_about_dialog [after render]: dialog bg=%s, ctk_mode=%s, bg_rgb=%s",
+                dialog.cget("background"),
+                ctk.get_appearance_mode(),
+                bg,
+            )
             for child in dialog.winfo_children():
                 try:
                     try:
@@ -259,9 +266,10 @@ DODATKOWE FUNKCJE:
                     _log.debug("  child %s: fg_color=%s", child, child_bg)
                 except Exception:
                     pass
+
     dialog.after(200, _debug_after_render)
     dialog.after(100, lambda: close_button.focus_set() if close_button.winfo_exists() else None)
-    
+
     # Zaczekaj aż okno zostanie zamknięte
     _log.debug("show_about_dialog: wait_window start")
     dialog.wait_window()

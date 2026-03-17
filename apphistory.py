@@ -1,16 +1,18 @@
-# pyright: reportUnknownMemberType=false
 import tkinter as tk
 from tkinter import ttk
+from typing import Any
 import customtkinter as ctk  # type: ignore
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel, apply_dark_titlebar
 import logging
+
 _log = logging.getLogger("apphistory")
 
-def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
+
+def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     """
     Wyświetla okno dialogowe z historią wersji aplikacji.
-    
+
     Args:
         parent: Okno rodzicielskie
         app_name: Nazwa aplikacji
@@ -20,7 +22,10 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
 
     # Ustaw tryb wyglądu CTk PRZED stworzeniem dialogu — widgety CTk biorą kolor
     # z ctk.get_appearance_mode() w momencie __init__, więc może być zły jeśli coś go zmieniło.
-    _log.debug("show_version_history_dialog: ctk.get_appearance_mode() przed stworzeniem = %s", ctk.get_appearance_mode())
+    _log.debug(
+        "show_version_history_dialog: ctk.get_appearance_mode() przed stworzeniem = %s",
+        ctk.get_appearance_mode(),
+    )
     ctk.set_appearance_mode("dark" if _dark else "light")
 
     # Utwórz CTkToplevel bez problematycznego cyklu withdraw/update/deiconify
@@ -29,33 +34,69 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
     _log.debug("show_version_history_dialog: dialog utworzony: %s", dialog)
     dialog.title("Historia wersji")
     dialog.resizable(True, True)
-    dialog.transient(parent) # type: ignore
-    
+    dialog.transient(parent)  # type: ignore
+
     # Bezpieczna geometria (obsługuje wysokie DPI)
     apply_safe_geometry(dialog, parent, 620, 820)
-    
+
     # Główny frame
     main_frame = ctk.CTkFrame(dialog)
     main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    
+
     # Tytuł
     title_label = ctk.CTkLabel(
         main_frame,
         text=f"{app_name} - Historia wersji",
-        font=('Segoe UI', scale_font_size(20), 'bold')
+        font=('Segoe UI', scale_font_size(20), 'bold'),
     )
     title_label.pack(pady=(10, 15))
-    
+
     # Separator
     separator = ttk.Separator(main_frame, orient='horizontal')
     separator.pack(fill=tk.X, pady=(0, 15))
-    
+
     # Scrollable Frame dla zawartości
     scrollable_frame = ctk.CTkScrollableFrame(main_frame, width=550, height=600)
     scrollable_frame.pack(fill=tk.BOTH, expand=True)
-    
+
     # Historia wersji
-    version_history = [ # type: ignore
+    version_history = [  # type: ignore
+        {
+            "version": "0.3.30",
+            "date": "18.03.2026",
+            "changes": [
+                "⚙️ REFAKTORYZACJA KODU — RUNDY 1–4:°",
+                "",
+                "✅ BLACK FORMATTER + PYRIGHT:",
+                "  • Black zastosowany do wszystkich 14 plików",
+                "    źródłowych — linie do 99 znaków",
+                "  • pyrightconfig.json — konfiguracja type checkera",
+                "  • Adnotacje typów (PEP 484) we wszystkich",
+                "    nowych funkcjach i metodach",
+                "",
+                "✅ SQLITE — DOBRE PRAKTYKI:",
+                "  • conn.row_factory = sqlite3.Row w każdym",
+                "    połączeniu — dostęp do kolumn po nazwie",
+                "  • PRAGMA foreign_keys = ON — integralność",
+                "    referencyjna wymuszona w całej aplikacji",
+                "  • Context managery (with sqlite3.connect as conn:)",
+                "    — automatyczny commit/rollback",
+                "",
+                "✅ THREADING — GUI NIE BLOKUJE:",
+                "  • fill_systemy_rpg_tab(), fill_sesje_rpg_tab(),",
+                "    fill_gracze_tab(), fill_wydawcy_tab():",
+                "    SQL/IO przeniesione do wątku tła",
+                "    — widget.after() do aktualizacji UI",
+                "  • update_system_chart(): matplotlib + SQL",
+                "    w wątku tła, naprawa N+1 query",
+                "    (batch WHERE id IN (?) zamiast per-system)",
+                "",
+                "🐛 NAPRAWA UI:°",
+                "",
+                "  • wraplength zmniejszone do 510 px — tekst",
+                "    nie wychodzi poza krawędź dialogów",
+            ],
+        },
         {
             "version": "0.3.28",
             "date": "10.03.2026",
@@ -501,8 +542,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "    (surowe dane z bazy z int 0/1)",
                 "  • do_sort(): obie listy sortowane razem przez",
                 "    sorted(zip(...)) z rozpakowaniem powrotnym",
-                "  • Poprawne kolorowanie statusów po sortowaniu"
-            ]
+                "  • Poprawne kolorowanie statusów po sortowaniu",
+            ],
         },
         {
             "version": "0.3.19",
@@ -544,8 +585,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • systemy_rpg.py, sesje_rpg_dialogs.py",
                 "  • sesje_rpg.py, gracze.py, wydawcy.py",
                 "  • about_dialog.py, apphistory.py",
-                "  • Każdy dialog używa apply_safe_geometry()"
-            ]
+                "  • Każdy dialog używa apply_safe_geometry()",
+            ],
         },
         {
             "version": "0.3.16",
@@ -621,8 +662,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Okna szersze zamiast wyższe",
                 "  • Rozmiary: 950px/1100px (zamiast 700px/850px)",
                 "  • Responsive: columnconfigure(3, weight=1)",
-                "  • Wszystkie pola przesunięte o 1 row w dół"
-            ]
+                "  • Wszystkie pola przesunięte o 1 row w dół",
+            ],
         },
         {
             "version": "0.3.15",
@@ -662,8 +703,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Zmienna globalna font_scale_factor",
                 "  • Funkcje: set/get_font_scale_factor()",
                 "  • Minimum: 8px (ochrona czytelności)",
-                "  • Ribbon rebuild po każdej zmianie"
-            ]
+                "  • Ribbon rebuild po każdej zmianie",
+            ],
         },
         {
             "version": "0.3.14",
@@ -695,8 +736,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Zwiększono wysokość okien o +30px (6 checkboxów)",
                 "  • Dodawanie systemu: 520→550px, 720→750px, 850→880px",
                 "  • Edycja systemu: 560→590px, 720→750px, 850→880px",
-                "  • Dodawanie suplementu: 650→680px"
-            ]
+                "  • Dodawanie suplementu: 650→680px",
+            ],
         },
         {
             "version": "0.3.13",
@@ -717,8 +758,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "    - get_all_systems() - lista systemów RPG w formularzu",
                 "    - get_all_players() - lista graczy w formularzu",
                 "  • Zastąpiono hardcoded ścieżki wywołaniami get_db_path()",
-                "  • Analogiczny bug do naprawionego w v0.3.12 (wydawcy.db)"
-            ]
+                "  • Analogiczny bug do naprawionego w v0.3.12 (wydawcy.db)",
+            ],
         },
         {
             "version": "0.3.12",
@@ -752,8 +793,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "🔧 CZYSZCZENIE KODU:",
                 "  • Usunięto niedziałający system callbacków odświeżania",
                 "  • Usunięto zbędne przyciski odświeżania (🔄)",
-                "  • Uproszczony, niezawodny mechanizm refresh-on-click"
-            ]
+                "  • Uproszczony, niezawodny mechanizm refresh-on-click",
+            ],
         },
         {
             "version": "0.3.11",
@@ -818,8 +859,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Wszystkie funkcje kontekstowe (edycja, usuwanie)",
                 "  • Wszystkie funkcje sortowania",
                 "  • Wszystkie funkcje filtrowania",
-                "  • Wykrywanie linków (w tabelach gracze i wydawcy)"
-            ]
+                "  • Wykrywanie linków (w tabelach gracze i wydawcy)",
+            ],
         },
         {
             "version": "0.3.10",
@@ -848,8 +889,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "📊 WYNIK:",
                 "  • Poprawne wykrywanie rozdzielczości niezależnie od skalowania Windows",
                 "  • Okno 'O programie' pokazuje teraz fizyczną rozdzielczość",
-                "  • Odpowiednie skalowanie interfejsu dla monitorów 2K/4K"
-            ]
+                "  • Odpowiednie skalowanie interfejsu dla monitorów 2K/4K",
+            ],
         },
         {
             "version": "0.3.9",
@@ -884,8 +925,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Wykorzystanie CustomTkinter set_widget_scaling()",
                 "  • Wykorzystanie CustomTkinter set_window_scaling()",
                 "  • Zaokrąglanie do 0.1 dla lepszej wydajności",
-                "  • Zabezpieczenia przed błędami wykrywania"
-            ]
+                "  • Zabezpieczenia przed błędami wykrywania",
+            ],
         },
         {
             "version": "0.3.8",
@@ -933,8 +974,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • sesje_rpg.py - używa nowego systemu ścieżek",
                 "  • gracze.py - używa nowego systemu ścieżek",
                 "  • wydawcy.py - używa nowego systemu ścieżek",
-                "  • main.py - inicjalizacja przez database_manager"
-            ]
+                "  • main.py - inicjalizacja przez database_manager",
+            ],
         },
         {
             "version": "0.3.7",
@@ -964,8 +1005,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Funkcja wyświetlania: get_all_systems()",
                 "  • Funkcje dodawania: dodaj_system_rpg(), dodaj_suplement_do_systemu()",
                 "  • Funkcja edycji: edit_system_rpg_dialog()",
-                "  • Funkcje obsługi formularzy: on_status_kolekcja_change() (3 wystąpienia)"
-            ]
+                "  • Funkcje obsługi formularzy: on_status_kolekcja_change() (3 wystąpienia)",
+            ],
         },
         {
             "version": "0.3.6",
@@ -1011,8 +1052,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "    - wydawcy.py",
                 "    - gracze.py",
                 "  • Dodano dyrektywy pyright dla lepszego type checking",
-                "  • Kod zgodny ze standardami Python 3.9+"
-            ]
+                "  • Kod zgodny ze standardami Python 3.9+",
+            ],
         },
         {
             "version": "0.3.5",
@@ -1068,8 +1109,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Poprawna hierarchia widgetów w ramkach",
                 "  • Optymalizacja renderowania wykresów",
                 "  • Responsywny layout z weight dla kolumn",
-                "  • Lepsza adaptacja do trybu ciemnego"
-            ]
+                "  • Lepsza adaptacja do trybu ciemnego",
+            ],
         },
         {
             "version": "0.3.0",
@@ -1105,8 +1146,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • gracze.py - dialogi dodawania i edycji",
                 "  • wydawcy.py - dialogi dodawania, edycji i usuwania",
                 "  • about_dialog.py - okno O programie",
-                "  • apphistory.py - historia wersji"
-            ]
+                "  • apphistory.py - historia wersji",
+            ],
         },
         {
             "version": "0.2.8",
@@ -1116,8 +1157,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Instalacja biblioteki CustomTkinter",
                 "  • Instalacja matplotlib dla wykresów",
                 "  • Utworzenie backupu projektu",
-                "  • Testy kompatybilności"
-            ]
+                "  • Testy kompatybilności",
+            ],
         },
         {
             "version": "0.2.7",
@@ -1140,8 +1181,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "✅ POPRAWKI:",
                 "  • Naprawiono stabilność przełącznika trybu",
                 "  • Usunięto nieużywane importy",
-                "  • Zoptymalizowano kod przełączania motywów"
-            ]
+                "  • Zoptymalizowano kod przełączania motywów",
+            ],
         },
         {
             "version": "0.2.6",
@@ -1180,8 +1221,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "✅ POPRAWKI:",
                 "  • Naprawione błędy typów we wszystkich modułach",
                 "  • Poprawione obsługa trybu ciemnego w dialogach",
-                "  • Ulepszona kompatybilność z Python 3.9+"
-            ]
+                "  • Ulepszona kompatybilność z Python 3.9+",
+            ],
         },
         {
             "version": "0.2.2",
@@ -1197,8 +1238,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "✅ INTERFEJS:",
                 "  • Zwiększone wysokości okien dialogowych",
                 "  • Dodano historię wersji aplikacji",
-                "  • Zaktualizowane informacje o programie"
-            ]
+                "  • Zaktualizowane informacje o programie",
+            ],
         },
         {
             "version": "0.2.1",
@@ -1210,12 +1251,12 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "",
                 "🐛 POPRAWKI:",
                 "  • Naprawione błędy indeksowania w wyświetlaniu danych",
-                "  • Poprawiona struktura bazy danych"
-            ]
+                "  • Poprawiona struktura bazy danych",
+            ],
         },
         {
             "version": "0.2.0",
-            "date": "15.09.2025", 
+            "date": "15.09.2025",
             "changes": [
                 "🎉 PIERWSZA PEŁNA WERSJA:",
                 "",
@@ -1240,8 +1281,8 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Nowoczesna wstążka z kolorowymi przyciskami",
                 "  • Zakładki z ikonami emoji",
                 "  • Tryb jasny i ciemny",
-                "  • Spójny design we wszystkich oknach"
-            ]
+                "  • Spójny design we wszystkich oknach",
+            ],
         },
         {
             "version": "0.1.0",
@@ -1251,36 +1292,36 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
                 "  • Podstawowa struktura aplikacji",
                 "  • Implementacja baz danych SQLite",
                 "  • Podstawowe operacje CRUD",
-                "  • Prototyp interfejsu użytkownika"
-            ]
-        }
+                "  • Prototyp interfejsu użytkownika",
+            ],
+        },
     ]
-    
+
     # Dodaj każdą wersję jako osobną sekcję
-    for version_info in version_history: # type: ignore
+    for version_info in version_history:  # type: ignore
         # Frame dla wersji
         version_frame = ctk.CTkFrame(scrollable_frame)
         version_frame.pack(fill=tk.X, pady=(0, 15), padx=5)
-        
+
         # Nagłówek wersji
         header_frame = ctk.CTkFrame(version_frame, fg_color="transparent")
         header_frame.pack(fill=tk.X, padx=15, pady=(10, 5))
-        
+
         version_label = ctk.CTkLabel(
             header_frame,
             text=f"Wersja {version_info['version']}",
             font=('Segoe UI', scale_font_size(14), 'bold'),
-            text_color="#1976D2"
+            text_color="#1976D2",
         )
         version_label.pack(side=tk.LEFT)
-        
+
         date_label = ctk.CTkLabel(
             header_frame,
-            text=version_info['date'], # type: ignore
-            font=('Segoe UI', scale_font_size(12))
+            text=version_info['date'],  # type: ignore
+            font=('Segoe UI', scale_font_size(12)),
         )
         date_label.pack(side=tk.RIGHT)
-        
+
         # Lista zmian — scal linie kontynuacji (wcięcie ≥4 spacji) z poprzednią linią
         merged: list[str] = []
         for line in version_info['changes']:  # type: ignore
@@ -1307,11 +1348,11 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
             foreground="#dce4ee" if _dark else "#1a1a1a",
         )
         changes_label.pack(fill=tk.X, padx=15, pady=(0, 10))
-    
+
     # Frame dla przycisku zamknij
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
     button_frame.pack(fill=tk.X, pady=(15, 0))
-    
+
     # Przycisk zamknij
     close_button = ctk.CTkButton(
         button_frame,
@@ -1320,10 +1361,10 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
         width=120,
         fg_color="#666666",
         hover_color="#555555",
-        command=dialog.destroy
+        command=dialog.destroy,
     )
     close_button.pack(side=tk.RIGHT)
-    
+
     # Obsługa klawisza Escape
     dialog.bind('<Escape>', lambda e: dialog.destroy())  # type: ignore[misc]
 
@@ -1339,7 +1380,7 @@ def show_version_history_dialog(parent, app_name="Sesyjka"): # type: ignore
 
     _log.debug("show_version_history_dialog: rejestruję after(), _dark=%s", _dark)
     dialog.after(0, _show_dialog)
-    
+
     # Zaczekaj aż okno zostanie zamknięte
     _log.debug("show_version_history_dialog: wait_window start")
     dialog.wait_window()

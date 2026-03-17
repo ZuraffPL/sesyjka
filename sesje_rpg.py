@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, messagebox
@@ -6,13 +6,16 @@ import sqlite3
 from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
 import customtkinter as ctk  # type: ignore
+import logging
 from database_manager import get_db_path
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
 
 # Import funkcji dialogowych z oddzielnego modułu
 from sesje_rpg_dialogs import open_edit_session_dialog
+
+_log = logging.getLogger(__name__)
 
 DB_FILE = get_db_path("sesje_rpg.db")
 
@@ -21,12 +24,16 @@ active_filters_sesje: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_sesje: Dict[str, Any] = {"column": "ID", "reverse": False}
 
+
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
     with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
         # Tabela główna sesji
-        c.execute("""
+        c.execute(
+            """
             CREATE TABLE IF NOT EXISTS sesje_rpg (
                 id INTEGER PRIMARY KEY,
                 data_sesji TEXT NOT NULL,
@@ -40,10 +47,12 @@ def init_db() -> None:
                 FOREIGN KEY (system_id) REFERENCES systemy_rpg(id),
                 FOREIGN KEY (mg_id) REFERENCES gracze(id)
             )
-        """)
-        
+        """
+        )
+
         # Tabela relacji sesja-gracze
-        c.execute("""
+        c.execute(
+            """
             CREATE TABLE IF NOT EXISTS sesje_gracze (
                 sesja_id INTEGER NOT NULL,
                 gracz_id INTEGER NOT NULL,
@@ -51,13 +60,16 @@ def init_db() -> None:
                 FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE,
                 FOREIGN KEY (gracz_id) REFERENCES gracze(id)
             )
-        """)
+        """
+        )
         conn.commit()
+
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
     """Pobiera tryb ciemny z głównego okna"""
     root = tab.winfo_toplevel()
     return getattr(root, 'dark_mode', False)
+
 
 def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:
     """Stosuje ciemny motyw do okna dialogowego"""
@@ -65,43 +77,58 @@ def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:
     dark_fg = "#ffffff"
     dark_entry_bg = "#404040"
     dark_entry_fg = "#ffffff"
-    
+
     # Główne okno
     dialog.configure(bg=dark_bg)
-    
+
     # Wszystkie widgety w oknie
     for widget in dialog.winfo_children():
         _apply_dark_theme_to_widget(widget, dark_bg, dark_fg, dark_entry_bg, dark_entry_fg)
 
-def _apply_dark_theme_to_widget(widget: Union[tk.Widget, tk.Toplevel], dark_bg: str, dark_fg: str, 
-                               dark_entry_bg: str, dark_entry_fg: str) -> None:
+
+def _apply_dark_theme_to_widget(
+    widget: Union[tk.Widget, tk.Toplevel],
+    dark_bg: str,
+    dark_fg: str,
+    dark_entry_bg: str,
+    dark_entry_fg: str,
+) -> None:
     """Rekurencyjnie stosuje ciemny motyw do widgetów"""
     widget_class = widget.winfo_class()
-    
+
     try:
         if widget_class in ('Label', 'Button', 'Checkbutton', 'Radiobutton'):
             widget.configure(bg=dark_bg, fg=dark_fg)  # type: ignore
             if widget_class in ('Checkbutton', 'Radiobutton'):
                 widget.configure(selectcolor=dark_entry_bg, activebackground=dark_bg, activeforeground=dark_fg)  # type: ignore
         elif widget_class in ('Entry', 'Text'):
-            widget.configure(bg=dark_entry_bg, fg=dark_entry_fg,  # type: ignore
-                           insertbackground=dark_entry_fg, selectbackground="#0078d4")  # type: ignore
+            widget.configure(
+                bg=dark_entry_bg,
+                fg=dark_entry_fg,  # type: ignore
+                insertbackground=dark_entry_fg,
+                selectbackground="#0078d4",
+            )  # type: ignore
         elif widget_class == 'Frame':
             widget.configure(bg=dark_bg)  # type: ignore
         elif widget_class == 'Combobox':
             # Dla Combobox używamy ttk style
             pass
-        
+
         # Rekurencyjnie dla dzieci
         for child in widget.winfo_children():
             _apply_dark_theme_to_widget(child, dark_bg, dark_fg, dark_entry_bg, dark_entry_fg)
     except tk.TclError:
         # Ignoruj błędy konfiguracji (niektóre widgety mogą nie obsługiwać pewnych opcji)
-        pass
+        _log.debug(
+            "TclError w _apply_dark_theme_to_widget (ignorowany): %s", widget, exc_info=True
+        )
+
 
 def get_first_free_id() -> int:
     """Zwraca pierwszy wolny ID w bazie sesji RPG"""
     with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
         c.execute("SELECT id FROM sesje_rpg ORDER BY id ASC")
         used_ids = [row[0] for row in c.fetchall()]
@@ -110,29 +137,40 @@ def get_first_free_id() -> int:
         i += 1
     return i
 
+
 def get_all_systems() -> List[Tuple[int, str]]:
     """Pobiera tylko podręczniki główne systemów RPG z bazy (bez suplementów)"""
     try:
         with sqlite3.connect(get_db_path("systemy_rpg.db")) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute("SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa")
+            c.execute(
+                "SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa"
+            )
             return c.fetchall()
     except sqlite3.Error:
         return []
+
 
 def get_all_players() -> List[Tuple[int, str]]:
     """Pobiera wszystkich graczy z bazy"""
     try:
         with sqlite3.connect(get_db_path("gracze.db")) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
             c.execute("SELECT id, nick FROM gracze ORDER BY nick")
             return c.fetchall()
     except sqlite3.Error:
         return []
 
+
 def get_all_sessions() -> List[Tuple[Any, ...]]:
     """Pobiera wszystkie sesje RPG z bazy (zoptymalizowane – bulk queries)."""
     with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
         c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sesje_rpg'")
         if not c.fetchone():
@@ -141,12 +179,14 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
         if c.fetchone()[0] == 0:
             return []
 
-        c.execute("""
+        c.execute(
+            """
             SELECT s.id, s.data_sesji, s.system_id, s.liczba_graczy, s.mg_id,
                    s.kampania, s.jednostrzal, s.tytul_kampanii, s.tytul_przygody
             FROM sesje_rpg s
             ORDER BY s.data_sesji ASC, s.id ASC
-        """)
+        """
+        )
         sessions = c.fetchall()
 
         # Pobierz wszystkich graczy z sesji jednym zapytaniem
@@ -162,7 +202,8 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
     systems_map: Dict[int, str] = {}
     try:
         with sqlite3.connect(get_db_path("systemy_rpg.db")) as sys_conn:
-            sys_conn.row_factory = None
+            sys_conn.row_factory = sqlite3.Row
+            sys_conn.execute("PRAGMA foreign_keys = ON")
             sc = sys_conn.cursor()
             sc.execute("SELECT id, nazwa FROM systemy_rpg")
             systems_map = {row[0]: row[1] for row in sc.fetchall()}
@@ -173,7 +214,8 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
     players_map: Dict[int, str] = {}
     try:
         with sqlite3.connect(get_db_path("gracze.db")) as gracze_conn:
-            gracze_conn.row_factory = None
+            gracze_conn.row_factory = sqlite3.Row
+            gracze_conn.execute("PRAGMA foreign_keys = ON")
             gc = gracze_conn.cursor()
             gc.execute("SELECT id, nick FROM gracze")
             players_map = {row[0]: row[1] for row in gc.fetchall()}
@@ -182,13 +224,23 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
 
     result = []
     for session in sessions:
-        sid, data_sesji, system_id, _lb_graczy, mg_id, kampania, jednostrzal, tytul_kampanii, tytul_przygody = session
+        (
+            sid,
+            data_sesji,
+            system_id,
+            _lb_graczy,
+            mg_id,
+            kampania,
+            jednostrzal,
+            tytul_kampanii,
+            tytul_przygody,
+        ) = session
 
         system_nazwa = systems_map.get(system_id, f"System ID {system_id}")
-        mg_nick      = players_map.get(mg_id, f"Gracz ID {mg_id}")
+        mg_nick = players_map.get(mg_id, f"Gracz ID {mg_id}")
 
-        gracz_ids    = sesja_gracze_map.get(sid, [])
-        gracze_str   = ", ".join(players_map.get(gid, f"Gracz ID {gid}") for gid in gracz_ids)
+        gracz_ids = sesja_gracze_map.get(sid, [])
+        gracze_str = ", ".join(players_map.get(gid, f"Gracz ID {gid}") for gid in gracz_ids)
 
         typ_sesji = ""
         if kampania:
@@ -206,72 +258,155 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
 
     return result  # type: ignore
 
+
 # Funkcja dodaj_sesje_rpg została przeniesiona do sesje_rpg_dialogs.py
-def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
+def fill_sesje_rpg_tab(
+    tab: tk.Frame,
+    dark_mode: bool = False,
+    _preloaded_data: Optional[List[List[Any]]] = None,
+) -> None:
     """Wypełnia zakładkę Sesje RPG"""
     init_db()
 
     # ── Szybka ścieżka: odśwież dane bez niszczenia całego UI ───────────────
     cache = getattr(tab, '_sesje_tab_cache', None)
-    if cache is not None and cache.get('table_ref') is not None and cache.get('dark_mode') == dark_mode:
+    if (
+        cache is not None
+        and cache.get('table_ref') is not None
+        and cache.get('dark_mode') == dark_mode
+    ):
         try:
             if cache['table_ref'].winfo_exists():
-                new_raw = get_all_sessions()
-                new_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in new_raw]
-                cache['data_ref'][0] = new_data
+                if _preloaded_data is None:
+
+                    def _bg_fast_ses() -> None:
+                        raw = get_all_sessions()
+                        data: List[List[Any]] = [
+                            [v if v is not None else "" for v in rec] for rec in raw
+                        ]
+                        tab.after(
+                            0,
+                            lambda: fill_sesje_rpg_tab(
+                                tab, dark_mode, _preloaded_data=data
+                            ),
+                        )
+
+                    threading.Thread(target=_bg_fast_ses, daemon=True).start()
+                    return
+                cache['data_ref'][0] = _preloaded_data
                 cache['apply_fn']()
                 return
         except Exception:
             pass
-        # Widget zniszczony – usuń stary cache i przebuduj
         del tab._sesje_tab_cache  # type: ignore[attr-defined]
+
+    if _preloaded_data is None:
+
+        def _bg_full_ses() -> None:
+            raw = get_all_sessions()
+            data_list: List[List[Any]] = [
+                [v if v is not None else "" for v in rec] for rec in raw
+            ]
+            tab.after(
+                0,
+                lambda: fill_sesje_rpg_tab(tab, dark_mode, _preloaded_data=data_list),
+            )
+
+        threading.Thread(target=_bg_full_ses, daemon=True).start()
+        return
 
     for widget in tab.winfo_children():
         widget.destroy()
 
-    data_raw = get_all_sessions()
-    _initial_data: List[List[Any]] = [[v if v is not None else "" for v in rec] for rec in data_raw]
-    # Mutable holder – closure’y zawsze widzą aktualne dane przez data_ref[0]
-    data_ref: List[List[List[Any]]] = [_initial_data]
+    # Mutable holder – closure'y zawsze widzą aktualne dane przez data_ref[0]
+    data_ref: List[List[List[Any]]] = [_preloaded_data]
 
-    _HEADERS  = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
+    _HEADERS = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
     _SORTABLE = {"ID": 0, "Data": 1, "System": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5}
 
     # ── Kolory górnego paska ─────────────────────────────────────────────────
     bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
     fg_top = "#e0e0e0" if dark_mode else "#212121"
-    FONT   = ("Segoe UI", scale_font_size(10))
+    FONT = ("Segoe UI", scale_font_size(10))
 
     # ── Obliczanie szerokości kolumn ─────────────────────────────────────────
-    _mf      = tkfont.Font(family="Segoe UI", size=scale_font_size(10))
+    _mf = tkfont.Font(family="Segoe UI", size=scale_font_size(10))
     _mf_bold = tkfont.Font(family="Segoe UI", size=scale_font_size(10), weight="bold")
 
     def _compute_widths(rows: List[List[Any]]) -> List[int]:
         pad = 24
-        w_data   = max([_mf_bold.measure("Data")]        + ([_mf.measure(str(r[1])) for r in rows if r[1]] or [0])) + pad
-        w_system = max([_mf_bold.measure("System")]      + ([_mf.measure(str(r[2])) for r in rows if r[2]] or [0])) + pad
-        w_typ    = max([_mf_bold.measure("Typ sesji")]   + ([_mf.measure(str(r[3])) for r in rows if r[3]] or [0])) + pad
-        w_mg     = max([_mf_bold.measure("Mistrz Gry")] + ([_mf.measure(str(r[4])) for r in rows if r[4]] or [0])) + pad
-        w_gracze = max([_mf_bold.measure("Gracze")]      + ([_mf.measure(str(r[5])) for r in rows if r[5]] or [0])) + pad
+        w_data = (
+            max(
+                [_mf_bold.measure("Data")]
+                + ([_mf.measure(str(r[1])) for r in rows if r[1]] or [0])
+            )
+            + pad
+        )
+        w_system = (
+            max(
+                [_mf_bold.measure("System")]
+                + ([_mf.measure(str(r[2])) for r in rows if r[2]] or [0])
+            )
+            + pad
+        )
+        w_typ = (
+            max(
+                [_mf_bold.measure("Typ sesji")]
+                + ([_mf.measure(str(r[3])) for r in rows if r[3]] or [0])
+            )
+            + pad
+        )
+        w_mg = (
+            max(
+                [_mf_bold.measure("Mistrz Gry")]
+                + ([_mf.measure(str(r[4])) for r in rows if r[4]] or [0])
+            )
+            + pad
+        )
+        w_gracze = (
+            max(
+                [_mf_bold.measure("Gracze")]
+                + ([_mf.measure(str(r[5])) for r in rows if r[5]] or [0])
+            )
+            + pad
+        )
         return [
             44,
-            min(max(w_data,    90), 120),
+            min(max(w_data, 90), 120),
             min(max(w_system, 100), 280),
-            min(max(w_typ,    100), 360),
-            min(max(w_mg,      80), 160),
+            min(max(w_typ, 100), 360),
+            min(max(w_mg, 80), 160),
             min(max(w_gracze, 100), 480),
         ]
 
     # ── Kolorowanie wierszy według miesiąca daty sesji ───────────────────────
     _month_colors_light: Dict[int, str] = {
-        1: "#D1E7FF", 2: "#E6D1FF", 3: "#D1FFD1",  4: "#FFF4C4",
-        5: "#FFD1D1", 6: "#D1F4FF", 7: "#FFDED1",  8: "#F0D1FF",
-        9: "#D1FFB8", 10: "#FFD8B8", 11: "#D1D1FF", 12: "#FFD1E6",
+        1: "#D1E7FF",
+        2: "#E6D1FF",
+        3: "#D1FFD1",
+        4: "#FFF4C4",
+        5: "#FFD1D1",
+        6: "#D1F4FF",
+        7: "#FFDED1",
+        8: "#F0D1FF",
+        9: "#D1FFB8",
+        10: "#FFD8B8",
+        11: "#D1D1FF",
+        12: "#FFD1E6",
     }
     _month_colors_dark: Dict[int, str] = {
-        1: "#0D4F73", 2: "#4D0D73", 3: "#0D730D",  4: "#73730D",
-        5: "#730D0D", 6: "#0D7373", 7: "#73470D",  8: "#470D73",
-        9: "#47730D", 10: "#73470D", 11: "#0D0D73", 12: "#730D47",
+        1: "#0D4F73",
+        2: "#4D0D73",
+        3: "#0D730D",
+        4: "#73730D",
+        5: "#730D0D",
+        6: "#0D7373",
+        7: "#73470D",
+        8: "#470D73",
+        9: "#47730D",
+        10: "#73470D",
+        11: "#0D0D73",
+        12: "#730D47",
     }
 
     def _row_color(i: int, row: List[Any]) -> Optional[Tuple[Optional[str], Optional[str]]]:
@@ -298,11 +433,14 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
 
         phrase = search_var.get().strip().lower()
         if phrase:
-            filtered = [r for r in filtered if
-                        phrase in (str(r[2]) or '').lower() or
-                        phrase in (str(r[3]) or '').lower() or
-                        phrase in (str(r[4]) or '').lower() or
-                        phrase in (str(r[5]) or '').lower()]
+            filtered = [
+                r
+                for r in filtered
+                if phrase in (str(r[2]) or '').lower()
+                or phrase in (str(r[3]) or '').lower()
+                or phrase in (str(r[4]) or '').lower()
+                or phrase in (str(r[5]) or '').lower()
+            ]
 
         year_f = active_filters_sesje.get('year', 'Wszystkie')
         if year_f != 'Wszystkie':
@@ -321,7 +459,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
             filtered = [r for r in filtered if r[4] == mg_f]
 
         col_i = _SORTABLE.get(active_sort_sesje.get("column", "ID"), 0)
-        rev   = active_sort_sesje.get("reverse", False)
+        rev = active_sort_sesje.get("reverse", False)
         if col_i == 0:
             filtered.sort(key=lambda x: int(x[0]) if x[0] != "" else 0, reverse=rev)
         else:
@@ -339,33 +477,40 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     # ── Górny pasek ──────────────────────────────────────────────────────────
     top_bar = tk.Frame(tab, bg=bg_top)
     top_bar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 4))
-    tk.Label(top_bar, text="Sortuj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    tk.Label(top_bar, text="Sortuj:", bg=bg_top, fg=fg_top, font=FONT).pack(
+        side=tk.LEFT, padx=(0, 4)
+    )
     sort_var = tk.StringVar(value=active_sort_sesje.get("column", "ID"))
     ttk.Combobox(
-        top_bar, textvariable=sort_var,
+        top_bar,
+        textvariable=sort_var,
         values=list(_SORTABLE.keys()),
-        state="readonly", width=12,
+        state="readonly",
+        width=12,
     ).pack(side=tk.LEFT)
 
     def _sort_asc() -> None:
-        active_sort_sesje["column"]  = sort_var.get()
+        active_sort_sesje["column"] = sort_var.get()
         active_sort_sesje["reverse"] = False
         _apply_and_draw()
 
     def _sort_desc() -> None:
-        active_sort_sesje["column"]  = sort_var.get()
+        active_sort_sesje["column"] = sort_var.get()
         active_sort_sesje["reverse"] = True
         _apply_and_draw()
 
-    ttk.Button(top_bar, text="Rosnąco",  command=_sort_asc ).pack(side=tk.LEFT, padx=4)
+    ttk.Button(top_bar, text="Rosnąco", command=_sort_asc).pack(side=tk.LEFT, padx=4)
     ttk.Button(top_bar, text="Malejąco", command=_sort_desc).pack(side=tk.LEFT, padx=4)
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-    tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top, font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    tk.Label(top_bar, text="Filtruj:", bg=bg_top, fg=fg_top, font=FONT).pack(
+        side=tk.LEFT, padx=(0, 4)
+    )
     filter_btn = ttk.Button(top_bar, text="Filtruj", command=lambda: _open_filter())
     filter_btn.pack(side=tk.LEFT, padx=4)
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
-    tk.Label(top_bar, text="Wyszukaj:", bg=bg_top, fg=fg_top,
-             font=FONT).pack(side=tk.LEFT, padx=(0, 4))
+    tk.Label(top_bar, text="Wyszukaj:", bg=bg_top, fg=fg_top, font=FONT).pack(
+        side=tk.LEFT, padx=(0, 4)
+    )
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
     search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
@@ -373,7 +518,8 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
         open_edit_session_dialog(
-            tab, row_data,
+            tab,
+            row_data,
             refresh_callback=lambda **_kw: fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab)),  # type: ignore[misc]
         )
 
@@ -382,7 +528,7 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         if active_sort_sesje.get("column") == col_name:
             active_sort_sesje["reverse"] = not active_sort_sesje.get("reverse", False)
         else:
-            active_sort_sesje["column"]  = col_name
+            active_sort_sesje["column"] = col_name
             active_sort_sesje["reverse"] = False
         sort_var.set(col_name)
         _apply_and_draw()
@@ -392,26 +538,32 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
             _on_edit(_row_idx, row_data)
 
         def _del() -> None:
-            sesja_id   = row_data[0]
+            sesja_id = row_data[0]
             sesja_data = row_data[1]
             if messagebox.askyesno(
-                    "Usuń sesję",
-                    f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
-                    parent=tab):
+                "Usuń sesję",
+                f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?"
+                "\n\nOperacja jest nieodwracalna.",
+                parent=tab,
+            ):
                 try:
                     with sqlite3.connect(DB_FILE) as conn:
+                        conn.row_factory = sqlite3.Row
+                        conn.execute("PRAGMA foreign_keys = ON")
                         c = conn.cursor()
                         c.execute("DELETE FROM sesje_gracze WHERE sesja_id=?", (sesja_id,))
                         c.execute("DELETE FROM sesje_rpg WHERE id=?", (sesja_id,))
                         conn.commit()
                     fill_sesje_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
                 except sqlite3.Error as e:
-                    messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć sesji:\n{e}", parent=tab)
+                    messagebox.showerror(
+                        "Błąd bazy danych", f"Nie udało się usunąć sesji:\n{e}", parent=tab
+                    )
 
         ctx = tk.Menu(tab, tearoff=0)
         ctx.add_command(label="Edytuj", command=_edit)
         ctx.add_separator()
-        ctx.add_command(label="Usuń",   command=_del)
+        ctx.add_command(label="Usuń", command=_del)
         ctx.tk_popup(event.x_root, event.y_root)
         ctx.grab_release()
 
@@ -437,15 +589,15 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
 
     # ── Zapisz cache na widgecie ───────────────────────────────────────────
     tab._sesje_tab_cache = {  # type: ignore[attr-defined]
-        'data_ref':  data_ref,
-        'apply_fn':  _apply_and_draw,
+        'data_ref': data_ref,
+        'apply_fn': _apply_and_draw,
         'table_ref': tbl,
         'dark_mode': dark_mode,
     }
 
     # ── Dialog filtrowania ────────────────────────────────────────────────────
     def _open_filter() -> None:
-        dlg = ctk.CTkToplevel(tab)
+        dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj sesje RPG")
         dlg.transient(tab.winfo_toplevel())
         apply_safe_geometry(dlg, tab.winfo_toplevel(), 400, 300)
@@ -466,9 +618,11 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
                     pass
         year_var_ = tk.StringVar(value=active_filters_sesje.get('year', 'Wszystkie'))
         ttk.Combobox(
-            mf, textvariable=year_var_,
+            mf,
+            textvariable=year_var_,
             values=['Wszystkie'] + sorted(years, reverse=True),
-            width=22, state="readonly",
+            width=22,
+            state="readonly",
         ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
 
         # System
@@ -476,18 +630,22 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         systems: set[str] = {str(r[2]) for r in cur if r[2]}
         system_var_ = tk.StringVar(value=active_filters_sesje.get('system', 'Wszystkie'))
         ttk.Combobox(
-            mf, textvariable=system_var_,
+            mf,
+            textvariable=system_var_,
             values=['Wszystkie'] + sorted(systems),
-            width=22, state="readonly",
+            width=22,
+            state="readonly",
         ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
 
         # Typ sesji
         ctk.CTkLabel(mf, text="Typ sesji:").grid(row=2, column=0, sticky="w", pady=8)
         typ_var_ = tk.StringVar(value=active_filters_sesje.get('typ', 'Wszystkie'))
         ttk.Combobox(
-            mf, textvariable=typ_var_,
+            mf,
+            textvariable=typ_var_,
             values=['Wszystkie', 'Kampania', 'Jednostrzał'],
-            width=22, state="readonly",
+            width=22,
+            state="readonly",
         ).grid(row=2, column=1, sticky="ew", pady=8, padx=(10, 0))
 
         # Mistrz Gry
@@ -495,9 +653,11 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         mgs: set[str] = {str(r[4]) for r in cur if r[4]}
         mg_var_ = tk.StringVar(value=active_filters_sesje.get('mg', 'Wszystkie'))
         ttk.Combobox(
-            mf, textvariable=mg_var_,
+            mf,
+            textvariable=mg_var_,
             values=['Wszystkie'] + sorted(mgs),
-            width=22, state="readonly",
+            width=22,
+            state="readonly",
         ).grid(row=3, column=1, sticky="ew", pady=8, padx=(10, 0))
 
         mf.columnconfigure(1, weight=1)
@@ -506,10 +666,10 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
         bf.grid(row=4, column=0, columnspan=2, pady=(20, 0))
 
         def _apply() -> None:
-            active_filters_sesje['year']   = year_var_.get()
+            active_filters_sesje['year'] = year_var_.get()
             active_filters_sesje['system'] = system_var_.get()
-            active_filters_sesje['typ']    = typ_var_.get()
-            active_filters_sesje['mg']     = mg_var_.get()
+            active_filters_sesje['typ'] = typ_var_.get()
+            active_filters_sesje['mg'] = mg_var_.get()
             _apply_and_draw()
             dlg.destroy()
 
@@ -518,24 +678,37 @@ def fill_sesje_rpg_tab(tab: tk.Frame, dark_mode: bool = False) -> None:
             _apply_and_draw()
             dlg.destroy()
 
-        ctk.CTkButton(bf, text="Zastosuj", command=_apply,
-                      fg_color="#2E7D32", hover_color="#1B5E20",
-                      width=90).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(bf, text="Resetuj",  command=_reset,
-                      fg_color="#1976D2", hover_color="#1565C0",
-                      width=90).pack(side=tk.LEFT, padx=5)
-        ctk.CTkButton(bf, text="Anuluj",   command=dlg.destroy,
-                      fg_color="#666666", hover_color="#555555",
-                      width=90).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf,
+            text="Zastosuj",
+            command=_apply,
+            fg_color="#2E7D32",
+            hover_color="#1B5E20",
+            width=90,
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf, text="Resetuj", command=_reset, fg_color="#1976D2", hover_color="#1565C0", width=90
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf,
+            text="Anuluj",
+            command=dlg.destroy,
+            fg_color="#666666",
+            hover_color="#555555",
+            width=90,
+        ).pack(side=tk.LEFT, padx=5)
 
-        dlg.after(300, lambda: dlg.winfo_exists() and (
-            dlg.deiconify(), dlg.lift(), dlg.focus_force()))
+        dlg.after(
+            300, lambda: dlg.winfo_exists() and (dlg.deiconify(), dlg.lift(), dlg.focus_force())
+        )
 
     # ── Pierwsze wypełnienie ─────────────────────────────────────────────────
     _apply_and_draw()
 
 
-def usun_zaznaczona_sesja(tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None) -> None:
+def usun_zaznaczona_sesja(
+    tab: tk.Frame, refresh_callback: Optional[Callable[..., None]] = None
+) -> None:
     """Usuwa zaznaczoną sesję z bazy danych"""
     table: Optional[CTkDataTable] = None
     for widget in tab.winfo_children():
@@ -553,18 +726,20 @@ def usun_zaznaczona_sesja(tab: tk.Frame, refresh_callback: Optional[Callable[...
         return
 
     _, row_data = sel
-    sesja_id   = row_data[0]
+    sesja_id = row_data[0]
     sesja_data = row_data[1]
 
     result = messagebox.askyesno(
         "Potwierdzenie usunięcia",
         f"Czy na pewno chcesz usunąć sesję z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
-        parent=tab
+        parent=tab,
     )
 
     if result:
         try:
             with sqlite3.connect(DB_FILE) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA foreign_keys = ON")
                 c = conn.cursor()
                 c.execute("DELETE FROM sesje_gracze WHERE sesja_id = ?", (sesja_id,))
                 c.execute("DELETE FROM sesje_rpg WHERE id = ?", (sesja_id,))
@@ -573,7 +748,10 @@ def usun_zaznaczona_sesja(tab: tk.Frame, refresh_callback: Optional[Callable[...
             if refresh_callback:
                 refresh_callback()
         except sqlite3.Error as e:
-            messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć sesji:\n{str(e)}", parent=tab)
+            messagebox.showerror(
+                "Błąd bazy danych", f"Nie udało się usunąć sesji:\n{str(e)}", parent=tab
+            )
+
 
 # Alias dla kompatybilności z main.py
 # Funkcja open_edit_session_dialog została przeniesiona do sesje_rpg_dialogs.py

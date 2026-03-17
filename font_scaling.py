@@ -10,10 +10,10 @@ font_scale_factor = 1.0
 def scale_font_size(base_size: int) -> int:
     """
     Skaluje rozmiar fontu na podstawie globalnego współczynnika.
-    
+
     Args:
         base_size: bazowy rozmiar czcionki
-        
+
     Returns:
         przeskalowany rozmiar czcionki (minimum 8px dla czytelności)
     """
@@ -23,7 +23,7 @@ def scale_font_size(base_size: int) -> int:
 def set_font_scale_factor(factor: float) -> None:
     """
     Ustawia globalny współczynnik skalowania fontów.
-    
+
     Args:
         factor: współczynnik skalowania (0.8 - 1.2)
     """
@@ -34,7 +34,7 @@ def set_font_scale_factor(factor: float) -> None:
 def get_font_scale_factor() -> float:
     """
     Pobiera aktualny współczynnik skalowania fontów.
-    
+
     Returns:
         aktualny współczynnik skalowania
     """

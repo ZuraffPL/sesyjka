@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.28-blue)
+![Version](https://img.shields.io/badge/version-0.3.30-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.28-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.30-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.28.exe`
+4. Uruchom `Sesyjka-v0.3.30.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.28.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.28.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.30.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.30.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -150,6 +150,7 @@ sesyjka/
 ├── statystyki.py           # Moduł statystyk
 ├── about_dialog.py         # Dialog "O programie"
 ├── apphistory.py           # Historia wersji
+├── pyrightconfig.json      # Konfiguracja type checkera Pyright
 ├── Icons/                  # Ikony aplikacji (edit.png, ...)
 └── .github/                # Konfiguracja GitHub
 ```
@@ -171,8 +172,6 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - ✅ **Wersjonowanie schematu** - bezpieczne aktualizacje struktury bazy
 - ✅ **Kompatybilność wsteczna** - Twoje dane są bezpieczne przy aktualizacjach
 
-📖 Szczegóły: [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md)
-
 ## 🎨 Interfejs
 
 - Nowoczesny interfejs oparty na CustomTkinter
@@ -185,6 +184,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.30 (18.03.2026)
+- ⚙️ **Refaktoryzacja kodu (Rundy 1–4)**: Black formatter zastosowany do wszystkich 14 plików źródłowych; `pyrightconfig.json` — konfiguracja type checkera; PEP 484 type hints we wszystkich nowych funkcjach i metodach
+- 🗄️ **SQLite best practices**: `conn.row_factory = sqlite3.Row` + `PRAGMA foreign_keys = ON` + context managery (`with sqlite3.connect(...) as conn:`) w całej aplikacji
+- 🧵 **Threading**: `fill_systemy_rpg_tab()`, `fill_sesje_rpg_tab()`, `fill_gracze_tab()`, `fill_wydawcy_tab()` oraz `update_system_chart()` — SQL/IO przeniesione do wątków tła z `widget.after()` do UI; naprawa N+1 query w statystykach (`WHERE id IN (?)`)
+- 🐛 **Naprawa UI**: `wraplength` zmniejszony do 510 px — tekst nie wychodzi poza krawędź okien dialogowych
 
 ### v0.3.28 (10.03.2026)
 - 🔍 **Wyszukiwanie na żywo** we wszystkich zakładkach: pole „Wyszukaj" w górnym pasku Graczy, Sesji RPG, Wydawców i Systemów RPG — filtrowanie w czasie rzeczywistym

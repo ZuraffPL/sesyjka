@@ -7,6 +7,7 @@ import json
 import os
 from typing import Any, Dict
 
+
 # Ścieżka do pliku ustawień (obok baz danych, w AppData)
 def _get_settings_path() -> str:
     app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
@@ -31,8 +32,8 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "sort": {
         "systemy": {"column": "ID", "reverse": False},
-        "sesje":   {"column": "ID", "reverse": False},
-        "gracze":  {"column": "ID", "reverse": False},
+        "sesje": {"column": "ID", "reverse": False},
+        "gracze": {"column": "ID", "reverse": False},
         "wydawcy": {"column": "ID", "reverse": False},
     },
 }
@@ -66,6 +67,7 @@ def save_settings(settings: Dict[str, Any]) -> None:
 
 def _deep_copy(d: Any) -> Any:
     import copy
+
     return copy.deepcopy(d)
 
 

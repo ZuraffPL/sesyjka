@@ -62,6 +62,31 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.3.31",
+            "date": "18.03.2026",
+            "changes": [
+                "📈 NAPRAWA STATYSTYKI — WYKRES SYSTEMÓW:°",
+                "",
+                "✅ STATYSTYKI.PY — ROSNąCE OKNO:",
+                "  • pack_propagate(False) na ramce wykresu",
+                "    — canvas matplotlib nie rozciąga już okna",
+                "  • figsize dynamiczne: winfo_width()/height()",
+                "    zamiast max(3, len * 0.4)",
+                "  • update_idletasks() po destroy — poprawny",
+                "    pomiar dostępnej przestrzeni",
+                "  • Etykieta podsumowania pakowana BOTTOM",
+                "    przed canvasem — nie wypycha wykresu",
+                "",
+                "🖼️ LAYOUT KOLUMN STATYSTYK:°",
+                "",
+                "  • Kolumny 0 i 1: równe (weight=1, min 280px)",
+                "  • Kolumna 2 (systemy): szersza",
+                "    (weight=3, min 520px)",
+                "  • Nagłówek pierwszej statystyki: wraplength=240",
+                "    — tekst zawija się zamiast rozszerzać kolumnę",
+            ],
+        },
+        {
             "version": "0.3.30",
             "date": "18.03.2026",
             "changes": [

@@ -93,9 +93,9 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
     grid_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
     # Konfiguracja kolumn - 3 kolumny z różnymi proporcjami
-    grid_container.columnconfigure(0, weight=0, minsize=220)  # Wykres kołowy - kompaktowy
-    grid_container.columnconfigure(1, weight=1, minsize=320)  # MG vs Gracz
-    grid_container.columnconfigure(2, weight=2, minsize=450)  # Systemy - potrzebuje więcej miejsca
+    grid_container.columnconfigure(0, weight=1, minsize=280)  # Wykres kołowy
+    grid_container.columnconfigure(1, weight=1, minsize=280)  # MG vs Gracz
+    grid_container.columnconfigure(2, weight=3, minsize=520)  # Systemy - więcej miejsca
     # Konfiguracja wiersza - jednolita wysokość
     grid_container.rowconfigure(0, weight=1, minsize=500)
 
@@ -110,6 +110,8 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
         font=('Segoe UI', scale_font_size(14), 'bold'),
         bg=frame_bg,
         fg=fg_color,
+        wraplength=240,
+        justify='center',
     )
     stats_title.pack(pady=(15, 10))
 
@@ -624,6 +626,7 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
 
             # Ramka dla wykresu
             chart_system_frame = tk.Frame(system_sessions_frame, bg=frame_bg)  # type: ignore
+            chart_system_frame.pack_propagate(False)  # nie pozwól canvas matplotlib rozciągać ramki
             chart_system_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(10, 15))
 
             def update_system_chart(*args: object) -> None:
@@ -682,10 +685,16 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                     """Buduje wykres w wątku głównym."""
                     for widget in chart_system_frame.winfo_children():
                         widget.destroy()
+                    # Wymuś przeliczenie geometrii — po destroy, przed pomiarem
+                    chart_system_frame.update_idletasks()
                     if sorted_systems:
-                        fig3 = Figure(
-                            figsize=(5, max(3, len(sorted_systems) * 0.4)), dpi=100
-                        )
+                        # Dopasuj figurę do faktycznie dostępnej przestrzeni ramki
+                        _avail_w = max(chart_system_frame.winfo_width(), 400)
+                        _avail_h = max(chart_system_frame.winfo_height(), 300)
+                        _dpi = 100
+                        _fig_w = _avail_w / _dpi
+                        _fig_h = max(2.5, (_avail_h - 40) / _dpi)  # 40 px na etykietę podsumowania
+                        fig3 = Figure(figsize=(_fig_w, _fig_h), dpi=_dpi)
                         fig3.patch.set_facecolor(frame_bg)
                         ax3 = fig3.add_subplot(111)
                         ax3.set_facecolor(frame_bg)
@@ -744,9 +753,7 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                                 color=fg_color,
                             )
                         fig3.tight_layout()
-                        canvas_widget3 = FigureCanvasTkAgg(fig3, chart_system_frame)
-                        canvas_widget3.draw()
-                        canvas_widget3.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+                        # Etykieta podsumowania najpierw — rezerwuje miejsce od dołu
                         total_system_sessions = sum(counts)
                         summary_system_label = tk.Label(
                             chart_system_frame,
@@ -758,7 +765,11 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                             bg=frame_bg,
                             fg=fg_color,
                         )
-                        summary_system_label.pack(pady=(5, 10))
+                        summary_system_label.pack(side=tk.BOTTOM, pady=(5, 10))
+                        # Canvas wypełnia pozostałą przestrzeń powyżej etykiety
+                        canvas_widget3 = FigureCanvasTkAgg(fig3, chart_system_frame)
+                        canvas_widget3.draw()
+                        canvas_widget3.get_tk_widget().pack(fill=tk.BOTH, expand=True)
                     else:
                         no_data_system_label = tk.Label(
                             chart_system_frame,

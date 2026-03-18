@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.30-blue)
+![Version](https://img.shields.io/badge/version-0.3.31-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.30-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.31-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.30.exe`
+4. Uruchom `Sesyjka-v0.3.31.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.30.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.30.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.31.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.31.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -184,6 +184,11 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.31 (18.03.2026)
+- 📈 **Naprawa rosnącego wykresu systemów**: `pack_propagate(False)` na ramce wykresu + `figsize` dopasowane do faktycznej przestrzeni ramki (`winfo_width/height`) — zmiana roku nie rozciąga już okna aplikacji
+- 📊 **Etykieta podsumowania**: pakowana jako `BOTTOM` przed canvasem — nie wypycha wykresu poza ramkę
+- 🖼️ **Layout kolumn statystyk**: kolumna 0 i 1 równe (`weight=1, minsize=280`), kolumna 2 szersza (`weight=3, minsize=520`); nagłówek pierwszej statystyki z `wraplength=240`
 
 ### v0.3.30 (18.03.2026)
 - ⚙️ **Refaktoryzacja kodu (Rundy 1–4)**: Black formatter zastosowany do wszystkich 14 plików źródłowych; `pyrightconfig.json` — konfiguracja type checkera; PEP 484 type hints we wszystkich nowych funkcjach i metodach

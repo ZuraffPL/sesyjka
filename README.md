@@ -343,10 +343,6 @@ Od wersji 0.3.8 wszystkie dane są przechowywane w lokalizacji:
 
 Twoje dane są bezpieczne i oddzielone od plików aplikacji.
 
-### Co się stanie z moimi danymi po aktualizacji?
-
-Aplikacja automatycznie przeniesie Twoje dane do nowej lokalizacji i utworzy backup. Szczegóły w [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md).
-
 ### Czy mogę użyć aplikacji bez instalacji Python?
 
 Tak! Pobierz wersję binarną (.exe) z sekcji [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest). Nie wymaga instalacji Python ani żadnych dodatkowych pakietów.

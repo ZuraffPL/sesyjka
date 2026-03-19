@@ -229,9 +229,69 @@ conn.execute("PRAGMA foreign_keys = ON")  # wymuszenie integralności referencyj
         przy dużych tabelach (sesje, systemy) rozważyć dodanie indeksów na kolumnach filtrowanych (np. rok, system, MG, status) w ramach migracji; nie tworzyć indeksów „na żywo” w UI.
     Architektura wielu baz — uzasadnienie i ograniczenia:
 
-        Projekt celowo utrzymuje 4 oddzielne pliki `.db` (`systemy_rpg.db`, `sesje_rpg.db`, `gracze.db`, `wydawcy.db`) dla rozdzielenia kontekstów domenowych i uproszczenia backupów/migracji per-moduł.
+        Projekt celowo utrzymuje 4 oddzielne pliki `.db` (`systemy_rpg.db`, `sesje_rpg.db`,
+        `gracze.db`, `wydawcy.db`) dla rozdzielenia kontekstów domenowych i uproszczenia
+        backupów/migracji per-moduł.
 
-        **Zakaz:** nie używać `ATTACH DATABASE` do łączenia baz "na żywo" w czasie działania aplikacji bez osobnej decyzji architektonicznej — może prowadzić do trudnych w debugowaniu zależności między bazami. Zapytania cross-bazowe realizować przez denormalizację lub buforowanie w pamięci.
+        **Zakaz:** nie używać `ATTACH DATABASE` do łączenia baz „na żywo" w czasie działania
+        aplikacji bez osobnej decyzji architektonicznej — może prowadzić do trudnych
+        w debugowaniu zależności między bazami.
+        Zapytania cross-bazowe realizować przez denormalizację lub buforowanie w pamięci.
+
+        **Zakaz używania FOREIGN KEY między różnymi plikami `.db`:**
+        SQLite nie obsługuje deklaratywnych kluczy obcych wskazujących na tabele
+        w innym pliku bazy danych. Próba wymuszenia `PRAGMA foreign_keys = ON`
+        przy `FOREIGN KEY (x) REFERENCES tabela_z_innej_bazy(id)` powoduje błąd
+        `no such table: main.<nazwa_tabeli>` przy każdej operacji INSERT/UPDATE.
+
+        Dotyczy to konkretnie:
+            - `sesje_rpg.db` → referencje do `gracze.db` (mg_id, gracz_id) i `systemy_rpg.db` (system_id),
+            - `systemy_rpg.db` → referencje do `wydawcy.db` (wydawca_id).
+
+        FK dozwolone są WYŁĄCZNIE wewnątrz tego samego pliku `.db`, np.:
+            - `sesje_gracze.sesja_id → sesje_rpg.id` (obydwie w `sesje_rpg.db`) ✅
+            - `systemy_rpg.system_glowny_id → systemy_rpg.id` (obydwie w `systemy_rpg.db`) ✅
+
+    Integralność referencyjna między bazami — walidacja po stronie Pythona:
+
+        Ponieważ SQLite nie może egzekwować spójności między oddzielnymi plikami `.db`,
+        całą odpowiedzialność za walidację referencji cross-bazowych przejmuje kod Pythona.
+
+        **Obowiązek:** każda funkcja zapisująca dane, która korzysta z ID z innej bazy
+        (np. `system_id`, `mg_id`, `gracz_id`, `wydawca_id`), MUSI przed zapisem
+        sprawdzić istnienie rekordu w docelowej bazie.
+
+        Wzorzec walidacji (umieszczać w module domenowym, nie w callbacku UI):
+
+        ```python
+        def validate_cross_db_refs(system_id: int, mg_id: int, gracze_ids: list[int]) -> None:
+            """Rzuca ValueError jeśli którykolwiek z ID nie istnieje w odpowiedniej bazie."""
+            with sqlite3.connect(get_db_path("systemy_rpg.db")) as conn:
+                if not conn.execute(
+                    "SELECT 1 FROM systemy_rpg WHERE id=?", (system_id,)
+                ).fetchone():
+                    raise ValueError(f"System RPG o ID {system_id} nie istnieje.")
+
+            with sqlite3.connect(get_db_path("gracze.db")) as conn:
+                for gid in [mg_id] + gracze_ids:
+                    if not conn.execute(
+                        "SELECT 1 FROM gracze WHERE id=?", (gid,)
+                    ).fetchone():
+                        raise ValueError(f"Gracz o ID {gid} nie istnieje.")
+        ```
+
+        Walidację należy wywoływać w funkcji `on_save()` dialogu przed każdym `INSERT`/`UPDATE`,
+        a błąd `ValueError` przekształcać w komunikat `messagebox.showerror()` widoczny dla użytkownika.
+
+        **Zakaz cichego ignorowania błędów walidacji cross-bazowej** — brak rekordu
+        w obcej bazie nie może skutkować zapisem osieroconych ID (foreign key orphan).
+
+    PRAGMA foreign_keys — kiedy używać:
+
+        `PRAGMA foreign_keys = ON` pozostaje wymagane we wszystkich połączeniach,
+        ale ma skutek TYLKO dla FK wewnątrz tego samego pliku `.db`.
+        Nie usuwać tej PRAGMA — nadal chroni relacje wewnątrzbazowe
+        (np. `sesje_gracze → sesje_rpg`, `systemy_rpg → systemy_rpg`).
 ## Skalowanie, DPI, geometria
 
     Wszelka logika dot. DPI i geometrii dialogów:

@@ -49,8 +49,98 @@ active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
 all_expanded_systemy: bool = False
 
 
+def _migrate_remove_cross_db_fks() -> None:
+    """Jednorazowa migracja: usuwa cross-bazowy FK wydawcy z tabeli systemy_rpg.
+
+    `FOREIGN KEY (wydawca_id) REFERENCES wydawcy(id)` wskazuje na inny plik .db,
+    co jest nieobsługiwane przez SQLite i powoduje błąd przy INSERT gdy
+    PRAGMA foreign_keys = ON.  FK do systemy_rpg(id) (self-reference) jest
+    zachowywany — leży w tej samej bazie.
+    """
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return  # Baza nie istnieje — init_db() stworzy ją poprawnie
+
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    conn.isolation_level = None  # tryb explicit — pełna kontrola nad transakcją
+    try:
+        c = conn.cursor()
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='systemy_rpg'")
+        row = c.fetchone()
+        if row is None or "REFERENCES wydawcy" not in row["sql"]:
+            return  # Migracja nie jest potrzebna
+
+        logger.info("Migracja: usuwanie cross-bazowego FK wydawcy z tabeli systemy_rpg…")
+
+        # Pobierz faktyczne kolumny istniejącej tabeli
+        c.execute("PRAGMA table_info(systemy_rpg)")
+        existing_cols = [r["name"] for r in c.fetchall()]
+
+        # Docelowa lista kolumn nowej tabeli
+        target_cols = [
+            "id", "nazwa", "typ", "system_glowny_id", "typ_suplementu", "wydawca_id",
+            "fizyczny", "pdf", "jezyk", "status_gra", "status_kolekcja",
+            "cena_zakupu", "waluta_zakupu", "cena_sprzedazy", "waluta_sprzedazy",
+            "vtt", "system_glowny_nazwa_custom",
+        ]
+        copy_cols = [col for col in target_cols if col in existing_cols]
+        cols_str = ", ".join(copy_cols)
+
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN")
+
+        conn.execute(
+            """
+            CREATE TABLE systemy_rpg_mig_new (
+                id INTEGER PRIMARY KEY,
+                nazwa TEXT NOT NULL,
+                typ TEXT NOT NULL,
+                system_glowny_id INTEGER,
+                typ_suplementu TEXT,
+                wydawca_id INTEGER,
+                fizyczny INTEGER DEFAULT 0,
+                pdf INTEGER DEFAULT 0,
+                jezyk TEXT,
+                status_gra TEXT DEFAULT 'Nie grane',
+                status_kolekcja TEXT DEFAULT 'W kolekcji',
+                cena_zakupu REAL,
+                waluta_zakupu TEXT,
+                cena_sprzedazy REAL,
+                waluta_sprzedazy TEXT,
+                vtt TEXT,
+                system_glowny_nazwa_custom TEXT,
+                FOREIGN KEY (system_glowny_id) REFERENCES systemy_rpg(id)
+            )
+        """
+        )
+        conn.execute(
+            f"INSERT INTO systemy_rpg_mig_new ({cols_str}) "
+            f"SELECT {cols_str} FROM systemy_rpg"
+        )
+        conn.execute("DROP TABLE systemy_rpg")
+        conn.execute("ALTER TABLE systemy_rpg_mig_new RENAME TO systemy_rpg")
+
+        conn.execute("COMMIT")
+        conn.execute("PRAGMA foreign_keys = ON")
+        logger.info("Migracja systemy_rpg zakończona pomyślnie.")
+    except Exception as exc:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        logger.error("Błąd podczas migracji systemy_rpg: %s", exc)
+        raise
+    finally:
+        conn.close()
+
+
 def init_db() -> None:
     """Inicjalizuje bazę danych systemów RPG"""
+    # Jednorazowa migracja usuwająca cross-bazowe FK sprzed poprawki
+    _migrate_remove_cross_db_fks()
+
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -73,8 +163,7 @@ def init_db() -> None:
                 waluta_zakupu TEXT,
                 cena_sprzedazy REAL,
                 waluta_sprzedazy TEXT,
-                FOREIGN KEY (system_glowny_id) REFERENCES systemy_rpg(id),
-                FOREIGN KEY (wydawca_id) REFERENCES wydawcy(id)
+                FOREIGN KEY (system_glowny_id) REFERENCES systemy_rpg(id)
             )
         """
         )

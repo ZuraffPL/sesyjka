@@ -19,6 +19,105 @@ _log = logging.getLogger(__name__)
 
 DB_FILE = get_db_path("sesje_rpg.db")
 
+
+def _migrate_remove_cross_db_fks() -> None:
+    """Jednorazowa migracja: usuwa cross-bazowe FK z tabel sesje_rpg i sesje_gracze.
+
+    SQLite nie obsługuje FK między różnymi plikami .db.  Tabele mogły zostać
+    założone z błędnymi deklaracjami FOREIGN KEY, co powoduje błąd przy każdym
+    INSERT gdy PRAGMA foreign_keys = ON.  Funkcja sprawdza stan istniejącej bazy
+    i w razie potrzeby odtwarza tabele bez tych ograniczeń.
+    """
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return  # Baza nie istnieje — init_db() stworzy ją poprawnie
+
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    conn.isolation_level = None  # tryb explicit — pełna kontrola nad transakcją
+    try:
+        c = conn.cursor()
+
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='sesje_rpg'")
+        row = c.fetchone()
+        needs_sesje_rpg = row is not None and (
+            "REFERENCES systemy_rpg" in row["sql"] or "REFERENCES gracze" in row["sql"]
+        )
+
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='sesje_gracze'")
+        row2 = c.fetchone()
+        needs_sesje_gracze = row2 is not None and "REFERENCES gracze" in row2["sql"]
+
+        if not needs_sesje_rpg and not needs_sesje_gracze:
+            return
+
+        _log.info("Migracja: usuwanie cross-bazowych FK z tabel sesji RPG…")
+
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN")
+
+        if needs_sesje_rpg:
+            conn.execute(
+                """
+                CREATE TABLE sesje_rpg_mig_new (
+                    id INTEGER PRIMARY KEY,
+                    data_sesji TEXT NOT NULL,
+                    system_id INTEGER NOT NULL,
+                    liczba_graczy INTEGER NOT NULL,
+                    mg_id INTEGER NOT NULL,
+                    kampania INTEGER DEFAULT 0,
+                    jednostrzal INTEGER DEFAULT 0,
+                    tytul_kampanii TEXT,
+                    tytul_przygody TEXT
+                )
+            """
+            )
+            conn.execute(
+                """
+                INSERT INTO sesje_rpg_mig_new
+                SELECT id, data_sesji, system_id, liczba_graczy, mg_id,
+                       kampania, jednostrzal, tytul_kampanii, tytul_przygody
+                FROM sesje_rpg
+            """
+            )
+            conn.execute("DROP TABLE sesje_rpg")
+            conn.execute("ALTER TABLE sesje_rpg_mig_new RENAME TO sesje_rpg")
+
+        if needs_sesje_gracze:
+            conn.execute(
+                """
+                CREATE TABLE sesje_gracze_mig_new (
+                    sesja_id INTEGER NOT NULL,
+                    gracz_id INTEGER NOT NULL,
+                    PRIMARY KEY (sesja_id, gracz_id),
+                    FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE
+                )
+            """
+            )
+            conn.execute(
+                """
+                INSERT INTO sesje_gracze_mig_new
+                SELECT sesja_id, gracz_id FROM sesje_gracze
+            """
+            )
+            conn.execute("DROP TABLE sesje_gracze")
+            conn.execute("ALTER TABLE sesje_gracze_mig_new RENAME TO sesje_gracze")
+
+        conn.execute("COMMIT")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _log.info("Migracja sesji RPG zakończona pomyślnie.")
+    except Exception as exc:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        _log.error("Błąd podczas migracji sesji RPG: %s", exc)
+        raise
+    finally:
+        conn.close()
+
+
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_sesje: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
@@ -27,11 +126,14 @@ active_sort_sesje: Dict[str, Any] = {"column": "ID", "reverse": False}
 
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
+    # Jednorazowa migracja usuwająca cross-bazowe FK sprzed poprawki
+    _migrate_remove_cross_db_fks()
+
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        # Tabela główna sesji
+        # Tabela główna sesji — bez cross-bazowych FK (system_id/mg_id z innych plików .db)
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS sesje_rpg (
@@ -43,22 +145,20 @@ def init_db() -> None:
                 kampania INTEGER DEFAULT 0,
                 jednostrzal INTEGER DEFAULT 0,
                 tytul_kampanii TEXT,
-                tytul_przygody TEXT,
-                FOREIGN KEY (system_id) REFERENCES systemy_rpg(id),
-                FOREIGN KEY (mg_id) REFERENCES gracze(id)
+                tytul_przygody TEXT
             )
         """
         )
 
-        # Tabela relacji sesja-gracze
+        # Tabela relacji sesja-gracze — FK do sesje_rpg jest w tej samej bazie (OK)
+        # gracz_id pochodzi z gracze.db (inna baza) — walidacja po stronie Pythona
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS sesje_gracze (
                 sesja_id INTEGER NOT NULL,
                 gracz_id INTEGER NOT NULL,
                 PRIMARY KEY (sesja_id, gracz_id),
-                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE,
-                FOREIGN KEY (gracz_id) REFERENCES gracze(id)
+                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE
             )
         """
         )

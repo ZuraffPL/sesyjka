@@ -727,12 +727,15 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                             color=fg_color,
                             fontweight='bold',
                         )
-                        ax3.set_title(
+                        # Tytuł przez suptitle — zawsze wyśrodkowany względem figury,
+                        # nie względem osi (oś jest przesunięta w lewo przez długie etykiety Y)
+                        fig3.suptitle(
                             f'Sesje według systemów w {selected_year}',
                             fontsize=scale_font_size(11),
                             fontweight='bold',
                             color=fg_color,
-                            pad=10,
+                            x=0.5,
+                            y=0.98,
                         )
                         ax3.tick_params(axis='x', colors=fg_color)
                         ax3.tick_params(axis='y', colors=fg_color)
@@ -752,7 +755,8 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                                 fontsize=scale_font_size(9),
                                 color=fg_color,
                             )
-                        fig3.tight_layout()
+                        # rect zostawia miejsce u góry dla suptitle
+                        fig3.tight_layout(rect=(0, 0, 1, 0.93))
                         # Etykieta podsumowania najpierw — rezerwuje miejsce od dołu
                         total_system_sessions = sum(counts)
                         summary_system_label = tk.Label(

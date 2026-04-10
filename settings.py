@@ -36,6 +36,28 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "gracze": {"column": "ID", "reverse": False},
         "wydawcy": {"column": "ID", "reverse": False},
     },
+    "visible_columns": {
+        "systemy": {
+            "Nazwa systemu": True,
+            "Typ": True,
+            "System główny": True,
+            "Typ suplementu": True,
+            "Wydawca": True,
+            "Fizyczny": True,
+            "PDF": True,
+            "VTT": True,
+            "Język": True,
+            "Status": True,
+            "Cena": True,
+        },
+        "sesje": {
+            "Data": True,
+            "System": True,
+            "Typ sesji": True,
+            "Mistrz Gry": True,
+            "Gracze": True,
+        },
+    },
 }
 
 

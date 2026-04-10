@@ -20,7 +20,7 @@ import customtkinter as ctk  # type: ignore
 import logging as _logging
 import time as _time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 _log = _logging.getLogger(__name__)
 
@@ -50,6 +50,8 @@ def _attach_file_handler() -> None:
 
 _attach_file_handler()
 
+_PILImage: Any = None
+_PILImageTk: Any = None
 try:
     from PIL import Image as _PILImage  # type: ignore
     from PIL import ImageTk as _PILImageTk  # type: ignore
@@ -258,6 +260,7 @@ class CTkDataTable(tk.Frame):
         cell_click_callback: Optional[Callable[[int, int, List[Any]], None]] = None,
         right_click_callback: Optional[Callable[[int, List[Any], Any], None]] = None,
         show_row_numbers: bool = False,
+        hidden_cols: Optional[List[int]] = None,
         **kw: Any,
     ) -> None:
         t = _D if dark_mode else _L
@@ -275,6 +278,7 @@ class CTkDataTable(tk.Frame):
         self._cell_cb = cell_click_callback
         self._rc_cb = right_click_callback
         self._show_row_num = show_row_numbers
+        self._hidden_cols: Set[int] = set(hidden_cols or [])
         self._theme = t
         self._row_frames: List[tk.Frame] = []
         self._row_pool: Dict[Any, tk.Frame] = {}  # ID → ukryta ramka do ponownego użycia
@@ -307,6 +311,11 @@ class CTkDataTable(tk.Frame):
             x += _ROW_NUM_W
 
         for i, (h, w) in enumerate(zip(self.headers, self.col_widths)):
+            if i in self._hidden_cols:
+                if i == self._id_col:
+                    tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
+                    x += _EDIT_W
+                continue
             lbl = tk.Label(
                 hf,
                 text=h,
@@ -554,6 +563,41 @@ class CTkDataTable(tk.Frame):
             x += _ROW_NUM_W
 
         for j, (val, w) in enumerate(zip(row, self.col_widths)):
+            if j in self._hidden_cols:
+                if j == self._id_col:
+                    # Przycisk edycji nawet gdy kolumna ID ukryta – wstawiamy przycisk bez kolumny
+                    ri_, rd_ = i, list(row)
+                    is_dark = t is _D
+                    icon = _get_edit_photo(dark=is_dark)
+                    btn = tk.Button(
+                        rf,
+                        image=icon if icon else "",  # type: ignore
+                        text="" if icon else "✎",
+                        compound="center",
+                        bg=t["edit_bg"],
+                        fg=t["edit_fg"],
+                        activebackground=t["edit_hover"],
+                        activeforeground=t["edit_fg"],
+                        font=("Segoe UI", scale_font_size(11)),
+                        relief="flat",
+                        bd=0,
+                        cursor="hand2",
+                        command=lambda ri=ri_, rd=rd_: self._edit_cb(ri, rd),
+                    )
+                    if icon:
+                        btn._icon_ref = icon  # type: ignore
+                    btn.place(x=x + 2, y=2, width=_EDIT_W - 4, height=_ROW_H - 4)
+                    _Tooltip(btn, "Edytuj")
+                    btn.bind("<Enter>", _on_enter, add="+")
+                    btn.bind("<Leave>", _on_leave, add="+")
+                    if self._rc_cb is not None:
+                        btn.bind(
+                            "<Button-3>",
+                            lambda _e, ri=ri_, rd=rd_: self._rc_cb(ri, rd, _e),  # type: ignore
+                        )
+                    x += _EDIT_W
+                continue
+
             text = str(val) if val is not None else ""
             anchor = "center" if j in self._center_cols else "w"
             padx = 0 if j in self._center_cols else 4

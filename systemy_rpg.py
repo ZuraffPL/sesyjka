@@ -47,6 +47,23 @@ active_filters_systemy: Dict[str, Any] = {}
 active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
 # Stan przełącznika rozwiń/zwiń wszystkie suplementy
 all_expanded_systemy: bool = False
+# Widoczność kolumn w tabeli systemów (klucz = nazwa kolumny, wartość = czy widoczna)
+active_visible_cols_systemy: Dict[str, bool] = {
+    "Nazwa systemu": True,
+    "Typ": True,
+    "System główny": True,
+    "Typ suplementu": True,
+    "Wydawca": True,
+    "Fizyczny": True,
+    "PDF": True,
+    "VTT": True,
+    "Język": True,
+    "Status": True,
+    "Cena": True,
+}
+
+# Kolumny, które zawsze są widoczne (nie można ich ukryć)
+_ALWAYS_VISIBLE_SYSTEMY = {"", "ID"}
 
 
 def _migrate_remove_cross_db_fks() -> None:
@@ -259,12 +276,13 @@ def _apply_dark_theme_to_widget(
             if widget_class in ('Checkbutton', 'Radiobutton'):
                 widget.configure(selectcolor=dark_entry_bg, activebackground=dark_bg, activeforeground=dark_fg)  # type: ignore
         elif widget_class in ('Entry', 'Text'):
-            widget.configure(
+            _w: Any = widget
+            _w.configure(
                 bg=dark_entry_bg,
-                fg=dark_entry_fg,  # type: ignore
+                fg=dark_entry_fg,
                 insertbackground=dark_entry_fg,
                 selectbackground="#0078d4",
-            )  # type: ignore
+            )
         elif widget_class == 'Frame':
             widget.configure(bg=dark_bg)  # type: ignore
         elif widget_class == 'Combobox':
@@ -1464,6 +1482,9 @@ def fill_systemy_rpg_tab(
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
     search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    cols_btn = ttk.Button(top_bar, text="Kolumny", command=lambda: _open_columns_dialog())
+    cols_btn.pack(side=tk.LEFT, padx=4)
 
     # ── Tabela ───────────────────────────────────────────────────────────
     _rebuild_groups()
@@ -1475,6 +1496,16 @@ def fill_systemy_rpg_tab(
     ):
         _do_sort_main_systems(active_sort_systemy.get("reverse", False))
     initial_data = _build_hierarchical_data()
+
+    def _compute_hidden_cols() -> List[int]:
+        """Zwraca listę indeksów kolumn do ukrycia na podstawie active_visible_cols_systemy."""
+        hidden: List[int] = []
+        for idx, hdr in enumerate(_HEADERS):
+            if hdr in _ALWAYS_VISIBLE_SYSTEMY:
+                continue
+            if not active_visible_cols_systemy.get(hdr, True):
+                hidden.append(idx)
+        return hidden
 
     tbl = CTkDataTable(
         tab,
@@ -1490,6 +1521,7 @@ def fill_systemy_rpg_tab(
         right_click_callback=_on_right_click,
         cell_click_callback=_on_cell_click,
         show_row_numbers=True,
+        hidden_cols=_compute_hidden_cols(),
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
@@ -1591,6 +1623,67 @@ def fill_systemy_rpg_tab(
     displayed_data = initial_data
     tbl.set_data(initial_data)
     _refresh_filter_btn()
+
+    # ── Dialog wyboru kolumn ─────────────────────────────────────────────
+    def _open_columns_dialog() -> None:
+        """Otwiera dialog z checkboxami do wyboru widocznych kolumn tabeli systemów."""
+        dlg = create_ctk_toplevel(tab)
+        dlg.title("Widoczność kolumn – Systemy RPG")
+        dlg.transient(tab.winfo_toplevel())
+
+        # Kolumny z możliwością ukrycia (bez zawsze-widocznych)
+        toggleable = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SYSTEMY]
+        dialog_h = 80 + len(toggleable) * 38
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 280, dialog_h)
+
+        mf = ctk.CTkFrame(dlg)
+        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+
+        ctk.CTkLabel(
+            mf,
+            text="Wybierz widoczne kolumny:",
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
+        ).pack(anchor="w", pady=(0, 8))
+
+        vars_: Dict[str, tk.BooleanVar] = {}
+        for col_name in toggleable:
+            v = tk.BooleanVar(value=active_visible_cols_systemy.get(col_name, True))
+            vars_[col_name] = v
+            ctk.CTkCheckBox(mf, text=col_name, variable=v).pack(anchor="w", pady=2)
+
+        bf = ctk.CTkFrame(mf, fg_color="transparent")
+        bf.pack(pady=(14, 0))
+
+        def _apply() -> None:
+            for col_name, v in vars_.items():
+                active_visible_cols_systemy[col_name] = bool(v.get())
+            dlg.destroy()
+            cache = getattr(tab, '_systemy_tab_cache', None)
+            preloaded = cache['records_ref'][0] if cache else None
+            # Wymuś pełny rebuild tabeli (nowe hidden_cols pomija szybka ścieżka)
+            if hasattr(tab, '_systemy_tab_cache'):
+                del tab._systemy_tab_cache  # type: ignore[attr-defined]
+            fill_systemy_rpg_tab(tab, dark_mode=dark_mode, _preloaded_data=preloaded)
+
+        def _reset() -> None:
+            for v in vars_.values():
+                v.set(True)
+
+        ctk.CTkButton(
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf, text="Zaznacz wszystkie", command=_reset, fg_color="#1976D2",
+            hover_color="#1565C0", width=130,
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666",
+            hover_color="#555555", width=90,
+        ).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(
+            300, lambda: dlg.winfo_exists() and (dlg.deiconify(), dlg.lift(), dlg.focus_force())
+        )
 
 
 def usun_zaznaczony_system(

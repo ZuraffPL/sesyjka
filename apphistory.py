@@ -62,6 +62,36 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.3.32",
+            "date": "10.04.2026",
+            "changes": [
+                "🎛️ WYBÓR WIDOCZNYCH KOLUMN:°",
+                "",
+                "✅ SYSTEMY RPG I SESJE RPG:",
+                "  • nowy przycisk „Kolumny" w górnym pasku obu zakładek",
+                "  • dialog z checkboxami — ukryj/pokaż dowolne kolumny tabeli",
+                "  • kolumny ID/symbol zawsze widoczne (nie można ukryć)",
+                "  • preferencje widoczności zapisywane w settings.json",
+                "  • odtwarzane przy starcie aplikacji",
+                "",
+                "🔧 CTK_TABLE.PY — hidden_cols:°",
+                "",
+                "  • nowy parametr hidden_cols: Optional[List[int]]",
+                "    w konstruktorze CTkDataTable",
+                "  • nagłówki i komórki ukrytych kolumn pomijane",
+                "    w renderowaniu (dane w callbackach pełne)",
+                "",
+                "🐛 NAPRAWIONE BŁĘDY:°",
+                "",
+                "  • Pyright: reportPossiblyUnbound dla _PILImage/_PILImageTk",
+                "    (inicjalizacja jako Any = None przed blokiem try)",
+                "  • Pyright: błędy call-arg dla configure(bg=...) na widgetach",
+                "    tkinter — cast do Any w systemy_rpg.py i sesje_rpg.py",
+                "  • Odświeżanie tabeli po zmianie kolumn: usunięcie cache",
+                "    przed przebudową wymusza pełny rebuild z nowym hidden_cols",
+            ],
+        },
+        {
             "version": "0.3.31",
             "date": "18.03.2026",
             "changes": [

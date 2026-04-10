@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.31-blue)
+![Version](https://img.shields.io/badge/version-0.3.32-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.31-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.32-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.31.exe`
+4. Uruchom `Sesyjka-v0.3.32.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.31.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.31.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.32.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.32.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -184,6 +184,11 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.32 (10.04.2026)
+- 🎛️ **Wybór widocznych kolumn**: nowy przycisk „Kolumny" w górnym pasku zakładek Systemy RPG i Sesje RPG — dialog z checkboxami umożliwia ukrycie/pokazanie dowolnych kolumn tabeli; preferencje zapisywane w `settings.json`
+- 🔧 **Naprawione błędy Pyright**: `reportPossiblyUnbound` dla `_PILImage`/`_PILImageTk` w `ctk_table.py`; wywołania `configure(bg=..., insertbackground=...)` na widgetach tkinter castowanych do `Any`
+- 🐛 **Naprawa odświeżania tabeli po zmianie kolumn**: usunięcie cache przed przebudową wymusza pełny rebuild `CTkDataTable` z nową listą `hidden_cols`
 
 ### v0.3.31 (18.03.2026)
 - 📈 **Naprawa rosnącego wykresu systemów**: `pack_propagate(False)` na ramce wykresu + `figsize` dopasowane do faktycznej przestrzeni ramki (`winfo_width/height`) — zmiana roku nie rozciąga już okna aplikacji

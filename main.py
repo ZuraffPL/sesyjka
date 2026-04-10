@@ -26,7 +26,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.31"
+APP_VERSION = "0.3.32"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -592,6 +592,9 @@ if __name__ == "__main__":
     sesje_rpg.active_sort_sesje.update(_saved["sort"].get("sesje", {}))
     gracze.active_sort_gracze.update(_saved["sort"].get("gracze", {}))
     wydawcy.active_sort_wydawcy.update(_saved["sort"].get("wydawcy", {}))
+    _vc = _saved.get("visible_columns", {})
+    systemy_rpg.active_visible_cols_systemy.update(_vc.get("systemy", {}))
+    sesje_rpg.active_visible_cols_sesje.update(_vc.get("sesje", {}))
 
     # Wczytaj tryb i skalowanie czcionek
     _initial_dark_mode = bool(_saved.get("dark_mode", False))
@@ -636,6 +639,10 @@ if __name__ == "__main__":
                 "sesje": dict(sesje_rpg.active_sort_sesje),
                 "gracze": dict(gracze.active_sort_gracze),
                 "wydawcy": dict(wydawcy.active_sort_wydawcy),
+            },
+            "visible_columns": {
+                "systemy": dict(systemy_rpg.active_visible_cols_systemy),
+                "sesje": dict(sesje_rpg.active_visible_cols_sesje),
             },
         }
         app_settings.save_settings(_to_save)

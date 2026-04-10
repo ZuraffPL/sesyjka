@@ -3,5 +3,6 @@
     "reportUnknownVariableType": "none",
     "reportUnknownArgumentType": "none",
     "reportUndefinedVariable": "none",
-    "reportUnknownParameterType": "none"
+    "reportUnknownParameterType": "none",
+    "reportPossiblyUnbound": "none"
 }

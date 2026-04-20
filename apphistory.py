@@ -86,7 +86,7 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
                 "🗂️ DODAJ SESJĘ DO ISTNIEJĄCEJ KAMPANII:°",
                 "",
                 "✅ SESJE_RPG.PY — menu PPM:",
-                "  • nowa opcja „Dodaj sesję do istniejącej kampanii"",
+                "  • nowa opcja \u201eDodaj sesj\u0119 do istniej\u0105cej kampanii\u201c",
                 "    pojawia się wyłącznie na sesjach typu Kampania",
                 "  • pobiera z bazy: system, liczbę graczy, MG,",
                 "    listę graczy i tytuł kampanii",

@@ -25,7 +25,7 @@ VSVersionInfo(
         StringStruct(u'LegalCopyright', u'CC BY 4.0 - Zuraffpl'),
         StringStruct(u'OriginalFilename', u'TTRPG_Base.exe'),
         StringStruct(u'ProductName', u'Sesyjka'),
-        StringStruct(u'ProductVersion', u'0.3.34.0']),
+        StringStruct(u'ProductVersion', u'0.3.34.0')])
       ]), 
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]

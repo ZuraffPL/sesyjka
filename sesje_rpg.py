@@ -13,7 +13,7 @@ from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
 
 # Import funkcji dialogowych z oddzielnego modułu
-from sesje_rpg_dialogs import open_edit_session_dialog
+from sesje_rpg_dialogs import open_edit_session_dialog, dodaj_sesje_rpg
 
 _log = logging.getLogger(__name__)
 
@@ -675,8 +675,63 @@ def fill_sesje_rpg_tab(
                         "Błąd bazy danych", f"Nie udało się usunąć sesji:\n{e}", parent=tab
                     )
 
+        def _add_to_campaign() -> None:
+            """Otwiera dialog dodawania sesji z danymi z wybranej kampanii."""
+            sesja_id = row_data[0]
+            try:
+                with sqlite3.connect(DB_FILE) as conn:
+                    conn.row_factory = sqlite3.Row
+                    conn.execute("PRAGMA foreign_keys = ON")
+                    c = conn.cursor()
+                    c.execute(
+                        """
+                        SELECT system_id, liczba_graczy, mg_id, tytul_kampanii
+                        FROM sesje_rpg WHERE id = ?
+                        """,
+                        (sesja_id,),
+                    )
+                    src = c.fetchone()
+                    if src is None:
+                        messagebox.showerror("Błąd", "Nie znaleziono sesji.", parent=tab)
+                        return
+                    c.execute(
+                        "SELECT gracz_id FROM sesje_gracze WHERE sesja_id = ?",
+                        (sesja_id,),
+                    )
+                    player_ids = [r[0] for r in c.fetchall()]
+            except sqlite3.Error as e:
+                messagebox.showerror(
+                    "Błąd bazy danych",
+                    f"Nie udało się pobrać danych kampanii:\n{e}",
+                    parent=tab,
+                )
+                return
+
+            prefill = {
+                "system_id": src["system_id"],
+                "liczba_graczy": src["liczba_graczy"],
+                "mg_id": src["mg_id"],
+                "player_ids": player_ids,
+                "tytul_kampanii": src["tytul_kampanii"],
+            }
+            dodaj_sesje_rpg(
+                tab,
+                refresh_callback=lambda **_kw: fill_sesje_rpg_tab(
+                    tab, dark_mode=get_dark_mode_from_tab(tab)
+                ),
+                prefill=prefill,
+            )
+
+        is_kampania = str(row_data[3]).startswith("Kampania") if row_data[3] else False
+
         ctx = tk.Menu(tab, tearoff=0)
         ctx.add_command(label="Edytuj", command=_edit)
+        if is_kampania:
+            ctx.add_separator()
+            ctx.add_command(
+                label="Dodaj sesję do istniejącej kampanii",
+                command=_add_to_campaign,
+            )
         ctx.add_separator()
         ctx.add_command(label="Usuń", command=_del)
         ctx.tk_popup(event.x_root, event.y_root)

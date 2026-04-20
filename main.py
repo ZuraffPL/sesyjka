@@ -26,7 +26,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.32"
+APP_VERSION = "0.3.34"
 START_WIDTH = 1800
 START_HEIGHT = 920
 

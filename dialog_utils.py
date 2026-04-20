@@ -6,7 +6,7 @@ Zabezpiecza przed wychodzeniem dialogów poza ekran przy wysokim skalowaniu DPI.
 import sys
 import ctypes
 import tkinter as tk
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 import customtkinter as ctk  # type: ignore
 import logging
 import os
@@ -273,6 +273,108 @@ def apply_safe_geometry(
         dialog.resizable(True, allow_resize_height)
 
     return final_w, final_h
+
+
+def open_calendar_picker(parent: Any, initial_date_str: str = "") -> Optional[str]:
+    """Otwiera modalne okno z widgetem kalendarza.
+
+    Args:
+        parent: Okno nadrzędne (CTkToplevel lub Tk).
+        initial_date_str: Bieżąca data w formacie YYYY-MM-DD (lub pusty string).
+
+    Returns:
+        Wybrana data jako string YYYY-MM-DD lub ``None`` jeśli anulowano.
+    """
+    from tkcalendar import Calendar as _Cal  # type: ignore
+    from datetime import date as _date, datetime as _dt
+
+    try:
+        init_date = _dt.strptime(initial_date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        init_date = _date.today()
+
+    dark = ctk.get_appearance_mode().lower() == "dark"
+
+    # Kolory kalendarza zależne od trybu
+    if dark:
+        cal_kw = dict(
+            background="#2b2b2b",
+            foreground="#e0e0e0",
+            bordercolor="#444444",
+            headersbackground="#1e1e2e",
+            headersforeground="#a0c4ff",
+            selectbackground="#0078d4",
+            selectforeground="#ffffff",
+            normalbackground="#2b2b2b",
+            normalforeground="#e0e0e0",
+            weekendbackground="#353535",
+            weekendforeground="#aaaaaa",
+            othermonthbackground="#1e1e1e",
+            othermonthforeground="#555555",
+            othermonthwebackground="#1e1e1e",
+            othermonthweforeground="#555555",
+        )
+        win_bg = "#2b2b2b"
+        btn_bg = "#1e1e2e"
+        btn_fg = "#e0e0e0"
+        btn_abg = "#0078d4"
+    else:
+        cal_kw = dict(
+            selectbackground="#0078d4",
+            selectforeground="#ffffff",
+        )
+        win_bg = "#f5f5f5"
+        btn_bg = "#e0e0e0"
+        btn_fg = "#212121"
+        btn_abg = "#bbdefb"
+
+    result: list = [None]
+
+    cal_win = tk.Toplevel(parent)
+    cal_win.title("Wybierz datę")
+    cal_win.resizable(False, False)
+    cal_win.configure(bg=win_bg)
+    cal_win.grab_set()
+    cal_win.transient(parent)
+    parent.update_idletasks()
+    px = parent.winfo_rootx() + parent.winfo_width() // 2 - 160
+    py = parent.winfo_rooty() + parent.winfo_height() // 2 - 130
+    cal_win.geometry(f"+{px}+{py}")
+
+    cal = _Cal(
+        cal_win,
+        selectmode="day",
+        year=init_date.year,
+        month=init_date.month,
+        day=init_date.day,
+        date_pattern="yyyy-mm-dd",
+        **cal_kw,
+    )
+    cal.pack(padx=10, pady=(10, 4))
+
+    def _ok() -> None:
+        result[0] = cal.get_date()
+        cal_win.destroy()
+
+    def _cancel() -> None:
+        cal_win.destroy()
+
+    # Podwójne kliknięcie = szybkie zatwierdzenie
+    cal.bind("<Double-Button-1>", lambda _e: _ok())
+
+    btn_frame = tk.Frame(cal_win, bg=win_bg)
+    btn_frame.pack(pady=(4, 10))
+    tk.Button(
+        btn_frame, text="OK", command=_ok, width=10,
+        bg=btn_bg, fg=btn_fg, activebackground=btn_abg, relief="flat",
+    ).pack(side=tk.LEFT, padx=5)
+    tk.Button(
+        btn_frame, text="Anuluj", command=_cancel, width=10,
+        bg=btn_bg, fg=btn_fg, activebackground=btn_abg, relief="flat",
+    ).pack(side=tk.LEFT, padx=5)
+
+    cal_win.wait_window()
+    return result[0]
 
 
 def make_scrollable_dialog_frame(

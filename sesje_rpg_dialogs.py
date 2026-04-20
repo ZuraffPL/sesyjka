@@ -2,14 +2,14 @@
 import tkinter as tk
 import sqlite3
 import re
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 from datetime import datetime
 from typing import Optional, Callable, Sequence, Any, Dict, List, Tuple
 import customtkinter as ctk
 import logging
 from database_manager import get_db_path
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry, create_ctk_toplevel
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, open_calendar_picker
 
 _log = logging.getLogger(__name__)
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
@@ -146,9 +146,21 @@ def _apply_dark_theme_to_widget(
 
 
 def dodaj_sesje_rpg(
-    parent: Optional[tk.Tk] = None, refresh_callback: Optional[Callable[..., None]] = None
+    parent: Optional[tk.Tk] = None,
+    refresh_callback: Optional[Callable[..., None]] = None,
+    prefill: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Otwiera okno dodawania nowej sesji RPG"""
+    """Otwiera okno dodawania nowej sesji RPG.
+
+    Args:
+        parent: Okno nadrzędne.
+        refresh_callback: Callback wywoływany po zapisaniu sesji.
+        prefill: Opcjonalny słownik z danymi do wstępnego wypełnienia formularza
+                 (np. z istniejącej kampanii). Obsługiwane klucze:
+                 ``system_id`` (int), ``liczba_graczy`` (int),
+                 ``player_ids`` (List[int]), ``mg_id`` (int),
+                 ``tytul_kampanii`` (str | None).
+    """
     if parent is None:
         parent = tk._default_root  # type: ignore
 
@@ -204,18 +216,10 @@ def dodaj_sesje_rpg(
     date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
 
     def choose_date() -> None:
-        # Prosty kalendarz - możesz to rozbudować
-        date_str = simpledialog.askstring(
-            "Data", "Wprowadź datę (YYYY-MM-DD):", initialvalue=date_entry.get(), parent=dialog
-        )
-        if date_str:
-            try:
-                # Walidacja formatu daty
-                datetime.strptime(date_str, "%Y-%m-%d")
-                date_entry.delete(0, tk.END)
-                date_entry.insert(0, date_str)
-            except ValueError:
-                messagebox.showerror("Błąd", "Nieprawidłowy format daty. Użyj YYYY-MM-DD.", parent=dialog)  # type: ignore
+        picked = open_calendar_picker(dialog, date_entry.get())
+        if picked:
+            date_entry.delete(0, tk.END)
+            date_entry.insert(0, picked)
 
     calendar_btn = ctk.CTkButton(date_frame, text="📅", command=choose_date, width=40)
     calendar_btn.grid(row=0, column=1)
@@ -788,6 +792,37 @@ def dodaj_sesje_rpg(
     )
     cancel_btn.pack(side=tk.LEFT, padx=10)
 
+    # ── Wstępne wypełnienie pól z istniejącej kampanii ───────────────────────
+    if prefill:
+        pf_system_id: Optional[int] = prefill.get("system_id")
+        if pf_system_id is not None:
+            for s in systems:
+                if s[0] == pf_system_id:
+                    system_combo.set(f"{s[1]} (ID: {s[0]})")
+                    break
+
+        pf_liczba: Optional[int] = prefill.get("liczba_graczy")
+        if pf_liczba is not None:
+            liczba_var.set(str(pf_liczba))
+
+        pf_player_ids: Optional[List[int]] = prefill.get("player_ids")
+        if pf_player_ids:
+            selected_players_list.clear()
+            selected_players_list.extend(pf_player_ids)
+            update_selected_players_display()
+
+        pf_mg_id: Optional[int] = prefill.get("mg_id")
+        if pf_mg_id:
+            selected_mg_id = pf_mg_id
+            update_selected_mg_display()
+
+        kampania_var.set(True)
+        jednostrzal_var.set(False)
+
+        pf_tytul: Optional[str] = prefill.get("tytul_kampanii")
+        if pf_tytul:
+            tytul_kampanii_entry.insert(0, pf_tytul)
+
     # Focus na datę
     dialog.after(100, lambda: date_entry.focus_set() if date_entry.winfo_exists() else None)
 
@@ -880,18 +915,10 @@ def open_edit_session_dialog(
     date_entry.insert(0, session_data[1] or "")
 
     def choose_date() -> None:
-        date_str = simpledialog.askstring(
-            "Data", "Wprowadź datę (YYYY-MM-DD):", initialvalue=date_entry.get(), parent=dialog
-        )
-        if date_str:
-            try:
-                datetime.strptime(date_str, "%Y-%m-%d")
-                date_entry.delete(0, tk.END)
-                date_entry.insert(0, date_str)
-            except ValueError:
-                messagebox.showerror(
-                    "Błąd", "Nieprawidłowy format daty. Użyj YYYY-MM-DD.", parent=dialog
-                )
+        picked = open_calendar_picker(dialog, date_entry.get())
+        if picked:
+            date_entry.delete(0, tk.END)
+            date_entry.insert(0, picked)
 
     calendar_btn = ctk.CTkButton(date_frame, text="📅", command=choose_date, width=40)
     calendar_btn.grid(row=0, column=1)

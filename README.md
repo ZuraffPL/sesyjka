@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.32-blue)
+![Version](https://img.shields.io/badge/version-0.3.34-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -67,9 +67,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.32-Windows.zip`
+2. Pobierz `Sesyjka-v0.3.34-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.32.exe`
+4. Uruchom `Sesyjka-v0.3.34.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +95,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.32.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.32.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.3.34.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.34.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -184,6 +184,11 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.3.34 (20.04.2026)
+- 📅 **Graficzny kalendarz daty**: przycisk 📅 w dialogach dodawania/edycji sesji otwiera teraz okno z widgetem `tkcalendar` zamiast tekstowego pola — obsługa trybu ciemnego/jasnego, podwójne kliknięcie zatwierdza datę
+- 🗂️ **Dodaj sesję do istniejącej kampanii**: nowa opcja w menu PPM na sesji typu Kampania — prefilluje dane (system, gracze, MG, tytuł kampanii) do formularza nowej sesji
+- 🔧 **Konfiguracja VS Code**: poprawki `tasks.json` i `launch.json` — aktualne nazwy, usunięte przestarzałe opcje
 
 ### v0.3.32 (10.04.2026)
 - 🎛️ **Wybór widocznych kolumn**: nowy przycisk „Kolumny" w górnym pasku zakładek Systemy RPG i Sesje RPG — dialog z checkboxami umożliwia ukrycie/pokazanie dowolnych kolumn tabeli; preferencje zapisywane w `settings.json`

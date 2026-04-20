@@ -22,6 +22,8 @@ DB_FILE = get_db_path("gracze.db")
 active_filters_gracze: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_gracze: Dict[str, Any] = {"column": "ID", "reverse": False}
+# Zapisane szerokości kolumn (pusta lista = użyj auto-obliczonych)
+active_col_widths_gracze: List[int] = []
 
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
@@ -600,11 +602,21 @@ def fill_gracze_tab(
         ctx.tk_popup(event.x_root, event.y_root)
         ctx.grab_release()
 
-    # ── Tabela ───────────────────────────────────────────────────────────────
+    _col_w = (
+        list(active_col_widths_gracze)
+        if len(active_col_widths_gracze) == len(_HEADERS)
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 120, 160, 90, 200, 56])
+    )
+
+    def _on_col_resize_gracze(widths: List[int]) -> None:
+        active_col_widths_gracze.clear()
+        active_col_widths_gracze.extend(widths)
+
+    # ── Tabela ─────────────────────────────────────────────────────────────────
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 120, 160, 90, 200, 56],
+        col_widths=_col_w,
         data=[],
         edit_callback=_on_edit,
         id_col=0,
@@ -616,6 +628,7 @@ def fill_gracze_tab(
         cell_click_callback=_on_cell_click,
         right_click_callback=_on_right_click,
         show_row_numbers=True,
+        resize_callback=_on_col_resize_gracze,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

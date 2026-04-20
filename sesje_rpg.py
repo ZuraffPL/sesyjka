@@ -122,6 +122,8 @@ def _migrate_remove_cross_db_fks() -> None:
 active_filters_sesje: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_sesje: Dict[str, Any] = {"column": "ID", "reverse": False}
+# Zapisane szerokości kolumn (pusta lista = użyj auto-obliczonych)
+active_col_widths_sesje: List[int] = []
 # Widoczność kolumn w tabeli sesji (klucz = nazwa kolumny, wartość = czy widoczna)
 active_visible_cols_sesje: Dict[str, bool] = {
     "Data": True,
@@ -748,10 +750,20 @@ def fill_sesje_rpg_tab(
                 hidden.append(idx)
         return hidden
 
+    _col_w = (
+        list(active_col_widths_sesje)
+        if len(active_col_widths_sesje) == len(_HEADERS)
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260])
+    )
+
+    def _on_col_resize_sesje(widths: List[int]) -> None:
+        active_col_widths_sesje.clear()
+        active_col_widths_sesje.extend(widths)
+
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260],
+        col_widths=_col_w,
         data=[],
         edit_callback=_on_edit,
         id_col=0,
@@ -762,6 +774,7 @@ def fill_sesje_rpg_tab(
         right_click_callback=_on_right_click,
         show_row_numbers=True,
         hidden_cols=_compute_hidden_cols_sesje(),
+        resize_callback=_on_col_resize_sesje,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

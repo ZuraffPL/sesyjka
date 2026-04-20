@@ -261,13 +261,14 @@ class CTkDataTable(tk.Frame):
         right_click_callback: Optional[Callable[[int, List[Any], Any], None]] = None,
         show_row_numbers: bool = False,
         hidden_cols: Optional[List[int]] = None,
+        resize_callback: Optional[Callable[[List[int]], None]] = None,
         **kw: Any,
     ) -> None:
         t = _D if dark_mode else _L
         super().__init__(parent, bg=t["bg"], **kw)
 
         self.headers = headers
-        self.col_widths = col_widths
+        self.col_widths = list(col_widths)
         self._data: List[List[Any]] = list(data)
         self._edit_cb = edit_callback
         self._id_col = id_col
@@ -285,6 +286,19 @@ class CTkDataTable(tk.Frame):
         self._selected_idx: Optional[int] = None
         self._selected_data: Optional[List[Any]] = None
 
+        # ── Stan przeciągania zmiany szerokości kolumn ──────────────────
+        self._resize_cb = resize_callback
+        self._drag_col: Optional[int] = None
+        self._drag_start_x_root: int = 0
+        self._drag_start_w: int = 0
+        # Referencje do widgetów nagłówka (ustawiane przez _build_header)
+        self._header_frame: Optional[tk.Frame] = None
+        self._col_hdr_labels: Dict[int, Optional[tk.Label]] = {}
+        self._col_resize_handles: Dict[int, Optional[tk.Label]] = {}
+        self._header_edit_label: Optional[tk.Label] = None
+        self._header_lp_label: Optional[tk.Label] = None
+        self._header_filler: Optional[tk.Label] = None
+
         self._build_header()
         self._scroll = ctk.CTkScrollableFrame(self, fg_color=t["bg"])
         self._scroll.pack(fill=tk.BOTH, expand=True)  # type: ignore[misc]
@@ -296,10 +310,16 @@ class CTkDataTable(tk.Frame):
         hf = tk.Frame(self, bg=t["hdr_bg"], height=_HDR_H)
         hf.pack(fill=tk.X, side=tk.TOP)
         hf.pack_propagate(False)
+        self._header_frame = hf
+        self._col_hdr_labels = {}
+        self._col_resize_handles = {}
+        self._header_edit_label = None
+        self._header_lp_label = None
+        self._header_filler = None
 
         x = 0
         if self._show_row_num:
-            tk.Label(
+            lp_lbl = tk.Label(
                 hf,
                 text="Lp.",
                 bg=t["hdr_bg"],
@@ -307,13 +327,19 @@ class CTkDataTable(tk.Frame):
                 font=("Segoe UI", scale_font_size(10), "bold"),
                 anchor="center",
                 relief="flat",
-            ).place(x=x, y=0, width=_ROW_NUM_W, height=_HDR_H)
+            )
+            lp_lbl.place(x=x, y=0, width=_ROW_NUM_W, height=_HDR_H)
+            self._header_lp_label = lp_lbl
             x += _ROW_NUM_W
 
         for i, (h, w) in enumerate(zip(self.headers, self.col_widths)):
             if i in self._hidden_cols:
+                self._col_hdr_labels[i] = None
+                self._col_resize_handles[i] = None
                 if i == self._id_col:
-                    tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
+                    edit_lbl = tk.Label(hf, text="", bg=t["hdr_bg"])
+                    edit_lbl.place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
+                    self._header_edit_label = edit_lbl
                     x += _EDIT_W
                 continue
             lbl = tk.Label(
@@ -327,6 +353,7 @@ class CTkDataTable(tk.Frame):
                 relief="flat",
             )
             lbl.place(x=x, y=0, width=w, height=_HDR_H)
+            self._col_hdr_labels[i] = lbl
 
             if self._sort_cb is not None:
                 ci = i
@@ -337,13 +364,122 @@ class CTkDataTable(tk.Frame):
 
             x += w
 
+            # Uchwyt do zmiany szerokości kolumny (przezroczysty, zmienia kursor)
+            ci2 = i
+            handle = tk.Label(hf, text="", bg=t["hdr_bg"], cursor="sb_h_double_arrow")
+            handle.place(x=x - 3, y=0, width=6, height=_HDR_H)
+            handle.lift()
+            handle.bind("<ButtonPress-1>", lambda _e, c=ci2: self._on_resize_press(_e, c))
+            handle.bind("<B1-Motion>", self._on_resize_motion)
+            handle.bind("<ButtonRelease-1>", self._on_resize_release)
+            self._col_resize_handles[i] = handle
+
             if i == self._id_col:
                 # Wąska pusta kolumna ✎ w nagłówku
-                tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
+                edit_lbl = tk.Label(hf, text="", bg=t["hdr_bg"])
+                edit_lbl.place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
+                self._header_edit_label = edit_lbl
                 x += _EDIT_W
 
         # Wypełnienie prawej części nagłówka za ostatnią kolumną
-        tk.Label(hf, text="", bg=t["hdr_bg"]).place(x=x, y=0, relwidth=1, width=-x, height=_HDR_H)
+        filler = tk.Label(hf, text="", bg=t["hdr_bg"])
+        filler.place(x=x, y=0, relwidth=1, width=-x, height=_HDR_H)
+        self._header_filler = filler
+
+    # ── layout nagłówka in-place ───────────────────────────────────────────
+    def _update_header_layout(self) -> None:
+        """Aktualizuje pozycje etykiet i uchwytów nagłówka bez niszczenia widgetów."""
+        x = 0
+        if self._show_row_num and self._header_lp_label is not None:
+            self._header_lp_label.place_configure(x=x)
+            x += _ROW_NUM_W
+        for i, w in enumerate(self.col_widths):
+            if i in self._hidden_cols:
+                if i == self._id_col and self._header_edit_label is not None:
+                    self._header_edit_label.place_configure(x=x)
+                    x += _EDIT_W
+                continue
+            lbl = self._col_hdr_labels.get(i)
+            if lbl is not None:
+                lbl.place_configure(x=x, width=w)
+            x += w
+            handle = self._col_resize_handles.get(i)
+            if handle is not None:
+                handle.place_configure(x=x - 3)
+            if i == self._id_col and self._header_edit_label is not None:
+                self._header_edit_label.place_configure(x=x)
+                x += _EDIT_W
+        if self._header_filler is not None:
+            self._header_filler.place_configure(x=x, width=-x)
+
+    # ── zmiana szerokości kolumn (przeciąganie) ────────────────────────────
+    def _on_resize_press(self, event: Any, col_idx: int) -> None:
+        """Rozpoczyna przeciąganie uchwytu zmiany szerokości kolumny."""
+        self._drag_col = col_idx
+        self._drag_start_x_root = event.x_root
+        self._drag_start_w = self.col_widths[col_idx]
+
+    def _on_resize_motion(self, event: Any) -> None:
+        """Obsługuje ruch myszy podczas przeciągania – aktualizuje nagłówek i wiersze live."""
+        if self._drag_col is None:
+            return
+        delta = event.x_root - self._drag_start_x_root
+        new_w = max(30, self._drag_start_w + delta)
+        self.col_widths[self._drag_col] = new_w
+        self._update_header_layout()
+        self._update_rows_layout()
+
+    def _on_resize_release(self, event: Any) -> None:
+        """Kończy przeciąganie – przebudowuje wiersze i wywołuje callback."""
+        if self._drag_col is None:
+            return
+        self._drag_col = None
+        self._force_rebuild_rows()
+        if self._resize_cb is not None:
+            self._resize_cb(list(self.col_widths))
+
+    def _update_rows_layout(self) -> None:
+        """Aktualizuje pozycje widgetów w każdym wierszu na podstawie col_widths.
+
+        Wykonuje tylko place_configure() – bez niszczenia widgetów.
+        Wywoływane na każde zdarzenie ruchu myszy podczas zmiany szerokości.
+        """
+        for rf in self._row_frames:
+            x = 0
+            if self._show_row_num:
+                x += _ROW_NUM_W
+            col_map: Optional[Dict[int, tk.Label]] = getattr(rf, '_col_label_map', None)
+            edit_btn: Optional[tk.Button] = getattr(rf, '_edit_btn_ref', None)
+            filler: Optional[tk.Label] = getattr(rf, '_filler_ref', None)
+            if col_map is None:
+                continue
+            for i, w in enumerate(self.col_widths):
+                if i in self._hidden_cols:
+                    if i == self._id_col:
+                        if edit_btn is not None:
+                            edit_btn.place_configure(x=x + 2)
+                        x += _EDIT_W
+                    continue
+                lbl = col_map.get(i)
+                if lbl is not None:
+                    lbl.place_configure(x=x, width=w)
+                x += w
+                if i == self._id_col:
+                    if edit_btn is not None:
+                        edit_btn.place_configure(x=x + 2)
+                    x += _EDIT_W
+            if filler is not None:
+                filler.place_configure(x=x, width=-x)
+
+    def _force_rebuild_rows(self) -> None:
+        """Wymusza pełną przebudowę wierszy (po zmianie szerokości kolumn)."""
+        for rf in self._row_frames:
+            if hasattr(rf, '_cached_row'):
+                rf._cached_row = None  # type: ignore[attr-defined]
+        for rf in self._row_pool.values():
+            rf.destroy()
+        self._row_pool.clear()
+        self._build_rows()
 
     # ── wiersze ────────────────────────────────────────────────────────────
     def _pool_key(self, row: Optional[List[Any]]) -> Optional[Any]:
@@ -540,6 +676,8 @@ class CTkDataTable(tk.Frame):
         # ── komórki ────────────────────────────────────────────────────
         x = 0
         cell_labels: List[tk.Label] = []
+        col_label_map: Dict[int, tk.Label] = {}
+        edit_btn_ref: Optional[tk.Button] = None
         if self._show_row_num:
             num_lbl = tk.Label(
                 rf,
@@ -587,6 +725,7 @@ class CTkDataTable(tk.Frame):
                     if icon:
                         btn._icon_ref = icon  # type: ignore
                     btn.place(x=x + 2, y=2, width=_EDIT_W - 4, height=_ROW_H - 4)
+                    edit_btn_ref = btn
                     _Tooltip(btn, "Edytuj")
                     btn.bind("<Enter>", _on_enter, add="+")
                     btn.bind("<Leave>", _on_leave, add="+")
@@ -619,6 +758,7 @@ class CTkDataTable(tk.Frame):
                 padx=padx,
             )
             cell_labels.append(lbl)
+            col_label_map[j] = lbl
             lbl.place(x=x, y=0, width=w, height=_ROW_H)
             lbl.bind("<Enter>", _on_enter)
             lbl.bind("<Leave>", _on_leave)
@@ -668,6 +808,7 @@ class CTkDataTable(tk.Frame):
                 if icon:
                     btn._icon_ref = icon  # zapobiegaj GC  # type: ignore
                 btn.place(x=x + 2, y=2, width=_EDIT_W - 4, height=_ROW_H - 4)
+                edit_btn_ref = btn
                 _Tooltip(btn, "Edytuj")
                 btn.bind("<Enter>", _on_enter, add="+")
                 btn.bind("<Leave>", _on_leave, add="+")
@@ -682,8 +823,11 @@ class CTkDataTable(tk.Frame):
 
         # Wypełnienie prawej części wiersza za ostatnią kolumną
         rf._cell_labels = cell_labels  # type: ignore[attr-defined]
+        rf._col_label_map = col_label_map  # type: ignore[attr-defined]
+        rf._edit_btn_ref = edit_btn_ref  # type: ignore[attr-defined]
         filler = tk.Label(rf, text="", bg=def_bg)
         filler.place(x=x, y=0, relwidth=1, width=-x, height=_ROW_H)
+        rf._filler_ref = filler  # type: ignore[attr-defined]
         filler.bind("<Enter>", _on_enter)
         filler.bind("<Leave>", _on_leave)
         filler.bind("<Button-1>", _on_click)

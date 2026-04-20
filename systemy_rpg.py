@@ -45,6 +45,8 @@ logger = _setup_logger()
 active_filters_systemy: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
+# Zapisane szerokości kolumn (None = użyj auto-obliczonych)
+active_col_widths_systemy: List[int] = []
 # Stan przełącznika rozwiń/zwiń wszystkie suplementy
 all_expanded_systemy: bool = False
 # Widoczność kolumn w tabeli systemów (klucz = nazwa kolumny, wartość = czy widoczna)
@@ -1507,10 +1509,16 @@ def fill_systemy_rpg_tab(
                 hidden.append(idx)
         return hidden
 
+    _col_w = list(active_col_widths_systemy) if len(active_col_widths_systemy) == len(_HEADERS) else _compute_widths(initial_data)
+
+    def _on_col_resize_systemy(widths: List[int]) -> None:
+        active_col_widths_systemy.clear()
+        active_col_widths_systemy.extend(widths)
+
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(initial_data),
+        col_widths=_col_w,
         data=[],
         edit_callback=_on_edit,
         id_col=1,
@@ -1522,6 +1530,7 @@ def fill_systemy_rpg_tab(
         cell_click_callback=_on_cell_click,
         show_row_numbers=True,
         hidden_cols=_compute_hidden_cols(),
+        resize_callback=_on_col_resize_systemy,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

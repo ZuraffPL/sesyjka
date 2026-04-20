@@ -595,6 +595,15 @@ if __name__ == "__main__":
     _vc = _saved.get("visible_columns", {})
     systemy_rpg.active_visible_cols_systemy.update(_vc.get("systemy", {}))
     sesje_rpg.active_visible_cols_sesje.update(_vc.get("sesje", {}))
+    _cw = _saved.get("column_widths", {})
+    if _cw.get("systemy"):
+        systemy_rpg.active_col_widths_systemy.extend(_cw["systemy"])
+    if _cw.get("sesje"):
+        sesje_rpg.active_col_widths_sesje.extend(_cw["sesje"])
+    if _cw.get("gracze"):
+        gracze.active_col_widths_gracze.extend(_cw["gracze"])
+    if _cw.get("wydawcy"):
+        wydawcy.active_col_widths_wydawcy.extend(_cw["wydawcy"])
 
     # Wczytaj tryb i skalowanie czcionek
     _initial_dark_mode = bool(_saved.get("dark_mode", False))
@@ -643,6 +652,12 @@ if __name__ == "__main__":
             "visible_columns": {
                 "systemy": dict(systemy_rpg.active_visible_cols_systemy),
                 "sesje": dict(sesje_rpg.active_visible_cols_sesje),
+            },
+            "column_widths": {
+                "systemy": list(systemy_rpg.active_col_widths_systemy) or None,
+                "sesje": list(sesje_rpg.active_col_widths_sesje) or None,
+                "gracze": list(gracze.active_col_widths_gracze) or None,
+                "wydawcy": list(wydawcy.active_col_widths_wydawcy) or None,
             },
         }
         app_settings.save_settings(_to_save)

@@ -36,6 +36,12 @@ _DEFAULT_SETTINGS: Dict[str, Any] = {
         "gracze": {"column": "ID", "reverse": False},
         "wydawcy": {"column": "ID", "reverse": False},
     },
+    "column_widths": {
+        "systemy": None,
+        "sesje": None,
+        "gracze": None,
+        "wydawcy": None,
+    },
     "visible_columns": {
         "systemy": {
             "Nazwa systemu": True,

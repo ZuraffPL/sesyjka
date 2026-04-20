@@ -19,6 +19,8 @@ DB_FILE = get_db_path("wydawcy.db")
 active_filters_wydawcy: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_wydawcy: Dict[str, Any] = {"column": "ID", "reverse": False}
+# Zapisane szerokości kolumn (pusta lista = użyj auto-obliczonych)
+active_col_widths_wydawcy: List[int] = []
 
 
 def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:
@@ -440,11 +442,21 @@ def fill_wydawcy_tab(
         ctx.tk_popup(event.x_root, event.y_root)
         ctx.grab_release()
 
-    # ── Tabela ───────────────────────────────────────────────────────────────
+    _col_w = (
+        list(active_col_widths_wydawcy)
+        if len(active_col_widths_wydawcy) == len(_HEADERS)
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 160, 200, 80])
+    )
+
+    def _on_col_resize_wydawcy(widths: List[int]) -> None:
+        active_col_widths_wydawcy.clear()
+        active_col_widths_wydawcy.extend(widths)
+
+    # ── Tabela ─────────────────────────────────────────────────────────────────
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
-        col_widths=_compute_widths(data_ref[0]) if data_ref[0] else [44, 160, 200, 80],
+        col_widths=_col_w,
         data=[],
         edit_callback=_on_edit,
         id_col=0,
@@ -455,6 +467,7 @@ def fill_wydawcy_tab(
         cell_click_callback=_on_cell_click,
         right_click_callback=_on_right_click,
         show_row_numbers=True,
+        resize_callback=_on_col_resize_wydawcy,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

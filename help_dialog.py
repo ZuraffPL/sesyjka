@@ -49,7 +49,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Rozwiń wszystko / Zwiń wszystko — przełącza widoczność podrzędnych wierszy "
            "w tabeli hierarchicznej."),
     ("li", "Szukaj — wyszukiwanie tekstowe w czasie rzeczywistym po nazwie systemu."),
-    ("li", "Kolumny — umożliwia ukrycie/pokazanie wybranych kolumn tabeli."),
+    ("li", "Kolumny — umożliwia ukrycie/pokazanie wybranych kolumn tabeli oraz zmianę "
+           "ich kolejności przyciskami ↑/↓; ustawienie zapisywane w settings.json."),
+    ("li", "Ukryj systemy — checkbox w pasku tabeli Systemy RPG; po włączeniu widoczne są "
+           "tylko PG i suplementy (wiersze-systemy ukryte)."),
     ("h2", "Edycja rekordów"),
     ("li", "Kliknij ikonę ✏️ w wierszu lub dwukliknij wiersz, aby otworzyć dialog edycji."),
     ("li", "Kliknij nagłówek kolumny, aby posortować po danej kolumnie (przełącza rosnąco/malejąco)."),
@@ -135,6 +138,8 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("h1", "⌨️ Skróty i wskazówki"),
     ("li", "Enter w polu wyszukiwania — odświeża widok filtrowany."),
     ("li", "Kliknięcie nagłówka kolumny — sortowanie rosnąco/malejąco (przełącza)."),
+    ("li", "Przeciągnięcie krawędzi nagłówka kolumny — ręczna zmiana szerokości; ustawienie jest "
+           "zapamiętywane między uruchomieniami (settings.json)."),
     ("li", "PPM na wierszu tabeli — menu kontekstowe (edycja, usuń)."),
     ("li", "Podwójne kliknięcie wiersza — szybka edycja rekordu."),
     ("li", "Przycisk ➕ Dodaj wydawcę w formularzu PG — dodaje wydawcę bez zamykania "

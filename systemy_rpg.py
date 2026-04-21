@@ -908,6 +908,15 @@ def dodaj_system_rpg(
                 wydawca_var.set(f"{new_pub[0]} - {new_pub[1]}")
         else:
             wydawca_combo.configure(values=[])
+        # Odśwież zakładkę Wydawcy w głównym oknie
+        try:
+            import wydawcy as _wydawcy_mod
+            root = dialog.winfo_toplevel()
+            wydawcy_tab = getattr(root, 'tabs', {}).get('Wydawcy')
+            if wydawcy_tab:
+                _wydawcy_mod.fill_wydawcy_tab(wydawcy_tab, dark_mode=getattr(root, 'dark_mode', False))
+        except Exception:
+            pass
 
     def _open_add_publisher() -> None:
         import wydawcy as _wydawcy
@@ -1499,35 +1508,16 @@ def fill_systemy_rpg_tab(
         filtered = _apply_record_filters(records_ref[0])
         phrase = search_var.get().strip().lower()
 
-        # Podziel rekordy systemy_rpg na PG i Suplementy
-        all_pgs: Dict[int, Any] = {}   # pg_id → rec
-        all_supls: Dict[int, List[Any]] = {}  # pg_id → [supl]
-        orph_pgs: List[Any] = []
-        # Suplementy bez PG-rodzica: z system_gry_id (direct) lub całkowicie osierocone
-        direct_supls: Dict[int, List[Any]] = {}  # game_id → [supl]
-        true_orph_supls: List[Any] = []
+        # Grupuj wszystkie pozycje (PG i suplementy) bezpośrednio po system_gry_id
+        items_by_game: Dict[int, List[Any]] = {}   # game_id → [rec, ...]
+        orphans: List[Any] = []  # pozycje bez przypisanego systemu
 
         for rec in filtered:
-            if rec[2] == "Podręcznik Główny":
-                all_pgs[rec[0]] = rec
-            elif rec[2] == "Suplement":
-                pid = rec[3]  # system_glowny_id (PG-rodzic)
-                if pid is not None and pid in all_pgs:
-                    all_supls.setdefault(pid, []).append(rec)
-                else:
-                    # Suplement bez PG-rodzica — sprawdź czy ma system_gry_id
-                    sgid = rec[13] if len(rec) > 13 else None
-                    if sgid:
-                        direct_supls.setdefault(sgid, []).append(rec)
-                    else:
-                        true_orph_supls.append(rec)
-
-        # Sprawdź, które PG mają system_gry_id  (index 13)
-        for pg_id, rec in list(all_pgs.items()):
             sgid = rec[13] if len(rec) > 13 else None
-            if not sgid:
-                orph_pgs.append(rec)
-                del all_pgs[pg_id]
+            if sgid:
+                items_by_game.setdefault(sgid, []).append(rec)
+            else:
+                orphans.append(rec)
 
         # Załaduj systemy_gry (games) z games_ref
         raw_games = games_ref[0] if games_ref else []
@@ -1541,224 +1531,97 @@ def fill_systemy_rpg_tab(
         if not phrase:
             for g in raw_games:
                 games[g[0]] = g
-            for pg_id, rec in all_pgs.items():
-                sgid = rec[13]
-                pg_by_game.setdefault(sgid, []).append(rec)
-            for pg_id, supls in all_supls.items():
-                supl_by_pg[pg_id] = supls
-            for gid, supls in direct_supls.items():
-                supl_direct_by_game[gid] = supls
-            orphaned_pgs.extend(orph_pgs)
-            orphaned_supls.extend(true_orph_supls)
+            for gid, items in items_by_game.items():
+                supl_direct_by_game[gid] = items
+            orphaned_supls.extend(orphans)
         else:
-            # Z frazą: włącz grę, jeśli dopasowano jej nazwę LUB któryś z PG/Supl
             for g in raw_games:
                 gid = g[0]
                 gname = (g[1] or '').lower()
-                pgs_in_game = [rec for rec in all_pgs.values() if rec[13] == gid]
-                supls_in_game: List[Any] = []
-                for p in pgs_in_game:
-                    supls_in_game.extend(all_supls.get(p[0], []))
-                direct_in_game = direct_supls.get(gid, [])
-
+                items_in_game = items_by_game.get(gid, [])
                 game_name_match = phrase in gname
-                matching_pgs = [p for p in pgs_in_game if phrase in (p[1] or '').lower()]
-                matching_supls = [s for s in supls_in_game if phrase in (s[1] or '').lower()]
-                matching_direct = [s for s in direct_in_game if phrase in (s[1] or '').lower()]
-
-                if game_name_match or matching_pgs or matching_supls or matching_direct:
+                matching_items = [r for r in items_in_game if phrase in (r[1] or '').lower()]
+                if game_name_match or matching_items:
                     games[gid] = g
-                    show_pgs = pgs_in_game if game_name_match else matching_pgs
-                    for p in show_pgs:
-                        pg_by_game.setdefault(gid, []).append(p)
-                    for p in (pgs_in_game if game_name_match else matching_pgs):
-                        pg_supls = all_supls.get(p[0], [])
-                        supl_by_pg[p[0]] = pg_supls if game_name_match else [
-                            s for s in pg_supls if phrase in (s[1] or '').lower()
-                        ]
-                    supl_direct_by_game[gid] = direct_in_game if game_name_match else matching_direct
-            for rec in orph_pgs:
-                if phrase in (rec[1] or '').lower():
-                    orphaned_pgs.append(rec)
-            for rec in true_orph_supls:
+                    supl_direct_by_game[gid] = items_in_game if game_name_match else matching_items
+            for rec in orphans:
                 if phrase in (rec[1] or '').lower():
                     orphaned_supls.append(rec)
 
     def _build_hierarchical_data() -> List[List[Any]]:
-        """Buduje płaską listę wierszy dla CTkDataTable (3-poziomowa hierarchia).
+        """Buduje płaską listę wierszy dla CTkDataTable (2-poziomowa hierarchia).
 
         Poziom 1: System (systemy_gry) — z symbolem [+]/[-]/[ ]
-        Poziom 2: Podręczniki Główne i Suplementy na TYM SAMYM poziomie wcięcia,
-                  PG wyświetlane jako pierwsze, następnie Suplementy (oba sortowane po nazwie).
+        Poziom 2: Wszystkie pozycje należące do systemu (PG i suplementy), sortowane po nazwie.
         """
         data_h: List[List[Any]] = []
 
         for gid in games:
             game = games[gid]
-            pgs_here = pg_by_game.get(gid, [])
-            supls_here: List[Any] = []
-            for pg in pgs_here:
-                supls_here.extend(supl_by_pg.get(pg[0], []))
-            # Suplementy bezpośrednio pod systemem (bez PG-rodzica)
-            direct_supls_here = supl_direct_by_game.get(gid, [])
+            items_here = supl_direct_by_game.get(gid, [])
 
-            has_children = bool(pgs_here) or bool(supls_here) or bool(direct_supls_here)
+            has_children = bool(items_here)
             symbol = "[-]" if expanded_state.get(gid) else ("[+]" if has_children else "   ")
 
-            # Agreguj posiadanie z PG i suplementów bezpośrednich (logika OR)
-            agg_fiz = any(p[6] for p in pgs_here) if pgs_here else (
-                any(s[6] for s in direct_supls_here) if direct_supls_here else False
-            )
-            agg_pdf = any(p[7] for p in pgs_here) if pgs_here else (
-                any(s[7] for s in direct_supls_here) if direct_supls_here else False
-            )
-            vtt_set = {p[8] for p in pgs_here if p[8]}
-            vtt_set.update(s[8] for s in direct_supls_here if s[8])
+            # Agreguj posiadanie ze wszystkich pozycji (logika OR)
+            agg_fiz = any(r[6] for r in items_here)
+            agg_pdf = any(r[7] for r in items_here)
+            vtt_set = {r[8] for r in items_here if r[8]}
             agg_vtt = ", ".join(sorted(vtt_set))
-            pg_cnt = len(pgs_here)
-            supl_cnt = len(supls_here) + len(direct_supls_here)
-            cnt_label = ""
-            if pg_cnt:
-                cnt_label += f"{pg_cnt} PG"
-            if supl_cnt:
-                cnt_label += (", " if cnt_label else "") + f"{supl_cnt} supl."
+            cnt = len(items_here)
+            cnt_label = f"{cnt} poz." if cnt else ""
 
-            # Agreguj Wydawcę i Język z PG i suplementów bezpośrednich (unikalne wartości)
-            wydawca_set = {p[5] for p in pgs_here if p[5]}
-            wydawca_set.update(s[5] for s in direct_supls_here if s[5])
+            # Agreguj Wydawcę i Język (unikalne wartości)
+            wydawca_set = {r[5] for r in items_here if r[5]}
             agg_wydawca = ", ".join(sorted(wydawca_set)) if wydawca_set else (game[2] or "")
-            jezyk_set = {p[9] for p in pgs_here if p[9]}
-            jezyk_set.update(s[9] for s in direct_supls_here if s[9])
+            jezyk_set = {r[9] for r in items_here if r[9]}
             agg_jezyk = ", ".join(sorted(jezyk_set)) if jezyk_set else (game[3] or "")
 
             game_name = (game[1] or "") + (f" ({cnt_label})" if cnt_label else "")
             game_row: List[Any] = [
                 symbol,
-                f"G{gid}",   # prefix G = game (odróżnia od PG id)
+                f"G{gid}",
                 game_name,
                 "System",
-                "",          # brak systemu nadrzędnego
-                "",          # brak typ_suplementu
+                "",
+                "",
                 agg_wydawca,
                 "Tak" if agg_fiz else "Nie",
                 "Tak" if agg_pdf else "Nie",
                 agg_vtt,
                 agg_jezyk,
-                "",          # status
-                "",          # cena
+                "",
+                "",
             ]
             if not hide_systems_systemy:
                 data_h.append(game_row)
 
             if expanded_state.get(gid):
-                # Podręczniki Główne (pierwsze, sortowane po nazwie)
-                for pg in sorted(pgs_here, key=lambda x: (x[1] or "").lower()):
-                    pg_row: List[Any] = [
-                        "   ",
-                        str(pg[0]),
-                        "  " + (pg[1] or ""),
-                        "Podręcznik Główny",
-                        game[1] or "",   # system główny = nazwa gry
-                        "",
-                        pg[5] or "",
-                        "Tak" if pg[6] else "Nie",
-                        "Tak" if pg[7] else "Nie",
-                        pg[8] or "",
-                        pg[9] or "",
-                        pg[10] or "",
-                        pg[11] or "",
-                    ]
-                    data_h.append(pg_row)
-
-                # Suplementy (po PG, sortowane po nazwie — ten sam poziom wcięcia)
-                for supl in sorted(supls_here, key=lambda x: (x[1] or "").lower()):
-                    # Znajdź nazwę PG-rodzica
-                    parent_pg_name = ""
-                    for pg in pgs_here:
-                        if pg[0] == supl[3]:
-                            parent_pg_name = pg[1] or ""
-                            break
-                    supl_row: List[Any] = [
-                        "   ",
-                        str(supl[0]),
-                        "  " + (supl[1] or ""),
-                        "Suplement",
-                        parent_pg_name,  # system główny = PG
-                        supl[4] or "",
-                        supl[5] or "",
-                        "Tak" if supl[6] else "Nie",
-                        "Tak" if supl[7] else "Nie",
-                        supl[8] or "",
-                        supl[9] or "",
-                        supl[10] or "",
-                        supl[11] or "",
-                    ]
-                    data_h.append(supl_row)
-
-                # Suplementy bezpośrednio pod systemem (bez PG-rodzica, sortowane po nazwie)
-                for supl in sorted(direct_supls_here, key=lambda x: (x[1] or "").lower()):
+                for rec in sorted(items_here, key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower())):
                     data_h.append([
                         "   ",
-                        str(supl[0]),
-                        "  " + (supl[1] or ""),
-                        "Suplement",
-                        "",  # brak PG-rodzica
-                        supl[4] or "",
-                        supl[5] or "",
-                        "Tak" if supl[6] else "Nie",
-                        "Tak" if supl[7] else "Nie",
-                        supl[8] or "",
-                        supl[9] or "",
-                        supl[10] or "",
-                        supl[11] or "",
+                        str(rec[0]),
+                        "  " + (rec[1] or ""),
+                        rec[2] or "",
+                        game[1] or "",   # system główny = nazwa systemu gry
+                        rec[4] or "",
+                        rec[5] or "",
+                        "Tak" if rec[6] else "Nie",
+                        "Tak" if rec[7] else "Nie",
+                        rec[8] or "",
+                        rec[9] or "",
+                        rec[10] or "",
+                        rec[11] or "",
                     ])
 
-        # Osierocone Podręczniki Główne (bez system_gry_id)
-        for rec in sorted(orphaned_pgs, key=lambda r: (r[1] or '').lower()):
-            scnt = len(supl_by_pg.get(rec[0], []))
-            name = (rec[1] or "") + (f" ({scnt} supl.)" if scnt else "")
-            symbol_oph = "[-]" if expanded_state.get(rec[0]) else ("[+]" if scnt else "   !")
-            data_h.append([
-                symbol_oph,
-                str(rec[0]),
-                name,
-                "Podręcznik Główny",
-                "",
-                "",
-                rec[5] or "",
-                "Tak" if rec[6] else "Nie",
-                "Tak" if rec[7] else "Nie",
-                rec[8] or "",
-                rec[9] or "",
-                rec[10] or "",
-                rec[11] or "",
-            ])
-            if expanded_state.get(rec[0]):
-                for supl in sorted(supl_by_pg.get(rec[0], []), key=lambda x: (x[1] or "").lower()):
-                    data_h.append([
-                        "   \u2192",
-                        str(supl[0]),
-                        "  " + (supl[1] or ""),
-                        "Suplement",
-                        rec[1] or "",
-                        supl[4] or "",
-                        supl[5] or "",
-                        "Tak" if supl[6] else "Nie",
-                        "Tak" if supl[7] else "Nie",
-                        supl[8] or "",
-                        supl[9] or "",
-                        supl[10] or "",
-                        supl[11] or "",
-                    ])
-
-        # Osierocone Suplementy (bez PG)
+        # Pozycje bez przypisanego systemu gry
         for rec in sorted(orphaned_supls, key=lambda r: (r[1] or '').lower()):
-            mn = rec[12] or ""  # system_glowny_nazwa_custom
+            mn = rec[12] or ""  # system_glowny_nazwa_custom (legacy)
             data_h.append([
                 "   !",
                 str(rec[0]),
                 rec[1] or "",
-                "Suplement",
+                rec[2] or "",
                 mn,
                 rec[4] or "",
                 rec[5] or "",
@@ -1780,41 +1643,28 @@ def fill_systemy_rpg_tab(
             g = games.get(x)
             if g is None:
                 return ""
+            items_here = supl_direct_by_game.get(x, [])
             if sort_by == "Nazwa systemu":
                 return (g[1] or '').lower()
             elif sort_by == "Wydawca":
-                pgs_here = pg_by_game.get(x, [])
-                direct_here = supl_direct_by_game.get(x, [])
-                wydawca_set = {p[5] for p in pgs_here if p[5]}
-                wydawca_set.update(s[5] for s in direct_here if s[5])
+                wydawca_set = {r[5] for r in items_here if r[5]}
                 agg = ", ".join(sorted(wydawca_set)) if wydawca_set else (g[2] or "")
                 return agg.lower()
             elif sort_by == "Język":
-                pgs_here = pg_by_game.get(x, [])
-                direct_here = supl_direct_by_game.get(x, [])
-                jezyk_set = {p[9] for p in pgs_here if p[9]}
-                jezyk_set.update(s[9] for s in direct_here if s[9])
+                jezyk_set = {r[9] for r in items_here if r[9]}
                 agg = ", ".join(sorted(jezyk_set)) if jezyk_set else (g[3] or "")
                 return agg.lower()
             elif sort_by == "Status":
-                pgs_here = pg_by_game.get(x, [])
-                direct_here = supl_direct_by_game.get(x, [])
-                status_set = {p[10] for p in pgs_here if p[10]}
-                status_set.update(s[10] for s in direct_here if s[10])
+                status_set = {r[10] for r in items_here if r[10]}
                 return ", ".join(sorted(status_set)).lower()
             elif sort_by == "Posiadanie":
-                pgs_here = pg_by_game.get(x, [])
-                direct_here = supl_direct_by_game.get(x, [])
-                agg_fiz = any(p[6] for p in pgs_here) or any(s[6] for s in direct_here)
-                agg_pdf = any(p[7] for p in pgs_here) or any(s[7] for s in direct_here)
-                # Sortuj: oba=2, jedno=1, żadne=0
+                agg_fiz = any(r[6] for r in items_here)
+                agg_pdf = any(r[7] for r in items_here)
                 return int(agg_fiz) + int(agg_pdf)
             elif sort_by == "Cena":
-                pgs_here = pg_by_game.get(x, [])
-                direct_here = supl_direct_by_game.get(x, [])
                 total = 0.0
-                for p in pgs_here + direct_here:
-                    cena_str = p[11] if len(p) > 11 else ""
+                for r in items_here:
+                    cena_str = r[11] if len(r) > 11 else ""
                     if cena_str:
                         try:
                             total += float(cena_str.split()[0])
@@ -1861,21 +1711,15 @@ def fill_systemy_rpg_tab(
         if typ == "System":
             row_id = row[1] if len(row) > 1 else ""
             gid_str = str(row_id)[1:] if str(row_id).startswith("G") else None
-            has_pg = False
-            has_direct_supl = False
+            has_items = False
             if gid_str:
                 try:
                     gid_int = int(gid_str)
-                    has_pg = bool(pg_by_game.get(gid_int))
-                    has_direct_supl = bool(supl_direct_by_game.get(gid_int))
+                    has_items = bool(supl_direct_by_game.get(gid_int))
                 except ValueError:
                     pass
-            if has_pg:
-                # System z PG (i opcjonalnie suplementami) — złoty/amber
+            if has_items:
                 return ("#4a3000" if dark_mode else "#fff8e1", "#ffcc80" if dark_mode else "#e65100")
-            elif has_direct_supl:
-                # System tylko z suplementami bezpośrednimi (bez PG) — niebieskawa zieleń
-                return ("#003040" if dark_mode else "#e0f7fa", "#4dd0e1" if dark_mode else "#006064")
             else:
                 # System bez żadnych pozycji — szary
                 return ("#2a2a2a" if dark_mode else "#eeeeee", "#757575" if dark_mode else "#9e9e9e")
@@ -1946,46 +1790,19 @@ def fill_systemy_rpg_tab(
 
                 if new_expanded:
                     # Zbuduj child_rows tylko dla tego systemu (bez pełnego rebuild)
-                    pgs_here = pg_by_game.get(gid, [])
-                    supls_here_loc: List[Any] = []
-                    for pg in pgs_here:
-                        supls_here_loc.extend(supl_by_pg.get(pg[0], []))
-                    direct_supls_here = supl_direct_by_game.get(gid, [])
+                    items_here_loc = supl_direct_by_game.get(gid, [])
                     game_data = games.get(gid)
                     game_name_loc: str = game_data[1] if game_data else ""
 
                     child_rows: List[List[Any]] = []
-                    for pg in sorted(pgs_here, key=lambda x: (x[1] or "").lower()):
+                    for rec in sorted(items_here_loc, key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower())):
                         child_rows.append([
-                            "   ", str(pg[0]), "  " + (pg[1] or ""),
-                            "Podr\u0119cznik G\u0142\u00f3wny", game_name_loc, "",
-                            pg[5] or "",
-                            "Tak" if pg[6] else "Nie",
-                            "Tak" if pg[7] else "Nie",
-                            pg[8] or "", pg[9] or "", pg[10] or "", pg[11] or "",
-                        ])
-                    for supl in sorted(supls_here_loc, key=lambda x: (x[1] or "").lower()):
-                        parent_pg_name = ""
-                        for pg in pgs_here:
-                            if pg[0] == supl[3]:
-                                parent_pg_name = pg[1] or ""
-                                break
-                        child_rows.append([
-                            "   ", str(supl[0]), "  " + (supl[1] or ""),
-                            "Suplement", parent_pg_name, supl[4] or "",
-                            supl[5] or "",
-                            "Tak" if supl[6] else "Nie",
-                            "Tak" if supl[7] else "Nie",
-                            supl[8] or "", supl[9] or "", supl[10] or "", supl[11] or "",
-                        ])
-                    for supl in sorted(direct_supls_here, key=lambda x: (x[1] or "").lower()):
-                        child_rows.append([
-                            "   ", str(supl[0]), "  " + (supl[1] or ""),
-                            "Suplement", "", supl[4] or "",
-                            supl[5] or "",
-                            "Tak" if supl[6] else "Nie",
-                            "Tak" if supl[7] else "Nie",
-                            supl[8] or "", supl[9] or "", supl[10] or "", supl[11] or "",
+                            "   ", str(rec[0]), "  " + (rec[1] or ""),
+                            rec[2] or "", game_name_loc, rec[4] or "",
+                            rec[5] or "",
+                            "Tak" if rec[6] else "Nie",
+                            "Tak" if rec[7] else "Nie",
+                            rec[8] or "", rec[9] or "", rec[10] or "", rec[11] or "",
                         ])
                     _table[0].toggle_expand(
                         parent_id=f"G{gid}",
@@ -2052,11 +1869,11 @@ def fill_systemy_rpg_tab(
                     gid_int = int(gid_str)
                 except ValueError:
                     return
-                pgs_under = pg_by_game.get(gid_int, [])
+                items_under = supl_direct_by_game.get(gid_int, [])
                 warn = f"Czy na pewno chcesz usunąć System: {clean_name}?"
-                if pgs_under:
+                if items_under:
                     warn += (
-                        f"\n\nUWAGA: System ma {len(pgs_under)} Podręcznik(ów) Główny(ch)"
+                        f"\n\nUWAGA: System ma {len(items_under)} pozycję/pozycje"
                         " — ich system_gry_id zostanie wyczyszczony (staną się osierocone)."
                     )
                 if not messagebox.askyesno("Usuń System", warn, parent=tab):
@@ -2081,13 +1898,6 @@ def fill_systemy_rpg_tab(
             sid_int: Optional[int] = None
             try:
                 sid_int = int(str(sid))
-                if is_pg:
-                    supl_cnt = len(supl_by_pg.get(sid_int, []))
-                    if supl_cnt:
-                        warn += (
-                            f"\n\nUWAGA: Podręcznik główny ma {supl_cnt} suplement(ów)."
-                            " Suplementy NIE zostaną usunięte — pozostaną w systemie bez PG-rodzica."
-                        )
             except ValueError:
                 pass
             if messagebox.askyesno("Usuń", warn, parent=tab):
@@ -2825,6 +2635,15 @@ def open_edit_system_dialog(
                 wydawca_var.set(f"{new_pub[0]} - {new_pub[1]}")
         else:
             wydawca_combo.configure(values=[])
+        # Odśwież zakładkę Wydawcy w głównym oknie
+        try:
+            import wydawcy as _wydawcy_mod
+            root = dialog.winfo_toplevel()
+            wydawcy_tab = getattr(root, 'tabs', {}).get('Wydawcy')
+            if wydawcy_tab:
+                _wydawcy_mod.fill_wydawcy_tab(wydawcy_tab, dark_mode=getattr(root, 'dark_mode', False))
+        except Exception:
+            pass
 
     def _open_add_publisher() -> None:
         import wydawcy as _wydawcy
@@ -3255,7 +3074,7 @@ def open_edit_system_dialog(
                 (
                     nazwa,
                     typ,
-                    None,
+                    system_data[3],  # zachowaj istniejący system_glowny_id
                     typ_suplementu,
                     wydawca_id,
                     int(fizyczny_var.get()),
@@ -4019,6 +3838,17 @@ def dodaj_suplement_do_systemu(
                     messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog)  # type: ignore
                     return
 
+        # Pobierz system_gry_id z PG-rodzica, aby zachować spójność hierarchii
+        parent_system_gry_id: Optional[int] = None
+        try:
+            with sqlite3.connect(DB_FILE) as _pc:
+                _row = _pc.execute(
+                    "SELECT system_gry_id FROM systemy_rpg WHERE id=?", (system_glowny_id,)
+                ).fetchone()
+                parent_system_gry_id = _row[0] if _row else None
+        except sqlite3.Error:
+            pass
+
         with sqlite3.connect(DB_FILE) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
@@ -4029,8 +3859,8 @@ def dodaj_suplement_do_systemu(
                                        wydawca_id, fizyczny, pdf, jezyk,
                                        status_gra, status_kolekcja,
                                        cena_zakupu, waluta_zakupu, cena_sprzedazy,
-                                       waluta_sprzedazy) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       waluta_sprzedazy, system_gry_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     reserved_id,
@@ -4048,6 +3878,7 @@ def dodaj_suplement_do_systemu(
                     waluta_zakupu,
                     cena_sprzedazy,
                     waluta_sprzedazy,
+                    parent_system_gry_id,
                 ),
             )
             conn.commit()

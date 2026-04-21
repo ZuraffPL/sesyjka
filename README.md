@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.20-blue)
+![Version](https://img.shields.io/badge/version-0.4.22-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -74,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.20-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.22-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.20.exe`
+4. Uruchom `Sesyjka-v0.4.22.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -102,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.20.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.20.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.22.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.22.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -194,11 +194,20 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 
 ## 📝 Changelog
 
+### v0.4.22 (22.04.2026)
+- 🔧 **Uproszczenie hierarchii Systemów RPG**: 2-poziomowa struktura (System → wszystkie pozycje) zamiast 3-poziomowej; kolumna „System główny” zawsze pokazuje nazwę systemu gry; PG wyświetlane przed suplementami
+- 🐛 **Naprawiony zapis edycji**: edycja systemu/PG zachowuje `system_glowny_id`; dodawanie suplementu poprawnie zapisuje `system_gry_id`
+- 🔄 **Odświeżanie zakładki Wydawcy**: po dodaniu wydawcy z formularza PG/suplementu tabela Wydawcy odświeża się natychmiast
+- 📖 **Uzupełniona instrukcja obsługi**: opis zmiany kolejności kolumn ↑/↓ i checkbox „Ukryj systemy”; ręczna zmiana szerokości kolumn
+
 ### v0.4.20 (21.04.2026)
 - 💰 **Ceny per forma posiadania**: nowe pola Cena Fizyczna / Cena PDF / Cena VTT w dialogach dodawania i edycji systemu — wyświetlane dynamicznie po zaznaczeniu odpowiedniej formy; automatyczna migracja istniejących danych z `cena_zakupu`
 - 🎛️ **Multi-select filtry we wszystkich zakładkach**: toggle-buttony zamiast combobox — można zaznaczyć wiele opcji jednocześnie (Typ, Język, Status, Wydawca, Posiadanie, Rok, System, MG, Płeć, Kraj)
 - 📐 **Zawijanie przycisków filtrów**: przy dużej liczbie opcji przyciski automatycznie zawijają się do nowych wierszy — brak ucinania opcji
 - 🔧 **Naprawa dialogu edycji systemu**: poprawiony rozmiar okna i inicjalizacja pól cen przy otwarciu
+- ⚡ **Optymalizacja rozwijania/zwijania hierarchii**: `_cached_lp` na ramkach wierszy `CTkDataTable` — złożoność O(k), tylko modyfikowane wiersze; pierwsze rozwinięcie ~5 ms
+- 📄 **Zmiana kolejności kolumn**: dialog „Widoczność i kolejność kolumn” z przyciskami ↑/↓; kolejność zapisywana w `settings.json`; parametr `col_order` w `CTkDataTable`
+- 👁️ **Checkbox „Ukryj systemy”**: przełącznik w pasku tabeli Systemy RPG — ukrywa wiersze-systemy, pozostawiając widoczne tylko PG i suplementy
 
 ### v0.4.16 (21.04.2026)
 - 🔧 **Przebudowa dialogu edycji systemu**: pole „Przypisz do systemu” (powiązanie z katalogiem gier) zamiast tekstowego pola nazwy systemu głównego; przycisk ➕ Dodaj system bez zamykania formularza

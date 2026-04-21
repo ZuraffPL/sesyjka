@@ -62,6 +62,34 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.20",
+            "date": "21.04.2026",
+            "changes": [
+                "💰 CENY PER FORMA POSIADANIA:°",
+                "",
+                "✅ NOWE POLA CEN:",
+                "  \u2022 Cena Fizyczna, Cena PDF, Cena VTT — osobna cena dla ka\u017cdej formy",
+                "  \u2022 pola wy\u015bwietlane dynamicznie po zaznaczeniu Fizyczny/PDF/VTT",
+                "  \u2022 automatyczna migracja danych z \u201ecena_zakupu\u201d do nowych p\u00f3l",
+                "  \u2022 obs\u0142uga w dialogach dodawania i edycji systemu",
+                "",
+                "🎛️ MULTI-SELECT FILTRY WE WSZYSTKICH ZAKŁADKACH:°",
+                "",
+                "✅ TOGGLE-BUTTONY ZAMIAST COMBOBOX:",
+                "  \u2022 Systemy RPG: Typ, J\u0119zyk, Status, Wydawca, Posiadanie",
+                "  \u2022 Sesje RPG: Rok, System, Typ sesji, Mistrz Gry",
+                "  \u2022 Gracze: P\u0142e\u0107, Status",
+                "  \u2022 Wydawcy: Kraj, Strona WWW",
+                "  \u2022 brak zaznaczenia = poka\u017c wszystko",
+                "",
+                "📐 ZAWIJANIE PRZYCISKÓW FILTRÓW:°",
+                "",
+                "  \u2022 przy du\u017cej liczbie opcji przyciski zawijaj\u0105 si\u0119 do nowych wierszy",
+                "  \u2022 brak ucinania opcji przy w\u0105skim oknie",
+                "  \u2022 dynamiczne przeliczanie przy zmianie szeroko\u015bci okna",
+            ],
+        },
+        {
             "version": "0.4.16",
             "date": "21.04.2026",
             "changes": [

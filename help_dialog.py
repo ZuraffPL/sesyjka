@@ -42,7 +42,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("h2", "Pasek narzędziowy tabeli"),
     ("li", "Sortuj — wybierz kolumnę sortowania z listy (ID, Nazwa systemu, Wydawca, Język, "
            "Status, Posiadanie, Cena), następnie kliknij Rosnąco lub Malejąco."),
-    ("li", "Filtruj — otwiera panel filtrów: Typ, Język, Status, Wydawca, Posiadanie (PDF/Fizyczny)."),
+    ("li", "Filtruj — otwiera panel filtrów: Typ, Język, Status, Wydawca, Posiadanie (PDF/Fizyczny/VTT). "
+           "Każdy filtr obsługuje multi-wybór za pomocą toggle-buttonów — kliknij kilka opcji, "
+           "aby wyświetlić rekordy spełniające dowolną z nich. Przyciski zawijają się "
+           "do nowych wierszy gdy opcji jest dużo."),
     ("li", "Rozwiń wszystko / Zwiń wszystko — przełącza widoczność podrzędnych wierszy "
            "w tabeli hierarchicznej."),
     ("li", "Szukaj — wyszukiwanie tekstowe w czasie rzeczywistym po nazwie systemu."),
@@ -57,9 +60,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "System główny — dla suplementów: opcjonalny wybór systemu-rodzica z kolekcji."),
     ("li", "Wydawca — wybór z listy wydawców (można dodać nowego przyciskiem ➕ Dodaj wydawcę)."),
     ("li", "Fizyczny / PDF / VTT — zaznaczenie formy posiadania."),
+    ("li", "Cena Fizyczna / Cena PDF / Cena VTT — osobna cena dla każdej formy posiadania "
+           "(wyświetlana dynamicznie po zaznaczeniu odpowiedniej formy)."),
     ("li", "Język — PL, ENG, DE, FR, ES, IT."),
     ("li", "Status — Posiadam, Chcę kupić, Przeczytane itp."),
-    ("li", "Cena — wartość numeryczna (np. 89.99)."),
     ("li", "Notatki — dowolny tekst."),
     ("sep", ""),
 
@@ -77,7 +81,9 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "Można dodać nowego gracza bezpośrednio z formularza sesji."),
     ("li", "Notatki — opis sesji, podsumowanie fabuły itp."),
     ("h2", "Filtrowanie i sortowanie"),
-    ("li", "Pasek narzędziowy obsługuje filtrowanie po systemie, MG, roku i typie sesji."),
+    ("li", "Pasek narzędziowy obsługuje filtrowanie po systemie, MG, roku i typie sesji. "
+           "Filtry mają multi-wybór: klikaj kolejne opcje (toggle-buttony), aby zawęzić widok "
+           "do wielu wartości jednocześnie. Brak zaznaczenia = pokaż wszystko."),
     ("li", "Sortowanie po dacie, systemie, MG."),
     ("sep", ""),
 

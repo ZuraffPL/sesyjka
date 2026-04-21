@@ -240,6 +240,12 @@ class CTkDataTable(tk.Frame):
         Wywoływana (row_idx, row_data, event) przy prawym kliku.
     show_row_numbers : bool
         Jeśli True, wyświetla kolumnę "Lp." przed pierwszą kolumną danych.
+    col_order : list[int] | None
+        Opcjonalna permutacja kolumn do wyświetlenia. Jeśli podana, kolumny są
+        renderowane w kolejności col_order[0], col_order[1], … (wartości to
+        oryginalne indeksy w ``headers``/``data``). Jeśli None, kolejność
+        odpowiada kolejności w ``headers``. Callbacki zawsze otrzymują dane
+        w oryginalnej kolejności.
     """
 
     # ── konstruktor ────────────────────────────────────────────────────────
@@ -262,6 +268,7 @@ class CTkDataTable(tk.Frame):
         show_row_numbers: bool = False,
         hidden_cols: Optional[List[int]] = None,
         resize_callback: Optional[Callable[[List[int]], None]] = None,
+        col_order: Optional[List[int]] = None,
         **kw: Any,
     ) -> None:
         t = _D if dark_mode else _L
@@ -280,6 +287,7 @@ class CTkDataTable(tk.Frame):
         self._rc_cb = right_click_callback
         self._show_row_num = show_row_numbers
         self._hidden_cols: Set[int] = set(hidden_cols or [])
+        self._col_order: List[int] = list(col_order) if col_order is not None else list(range(len(headers)))
         self._theme = t
         self._row_frames: List[tk.Frame] = []
         self._row_pool: Dict[Any, tk.Frame] = {}  # ID → ukryta ramka do ponownego użycia
@@ -332,7 +340,9 @@ class CTkDataTable(tk.Frame):
             self._header_lp_label = lp_lbl
             x += _ROW_NUM_W
 
-        for i, (h, w) in enumerate(zip(self.headers, self.col_widths)):
+        for i in self._col_order:
+            h = self.headers[i]
+            w = self.col_widths[i]
             if i in self._hidden_cols:
                 self._col_hdr_labels[i] = None
                 self._col_resize_handles[i] = None
@@ -356,7 +366,7 @@ class CTkDataTable(tk.Frame):
             self._col_hdr_labels[i] = lbl
 
             if self._sort_cb is not None:
-                ci = i
+                ci = i  # oryginalny indeks kolumny przekazywany do callbacku
                 lbl.bind("<Button-1>", lambda _e, c=ci: self._sort_cb(c))  # type: ignore
                 lbl.bind("<Enter>", lambda _e, lb=lbl: lb.configure(bg=t["hdr_hover"]))
                 lbl.bind("<Leave>", lambda _e, lb=lbl: lb.configure(bg=t["hdr_bg"]))
@@ -393,7 +403,8 @@ class CTkDataTable(tk.Frame):
         if self._show_row_num and self._header_lp_label is not None:
             self._header_lp_label.place_configure(x=x)
             x += _ROW_NUM_W
-        for i, w in enumerate(self.col_widths):
+        for i in self._col_order:
+            w = self.col_widths[i]
             if i in self._hidden_cols:
                 if i == self._id_col and self._header_edit_label is not None:
                     self._header_edit_label.place_configure(x=x)
@@ -453,7 +464,8 @@ class CTkDataTable(tk.Frame):
             filler: Optional[tk.Label] = getattr(rf, '_filler_ref', None)
             if col_map is None:
                 continue
-            for i, w in enumerate(self.col_widths):
+            for i in self._col_order:
+                w = self.col_widths[i]
                 if i in self._hidden_cols:
                     if i == self._id_col:
                         if edit_btn is not None:
@@ -558,11 +570,14 @@ class CTkDataTable(tk.Frame):
         # ── szybka ścieżka: dane bez zmian → nic nie rób ─────────────────
         cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
         if cached is not None and cached == row:
-            # Lp.: zawsze bezwzględna numeracja – aktualizuj nawet przy cache-hit
+            # Lp.: aktualizuj tylko gdy wartość faktycznie się zmieniła (optymalizacja)
             if self._show_row_num:
-                lbl = getattr(rf, '_row_num_lbl', None)
-                if lbl is not None:
-                    lbl.configure(text=str(i + 1))
+                new_lp = str(i + 1)
+                if getattr(rf, '_cached_lp', None) != new_lp:
+                    lbl = getattr(rf, '_row_num_lbl', None)
+                    if lbl is not None:
+                        lbl.configure(text=new_lp)
+                    rf._cached_lp = new_lp  # type: ignore[attr-defined]
             return
         rf._cached_row = list(row)  # type: ignore[attr-defined]
         # Zniszcz tylko dzieci (Label/Button) – Frame zostaje
@@ -692,6 +707,7 @@ class CTkDataTable(tk.Frame):
             num_lbl.bind("<Leave>", _on_leave)
             num_lbl.bind("<Button-1>", _on_click)
             rf._row_num_lbl = num_lbl  # type: ignore[attr-defined]
+            rf._cached_lp = str(i + 1)  # type: ignore[attr-defined]
             if self._rc_cb is not None:
                 ri_, rd_ = i, list(row)
                 num_lbl.bind(
@@ -700,7 +716,9 @@ class CTkDataTable(tk.Frame):
                 )
             x += _ROW_NUM_W
 
-        for j, (val, w) in enumerate(zip(row, self.col_widths)):
+        for j in self._col_order:
+            val = row[j] if j < len(row) else ""
+            w = self.col_widths[j]
             if j in self._hidden_cols:
                 if j == self._id_col:
                     # Przycisk edycji nawet gdy kolumna ID ukryta – wstawiamy przycisk bez kolumny
@@ -849,12 +867,16 @@ class CTkDataTable(tk.Frame):
         parent_id: Any,
         expand: bool,
         child_rows: Optional[List[List[Any]]] = None,
+        is_child_fn: Optional[Callable[[List[Any]], bool]] = None,
     ) -> None:
         """Rozwija/zwija wiersze potomne bez pełnego _build_rows.
 
         Zamiast przebudowywać całą tabelę, wykonuje tylko pack_forget/pack(after=...)
         na ramkach suplementu oraz aktualizuje symbol w wierszu nadrzędnym in-place.
-        TOTAL cost: O(k) gdzie k = liczba suplementów; niezależne od rozmiaru tabeli.
+        TOTAL cost: O(k) gdzie k = liczba dzieci; niezależne od rozmiaru tabeli.
+
+        is_child_fn: opcjonalny predykat identyfikujący wiersze-dzieci przy collapse.
+        Domyślnie (None) używa starego kryterium symbol == "   →".
         """
         _t0 = _time.perf_counter()
         # Znajdź indeks wiersza nadrzędnego po id_col
@@ -919,12 +941,20 @@ class CTkDataTable(tk.Frame):
             self._row_frames[ins:ins] = new_frames
             self._data[ins:ins] = new_data_rows
         else:
-            # ── COLLAPSE: schowaj bezpośrednich potomków ("   →") do puli ────
+            # ── COLLAPSE: schowaj bezpośrednich potomków do puli ─────────
             end = parent_idx + 1
             while end < len(self._row_frames):
                 cd = getattr(self._row_frames[end], '_cached_row', None)
-                if cd and len(cd) > 0 and str(cd[0]) == "   \u2192":
-                    end += 1
+                if cd:
+                    if is_child_fn is not None:
+                        if is_child_fn(cd):
+                            end += 1
+                        else:
+                            break
+                    elif len(cd) > 0 and str(cd[0]) == "   \u2192":
+                        end += 1
+                    else:
+                        break
                 else:
                     break
             for rf_child in self._row_frames[parent_idx + 1 : end]:
@@ -935,12 +965,15 @@ class CTkDataTable(tk.Frame):
             del self._row_frames[parent_idx + 1 : end]
             del self._data[parent_idx + 1 : end]
 
-        # Lp.: przenumeruj wszystkie ramki od parent_idx wzwyż
+        # Lp.: przenumeruj ramki od parent_idx wzwyż, pomijaj niezmienione
         if self._show_row_num:
             for seq, rf in enumerate(self._row_frames[parent_idx:], start=parent_idx + 1):
-                lbl = getattr(rf, '_row_num_lbl', None)
-                if lbl is not None:
-                    lbl.configure(text=str(seq))
+                new_lp = str(seq)
+                if getattr(rf, '_cached_lp', None) != new_lp:
+                    lbl = getattr(rf, '_row_num_lbl', None)
+                    if lbl is not None:
+                        lbl.configure(text=new_lp)
+                    rf._cached_lp = new_lp  # type: ignore[attr-defined]
 
         _t1 = _time.perf_counter()
         _log.debug(

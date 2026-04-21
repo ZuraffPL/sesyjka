@@ -62,12 +62,12 @@ def _apply_dark_theme_to_widget(
             if widget_class in ('Checkbutton', 'Radiobutton'):
                 widget.configure(selectcolor=dark_entry_bg, activebackground=dark_bg, activeforeground=dark_fg)  # type: ignore
         elif widget_class in ('Entry', 'Text'):
-            widget.configure(
+            widget.configure(  # type: ignore[call-overload]
                 bg=dark_entry_bg,
-                fg=dark_entry_fg,  # type: ignore
+                fg=dark_entry_fg,
                 insertbackground=dark_entry_fg,
                 selectbackground="#0078d4",
-            )  # type: ignore
+            )
         elif widget_class == 'Frame':
             widget.configure(bg=dark_bg)  # type: ignore
         elif widget_class == 'Combobox':
@@ -451,32 +451,55 @@ def fill_gracze_tab(
                 if phrase in (str(r[1]) or '').lower() or phrase in (str(r[2]) or '').lower()
             ]
 
-        # Filtr płci
-        if active_filters_gracze.get('plec', 'Wszystkie') != 'Wszystkie':
-            filtered = [r for r in filtered if r[3] == active_filters_gracze['plec']]
+        def _fl(d: Dict[str, Any], key: str) -> List[str]:
+            v = d.get(key, [])
+            if isinstance(v, str):
+                return [] if v == 'Wszystkie' else [v]
+            return list(v)
 
-        # Filtr imię i nazwisko
-        imie_f = active_filters_gracze.get('imie', 'Wszystkie')
-        if imie_f == 'Wpisane':
-            filtered = [r for r in filtered if r[2] and str(r[2]).strip()]
-        elif imie_f == 'Puste':
-            filtered = [r for r in filtered if not r[2] or not str(r[2]).strip()]
+        # Filtr plci
+        plec_list = _fl(active_filters_gracze, 'plec')
+        if plec_list:
+            filtered = [r for r in filtered if (r[3] or '') in plec_list]
+
+        # Filtr imie i nazwisko
+        imie_list = _fl(active_filters_gracze, 'imie')
+        if imie_list:
+            show_wpisane = 'Wpisane' in imie_list
+            show_puste = 'Puste' in imie_list
+            if not (show_wpisane and show_puste):
+                filtered = [
+                    r for r in filtered
+                    if (show_wpisane and r[2] and str(r[2]).strip())
+                    or (show_puste and (not r[2] or not str(r[2]).strip()))
+                ]
 
         # Filtr social media
-        social_f = active_filters_gracze.get('social', 'Wszystkie')
-        if social_f == 'Wpisane':
-            filtered = [r for r in filtered if r[4] and str(r[4]).strip()]
-        elif social_f == 'Puste':
-            filtered = [r for r in filtered if not r[4] or not str(r[4]).strip()]
+        social_list = _fl(active_filters_gracze, 'social')
+        if social_list:
+            show_wpisane = 'Wpisane' in social_list
+            show_puste = 'Puste' in social_list
+            if not (show_wpisane and show_puste):
+                filtered = [
+                    r for r in filtered
+                    if (show_wpisane and r[4] and str(r[4]).strip())
+                    or (show_puste and (not r[4] or not str(r[4]).strip()))
+                ]
 
         # Filtr status
-        status_f = active_filters_gracze.get('status', 'Wszystkie')
-        if status_f == 'Główny użytkownik':
-            filtered = [r for r in filtered if r[5] == "⭐"]
-        elif status_f == 'Ważna osoba':
-            filtered = [r for r in filtered if r[5] == "👑"]
-        elif status_f == 'Zwykła osoba':
-            filtered = [r for r in filtered if r[5] not in ("⭐", "👑")]
+        status_list = _fl(active_filters_gracze, 'status')
+        if status_list:
+            def _matches_status(row: List[Any]) -> bool:
+                emoji = row[5] if len(row) > 5 else ''
+                for s in status_list:
+                    if s == 'Główny użytkownik' and emoji == "⭐":
+                        return True
+                    if s == 'Ważna osoba' and emoji == "👑":
+                        return True
+                    if s == 'Zwykła osoba' and emoji not in ("⭐", "👑"):
+                        return True
+                return False
+            filtered = [r for r in filtered if _matches_status(r)]
 
         # Sortowanie
         col_i = _SORTABLE.get(active_sort_gracze.get("column", "ID"), 0)
@@ -503,7 +526,7 @@ def fill_gracze_tab(
         _refresh_filter_btn()
 
     def _refresh_filter_btn() -> None:
-        active = sum(1 for v in active_filters_gracze.values() if v != 'Wszystkie')
+        active = sum(1 for v in active_filters_gracze.values() if v)
         filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
 
     # ── Górny pasek (sortowanie + filtry) ────────────────────────────────────
@@ -648,68 +671,96 @@ def fill_gracze_tab(
         dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj graczy")
         dlg.transient(tab.winfo_toplevel())
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 390, 310)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 460, 300)
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         cur = data_ref[0]
+        plci_vals: List[str] = sorted({str(r[3]) for r in cur if r[3]})
 
-        # Płeć
-        ctk.CTkLabel(mf, text="Płeć:").grid(row=0, column=0, sticky="w", pady=8)
-        plci: set[str] = {str(r[3]) for r in cur if r[3]}
-        plec_var_ = tk.StringVar(value=active_filters_gracze.get('plec', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=plec_var_,
-            values=['Wszystkie'] + sorted(plci),
-            width=22,
-            state="readonly",
-        ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
+        rows_cfg_g = [
+            ("Płeć:", 'plec', plci_vals),
+            ("Imię i nazwisko:", 'imie', ['Wpisane', 'Puste']),
+            ("Social media:", 'social', ['Wpisane', 'Puste']),
+            ("Status:", 'status', ['Główny użytkownik', 'Ważna osoba', 'Zwykła osoba']),
+        ]
 
-        # Imię i nazwisko
-        ctk.CTkLabel(mf, text="Imię i nazwisko:").grid(row=1, column=0, sticky="w", pady=8)
-        imie_var_ = tk.StringVar(value=active_filters_gracze.get('imie', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=imie_var_,
-            values=['Wszystkie', 'Wpisane', 'Puste'],
-            width=22,
-            state="readonly",
-        ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
+        selected: Dict[str, set] = {}
 
-        # Social media
-        ctk.CTkLabel(mf, text="Social media:").grid(row=2, column=0, sticky="w", pady=8)
-        social_var_ = tk.StringVar(value=active_filters_gracze.get('social', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=social_var_,
-            values=['Wszystkie', 'Wpisane', 'Puste'],
-            width=22,
-            state="readonly",
-        ).grid(row=2, column=1, sticky="ew", pady=8, padx=(10, 0))
+        def _get_existing(key: str) -> set:
+            v = active_filters_gracze.get(key, [])
+            if isinstance(v, str):
+                return set() if v == 'Wszystkie' else {v}
+            return set(v)
 
-        # Status
-        ctk.CTkLabel(mf, text="Status:").grid(row=3, column=0, sticky="w", pady=8)
-        status_var_ = tk.StringVar(value=active_filters_gracze.get('status', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=status_var_,
-            values=['Wszystkie', 'Główny użytkownik', 'Ważna osoba', 'Zwykła osoba'],
-            width=22,
-            state="readonly",
-        ).grid(row=3, column=1, sticky="ew", pady=8, padx=(10, 0))
+        def _add_toggle_row(parent: Any, row_idx: int, label: str, key: str, vals: List[str]) -> None:
+            selected[key] = _get_existing(key)
+            ctk.CTkLabel(parent, text=label, anchor="w", width=110).grid(
+                row=row_idx, column=0, sticky="nw", pady=(6, 2), padx=(0, 6)
+            )
+            wrap = ctk.CTkFrame(parent, fg_color="transparent", height=30)
+            wrap.grid(row=row_idx, column=1, sticky="ew", pady=(6, 2))
+            wrap.grid_propagate(False)
 
-        mf.columnconfigure(1, weight=1)
+            btns: List[ctk.CTkButton] = []
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.grid(row=4, column=0, columnspan=2, pady=(20, 0))
+            def _make_btn(val: str) -> ctk.CTkButton:
+                active = val in selected[key]
+                btn = ctk.CTkButton(
+                    wrap, text=val,
+                    width=max(50, len(val) * 8), height=26,
+                    fg_color="#2E7D32" if active else "#555555",
+                    hover_color="#1B5E20" if active else "#444444",
+                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(9)),
+                )
+
+                def _toggle(b: ctk.CTkButton = btn, v: str = val) -> None:
+                    if v in selected[key]:
+                        selected[key].discard(v)
+                        b.configure(fg_color="#555555", hover_color="#444444")
+                    else:
+                        selected[key].add(v)
+                        b.configure(fg_color="#2E7D32", hover_color="#1B5E20")
+
+                btn.configure(command=_toggle)
+                return btn
+
+            for val in vals:
+                btns.append(_make_btn(val))
+
+            def _reflow(event: Any = None) -> None:
+                avail = wrap.winfo_width()
+                if avail <= 1:
+                    wrap.after(50, _reflow)
+                    return
+                x, y, row_h = 0, 0, 0
+                for b in btns:
+                    b.update_idletasks()
+                    w = b.winfo_reqwidth() + 4
+                    h = b.winfo_reqheight() + 2
+                    if x + w > avail and x > 0:
+                        x = 0
+                        y += row_h
+                        row_h = 0
+                    b.place(x=x, y=y)
+                    x += w
+                    row_h = max(row_h, h)
+                wrap.configure(height=max(y + row_h, 30))
+
+            wrap.bind("<Configure>", _reflow)
+            dlg.after(150, _reflow)
+
+        for ri, (label, key, vals) in enumerate(rows_cfg_g):
+            _add_toggle_row(outer, ri, label, key, vals)
+        outer.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(dlg, fg_color="transparent")
+        bf.pack(pady=(6, 10))
 
         def _apply() -> None:
-            active_filters_gracze['plec'] = plec_var_.get()
-            active_filters_gracze['imie'] = imie_var_.get()
-            active_filters_gracze['social'] = social_var_.get()
-            active_filters_gracze['status'] = status_var_.get()
+            for key in selected:
+                active_filters_gracze[key] = list(selected[key])
             _apply_and_draw()
             dlg.destroy()
 
@@ -719,23 +770,13 @@ def fill_gracze_tab(
             dlg.destroy()
 
         ctk.CTkButton(
-            bf,
-            text="Zastosuj",
-            command=_apply,
-            fg_color="#2E7D32",
-            hover_color="#1B5E20",
-            width=90,
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Resetuj", command=_reset, fg_color="#1976D2", hover_color="#1565C0", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf,
-            text="Anuluj",
-            command=dlg.destroy,
-            fg_color="#666666",
-            hover_color="#555555",
-            width=90,
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90
         ).pack(side=tk.LEFT, padx=5)
 
         dlg.after(

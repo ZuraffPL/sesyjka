@@ -328,12 +328,22 @@ def fill_wydawcy_tab(
         if phrase:
             filtered = [r for r in filtered if phrase in (str(r[1]) or '').lower()]
         if active_filters_wydawcy.get('kraj', 'Wszystkie') != 'Wszystkie':
-            filtered = [r for r in filtered if r[3] == active_filters_wydawcy['kraj']]
-        strona_f = active_filters_wydawcy.get('strona', 'Wszystkie')
-        if strona_f == 'Wpisane':
-            filtered = [r for r in filtered if r[2]]
-        elif strona_f == 'Puste':
-            filtered = [r for r in filtered if not r[2]]
+            kraj_v = active_filters_wydawcy['kraj']
+            if isinstance(kraj_v, list):
+                if kraj_v:
+                    filtered = [r for r in filtered if r[3] in kraj_v]
+            else:
+                filtered = [r for r in filtered if r[3] == kraj_v]
+        strona_v = active_filters_wydawcy.get('strona', 'Wszystkie')
+        strona_list = strona_v if isinstance(strona_v, list) else ([] if strona_v == 'Wszystkie' else [strona_v])
+        if strona_list:
+            show_wpisane = 'Wpisane' in strona_list
+            show_puste = 'Puste' in strona_list
+            if not (show_wpisane and show_puste):
+                filtered = [
+                    r for r in filtered
+                    if (show_wpisane and r[2]) or (show_puste and not r[2])
+                ]
         col_i = _SORTABLE.get(active_sort_wydawcy.get("column", "ID"), 0)
         rev = active_sort_wydawcy.get("reverse", False)
         if col_i == 0:
@@ -346,7 +356,7 @@ def fill_wydawcy_tab(
         _refresh_filter_btn()
 
     def _refresh_filter_btn() -> None:
-        active = sum(1 for v in active_filters_wydawcy.values() if v != 'Wszystkie')
+        active = sum(1 for v in active_filters_wydawcy.values() if v)
         filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
 
     # ── Górny pasek (sortowanie + filtrowanie) ───────────────────────────────
@@ -487,42 +497,94 @@ def fill_wydawcy_tab(
         dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj wydawców")
         dlg.transient(tab.winfo_toplevel())
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 380, 220)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 460, 200)
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         cur = data_ref[0]
+        kraje_vals: List[str] = sorted({str(r[3]) for r in cur if r[3]})
 
-        ctk.CTkLabel(mf, text="Kraj:").grid(row=0, column=0, sticky="w", pady=8)
-        kraje: set[str] = set(r[3] for r in cur if r[3])
-        kraj_var_ = tk.StringVar(value=active_filters_wydawcy.get('kraj', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=kraj_var_,
-            values=['Wszystkie'] + sorted(kraje),
-            width=22,
-            state="readonly",
-        ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
+        rows_cfg_w = [
+            ("Kraj:", 'kraj', kraje_vals),
+            ("Strona:", 'strona', ['Wpisane', 'Puste']),
+        ]
 
-        ctk.CTkLabel(mf, text="Strona:").grid(row=1, column=0, sticky="w", pady=8)
-        strona_var_ = tk.StringVar(value=active_filters_wydawcy.get('strona', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=strona_var_,
-            values=['Wszystkie', 'Wpisane', 'Puste'],
-            width=22,
-            state="readonly",
-        ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
+        selected: Dict[str, set] = {}
 
-        mf.columnconfigure(1, weight=1)
+        def _get_existing(key: str) -> set:
+            v = active_filters_wydawcy.get(key, [])
+            if isinstance(v, str):
+                return set() if v == 'Wszystkie' else {v}
+            return set(v)
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.grid(row=2, column=0, columnspan=2, pady=(20, 0))
+        def _add_toggle_row(parent: Any, row_idx: int, label: str, key: str, vals: List[str]) -> None:
+            selected[key] = _get_existing(key)
+            ctk.CTkLabel(parent, text=label, anchor="w", width=80).grid(
+                row=row_idx, column=0, sticky="nw", pady=(6, 2), padx=(0, 6)
+            )
+            wrap = ctk.CTkFrame(parent, fg_color="transparent", height=30)
+            wrap.grid(row=row_idx, column=1, sticky="ew", pady=(6, 2))
+            wrap.grid_propagate(False)
+
+            btns: List[ctk.CTkButton] = []
+
+            def _make_btn(val: str) -> ctk.CTkButton:
+                active = val in selected[key]
+                btn = ctk.CTkButton(
+                    wrap, text=val,
+                    width=max(50, len(val) * 8), height=26,
+                    fg_color="#2E7D32" if active else "#555555",
+                    hover_color="#1B5E20" if active else "#444444",
+                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(9)),
+                )
+
+                def _toggle(b: ctk.CTkButton = btn, v: str = val) -> None:
+                    if v in selected[key]:
+                        selected[key].discard(v)
+                        b.configure(fg_color="#555555", hover_color="#444444")
+                    else:
+                        selected[key].add(v)
+                        b.configure(fg_color="#2E7D32", hover_color="#1B5E20")
+
+                btn.configure(command=_toggle)
+                return btn
+
+            for val in vals:
+                btns.append(_make_btn(val))
+
+            def _reflow(event: Any = None) -> None:
+                avail = wrap.winfo_width()
+                if avail <= 1:
+                    wrap.after(50, _reflow)
+                    return
+                x, y, row_h = 0, 0, 0
+                for b in btns:
+                    b.update_idletasks()
+                    w = b.winfo_reqwidth() + 4
+                    h = b.winfo_reqheight() + 2
+                    if x + w > avail and x > 0:
+                        x = 0
+                        y += row_h
+                        row_h = 0
+                    b.place(x=x, y=y)
+                    x += w
+                    row_h = max(row_h, h)
+                wrap.configure(height=max(y + row_h, 30))
+
+            wrap.bind("<Configure>", _reflow)
+            dlg.after(150, _reflow)
+
+        for ri, (label, key, vals) in enumerate(rows_cfg_w):
+            _add_toggle_row(outer, ri, label, key, vals)
+        outer.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(dlg, fg_color="transparent")
+        bf.pack(pady=(6, 10))
 
         def _apply() -> None:
-            active_filters_wydawcy['kraj'] = kraj_var_.get()
-            active_filters_wydawcy['strona'] = strona_var_.get()
+            for key in selected:
+                active_filters_wydawcy[key] = list(selected[key])
             _apply_and_draw()
             dlg.destroy()
 
@@ -532,23 +594,13 @@ def fill_wydawcy_tab(
             dlg.destroy()
 
         ctk.CTkButton(
-            bf,
-            text="Zastosuj",
-            command=_apply,
-            fg_color="#2E7D32",
-            hover_color="#1B5E20",
-            width=90,
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Resetuj", command=_reset, fg_color="#1976D2", hover_color="#1565C0", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf,
-            text="Anuluj",
-            command=dlg.destroy,
-            fg_color="#666666",
-            hover_color="#555555",
-            width=90,
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90
         ).pack(side=tk.LEFT, padx=5)
 
         dlg.after(

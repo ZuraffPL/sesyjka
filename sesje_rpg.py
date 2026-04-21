@@ -133,6 +133,9 @@ active_visible_cols_sesje: Dict[str, bool] = {
     "Gracze": True,
 }
 
+# Kolejność kolumn w tabeli sesji (bez "ID" który zawsze jest pierwszy)
+active_col_order_sesje: List[str] = ["Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
+
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SESJE = {"ID"}
 
@@ -554,21 +557,27 @@ def fill_sesje_rpg_tab(
                 or phrase in (str(r[5]) or '').lower()
             ]
 
-        year_f = active_filters_sesje.get('year', 'Wszystkie')
-        if year_f != 'Wszystkie':
-            filtered = [r for r in filtered if r[1] and str(r[1]).startswith(year_f)]
+        def _fl(d: Dict[str, Any], key: str) -> List[str]:
+            v = d.get(key, [])
+            if isinstance(v, str):
+                return [] if v == 'Wszystkie' else [v]
+            return list(v)
 
-        system_f = active_filters_sesje.get('system', 'Wszystkie')
-        if system_f != 'Wszystkie':
-            filtered = [r for r in filtered if r[2] == system_f]
+        year_list = _fl(active_filters_sesje, 'year')
+        if year_list:
+            filtered = [r for r in filtered if r[1] and any(str(r[1]).startswith(y) for y in year_list)]
 
-        typ_f = active_filters_sesje.get('typ', 'Wszystkie')
-        if typ_f != 'Wszystkie':
-            filtered = [r for r in filtered if r[3] and str(r[3]).startswith(typ_f)]
+        system_list = _fl(active_filters_sesje, 'system')
+        if system_list:
+            filtered = [r for r in filtered if r[2] in system_list]
 
-        mg_f = active_filters_sesje.get('mg', 'Wszystkie')
-        if mg_f != 'Wszystkie':
-            filtered = [r for r in filtered if r[4] == mg_f]
+        typ_list = _fl(active_filters_sesje, 'typ')
+        if typ_list:
+            filtered = [r for r in filtered if r[3] and any(str(r[3]).startswith(t) for t in typ_list)]
+
+        mg_list = _fl(active_filters_sesje, 'mg')
+        if mg_list:
+            filtered = [r for r in filtered if r[4] in mg_list]
 
         col_i = _SORTABLE.get(active_sort_sesje.get("column", "ID"), 0)
         rev = active_sort_sesje.get("reverse", False)
@@ -583,7 +592,7 @@ def fill_sesje_rpg_tab(
         _refresh_filter_btn()
 
     def _refresh_filter_btn() -> None:
-        active = sum(1 for v in active_filters_sesje.values() if v != 'Wszystkie')
+        active = sum(1 for v in active_filters_sesje.values() if v)
         filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
 
     # ── Górny pasek ──────────────────────────────────────────────────────────
@@ -754,6 +763,16 @@ def fill_sesje_rpg_tab(
         else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260])
     )
 
+    def _compute_col_order_sesje() -> List[int]:
+        """Zwraca permutację kolumn wg active_col_order_sesje."""
+        fixed = [h for h in _HEADERS if h in _ALWAYS_VISIBLE_SESJE]
+        ordered = [h for h in active_col_order_sesje if h in _HEADERS and h not in _ALWAYS_VISIBLE_SESJE]
+        missing = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SESJE and h not in ordered]
+        ordered += missing
+        display_order = fixed + ordered
+        hdr_idx = {h: i for i, h in enumerate(_HEADERS)}
+        return [hdr_idx[h] for h in display_order if h in hdr_idx]
+
     def _on_col_resize_sesje(widths: List[int]) -> None:
         active_col_widths_sesje.clear()
         active_col_widths_sesje.extend(widths)
@@ -773,6 +792,7 @@ def fill_sesje_rpg_tab(
         show_row_numbers=True,
         hidden_cols=_compute_hidden_cols_sesje(),
         resize_callback=_on_col_resize_sesje,
+        col_order=_compute_col_order_sesje(),
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
@@ -792,76 +812,101 @@ def fill_sesje_rpg_tab(
         dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj sesje RPG")
         dlg.transient(tab.winfo_toplevel())
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 400, 300)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 520, 320)
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        cur = data_ref[0]  # bieżące dane (aktualne po każdym odświeżeniu)
+        cur = data_ref[0]
 
-        # Rok
-        ctk.CTkLabel(mf, text="Rok:").grid(row=0, column=0, sticky="w", pady=8)
-        years: set[str] = set()
-        for r in cur:
-            if r[1]:
-                try:
-                    years.add(str(r[1]).split('-')[0])
-                except Exception:
-                    pass
-        year_var_ = tk.StringVar(value=active_filters_sesje.get('year', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=year_var_,
-            values=['Wszystkie'] + sorted(years, reverse=True),
-            width=22,
-            state="readonly",
-        ).grid(row=0, column=1, sticky="ew", pady=8, padx=(10, 0))
+        years_vals: List[str] = sorted(
+            {str(r[1]).split('-')[0] for r in cur if r[1]}, reverse=True
+        )
+        systems_vals: List[str] = sorted({str(r[2]) for r in cur if r[2]})
+        mgs_vals: List[str] = sorted({str(r[4]) for r in cur if r[4]})
 
-        # System
-        ctk.CTkLabel(mf, text="System:").grid(row=1, column=0, sticky="w", pady=8)
-        systems: set[str] = {str(r[2]) for r in cur if r[2]}
-        system_var_ = tk.StringVar(value=active_filters_sesje.get('system', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=system_var_,
-            values=['Wszystkie'] + sorted(systems),
-            width=22,
-            state="readonly",
-        ).grid(row=1, column=1, sticky="ew", pady=8, padx=(10, 0))
+        rows_cfg = [
+            ("Rok:", 'year', years_vals),
+            ("System:", 'system', systems_vals),
+            ("Typ sesji:", 'typ', ['Kampania', 'Jednostrzał']),
+            ("Mistrz Gry:", 'mg', mgs_vals),
+        ]
 
-        # Typ sesji
-        ctk.CTkLabel(mf, text="Typ sesji:").grid(row=2, column=0, sticky="w", pady=8)
-        typ_var_ = tk.StringVar(value=active_filters_sesje.get('typ', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=typ_var_,
-            values=['Wszystkie', 'Kampania', 'Jednostrzał'],
-            width=22,
-            state="readonly",
-        ).grid(row=2, column=1, sticky="ew", pady=8, padx=(10, 0))
+        selected: Dict[str, set] = {}
 
-        # Mistrz Gry
-        ctk.CTkLabel(mf, text="Mistrz Gry:").grid(row=3, column=0, sticky="w", pady=8)
-        mgs: set[str] = {str(r[4]) for r in cur if r[4]}
-        mg_var_ = tk.StringVar(value=active_filters_sesje.get('mg', 'Wszystkie'))
-        ttk.Combobox(
-            mf,
-            textvariable=mg_var_,
-            values=['Wszystkie'] + sorted(mgs),
-            width=22,
-            state="readonly",
-        ).grid(row=3, column=1, sticky="ew", pady=8, padx=(10, 0))
+        def _get_existing(key: str) -> set:
+            v = active_filters_sesje.get(key, [])
+            if isinstance(v, str):
+                return set() if v == 'Wszystkie' else {v}
+            return set(v)
 
-        mf.columnconfigure(1, weight=1)
+        def _add_toggle_row(parent: Any, row_idx: int, label: str, key: str, vals: List[str]) -> None:
+            selected[key] = _get_existing(key)
+            ctk.CTkLabel(parent, text=label, anchor="w", width=80).grid(
+                row=row_idx, column=0, sticky="nw", pady=(6, 2), padx=(0, 6)
+            )
+            wrap = ctk.CTkFrame(parent, fg_color="transparent", height=30)
+            wrap.grid(row=row_idx, column=1, sticky="ew", pady=(6, 2))
+            wrap.grid_propagate(False)
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.grid(row=4, column=0, columnspan=2, pady=(20, 0))
+            btns: List[ctk.CTkButton] = []
+
+            def _make_btn(val: str) -> ctk.CTkButton:
+                active = val in selected[key]
+                btn = ctk.CTkButton(
+                    wrap, text=val,
+                    width=max(50, len(val) * 8), height=26,
+                    fg_color="#2E7D32" if active else "#555555",
+                    hover_color="#1B5E20" if active else "#444444",
+                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(9)),
+                )
+
+                def _toggle(b: ctk.CTkButton = btn, v: str = val) -> None:
+                    if v in selected[key]:
+                        selected[key].discard(v)
+                        b.configure(fg_color="#555555", hover_color="#444444")
+                    else:
+                        selected[key].add(v)
+                        b.configure(fg_color="#2E7D32", hover_color="#1B5E20")
+
+                btn.configure(command=_toggle)
+                return btn
+
+            for val in vals:
+                btns.append(_make_btn(val))
+
+            def _reflow(event: Any = None) -> None:
+                avail = wrap.winfo_width()
+                if avail <= 1:
+                    wrap.after(50, _reflow)
+                    return
+                x, y, row_h = 0, 0, 0
+                for b in btns:
+                    b.update_idletasks()
+                    w = b.winfo_reqwidth() + 4
+                    h = b.winfo_reqheight() + 2
+                    if x + w > avail and x > 0:
+                        x = 0
+                        y += row_h
+                        row_h = 0
+                    b.place(x=x, y=y)
+                    x += w
+                    row_h = max(row_h, h)
+                wrap.configure(height=max(y + row_h, 30))
+
+            wrap.bind("<Configure>", _reflow)
+            dlg.after(150, _reflow)
+
+        for ri, (label, key, vals) in enumerate(rows_cfg):
+            _add_toggle_row(outer, ri, label, key, vals)
+        outer.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(dlg, fg_color="transparent")
+        bf.pack(pady=(6, 10))
 
         def _apply() -> None:
-            active_filters_sesje['year'] = year_var_.get()
-            active_filters_sesje['system'] = system_var_.get()
-            active_filters_sesje['typ'] = typ_var_.get()
-            active_filters_sesje['mg'] = mg_var_.get()
+            for key in selected:
+                active_filters_sesje[key] = list(selected[key])
             _apply_and_draw()
             dlg.destroy()
 
@@ -871,24 +916,18 @@ def fill_sesje_rpg_tab(
             dlg.destroy()
 
         ctk.CTkButton(
-            bf,
-            text="Zastosuj",
-            command=_apply,
-            fg_color="#2E7D32",
-            hover_color="#1B5E20",
-            width=90,
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Resetuj", command=_reset, fg_color="#1976D2", hover_color="#1565C0", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf,
-            text="Anuluj",
-            command=dlg.destroy,
-            fg_color="#666666",
-            hover_color="#555555",
-            width=90,
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90
         ).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(
+            300, lambda: dlg.winfo_exists() and (dlg.deiconify(), dlg.lift(), dlg.focus_force())
+        )
 
         dlg.after(
             300, lambda: dlg.winfo_exists() and (dlg.deiconify(), dlg.lift(), dlg.focus_force())
@@ -899,54 +938,91 @@ def fill_sesje_rpg_tab(
 
     # ── Dialog wyboru kolumn ─────────────────────────────────────────────────
     def _open_columns_dialog() -> None:
-        """Otwiera dialog z checkboxami do wyboru widocznych kolumn tabeli sesji."""
+        """Otwiera dialog z checkboxami i przyciskami kolejności kolumn tabeli sesji."""
         dlg = create_ctk_toplevel(tab)
-        dlg.title("Widoczność kolumn – Sesje RPG")
+        dlg.title("Kolumny – Sesje RPG")
         dlg.transient(tab.winfo_toplevel())
 
-        toggleable = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SESJE]
-        dialog_h = 80 + len(toggleable) * 38
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 280, dialog_h)
+        toggleable_base = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SESJE]
+        ordered = [h for h in active_col_order_sesje if h in toggleable_base]
+        ordered += [h for h in toggleable_base if h not in ordered]
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+        dialog_h = min(120 + len(ordered) * 38, 400)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 340, dialog_h)
+
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         ctk.CTkLabel(
-            mf,
-            text="Wybierz widoczne kolumny:",
+            outer,
+            text="Widoczność i kolejność kolumn:",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w", pady=(0, 6))
 
-        vars_: Dict[str, tk.BooleanVar] = {}
-        for col_name in toggleable:
-            v = tk.BooleanVar(value=active_visible_cols_sesje.get(col_name, True))
-            vars_[col_name] = v
-            ctk.CTkCheckBox(mf, text=col_name, variable=v).pack(anchor="w", pady=2)
+        order_list: List[str] = list(ordered)
+        vis_vars: Dict[str, tk.BooleanVar] = {
+            h: tk.BooleanVar(value=active_visible_cols_sesje.get(h, True))
+            for h in order_list
+        }
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.pack(pady=(14, 0))
+        rows_frame = ctk.CTkFrame(outer, fg_color="transparent")
+        rows_frame.pack(fill=tk.X)
+
+        def _rebuild_rows() -> None:
+            for w in rows_frame.winfo_children():
+                w.destroy()
+            for idx, col_name in enumerate(order_list):
+                rf = ctk.CTkFrame(rows_frame, fg_color="transparent")
+                rf.pack(fill=tk.X, pady=1)
+                ctk.CTkButton(
+                    rf, text="↑", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, -1),
+                ).pack(side=tk.LEFT, padx=(0, 2))
+                ctk.CTkButton(
+                    rf, text="↓", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, 1),
+                ).pack(side=tk.LEFT, padx=(0, 6))
+                ctk.CTkCheckBox(rf, text=col_name, variable=vis_vars[col_name],
+                                width=180).pack(side=tk.LEFT)
+
+        def _move(idx: int, direction: int) -> None:
+            new_idx = idx + direction
+            if 0 <= new_idx < len(order_list):
+                order_list[idx], order_list[new_idx] = order_list[new_idx], order_list[idx]
+                _rebuild_rows()
+
+        _rebuild_rows()
+
+        bf = ctk.CTkFrame(outer, fg_color="transparent")
+        bf.pack(pady=(12, 0))
 
         def _apply() -> None:
-            for col_name, v in vars_.items():
+            for col_name, v in vis_vars.items():
                 active_visible_cols_sesje[col_name] = bool(v.get())
+            active_col_order_sesje.clear()
+            active_col_order_sesje.extend(order_list)
             dlg.destroy()
             cache = getattr(tab, '_sesje_tab_cache', None)
             preloaded = cache['data_ref'][0] if cache else None
-            # Wymuś pełny rebuild tabeli (nowe hidden_cols pomija szybka ścieżka)
             if hasattr(tab, '_sesje_tab_cache'):
                 del tab._sesje_tab_cache  # type: ignore[attr-defined]
             fill_sesje_rpg_tab(tab, dark_mode=dark_mode, _preloaded_data=preloaded)
 
         def _reset() -> None:
-            for v in vars_.values():
+            for v in vis_vars.values():
                 v.set(True)
+            order_list.clear()
+            order_list.extend(toggleable_base)
+            _rebuild_rows()
 
         ctk.CTkButton(
             bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf, text="Zaznacz wszystkie", command=_reset, fg_color="#1976D2",
-            hover_color="#1565C0", width=130,
+            bf, text="Resetuj", command=_reset, fg_color="#1976D2",
+            hover_color="#1565C0", width=90,
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Anuluj", command=dlg.destroy, fg_color="#666666",

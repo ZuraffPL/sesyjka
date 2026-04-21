@@ -49,6 +49,10 @@ active_sort_systemy: Dict[str, Any] = {"column": "ID", "reverse": False}
 active_col_widths_systemy: List[int] = []
 # Stan przełącznika rozwiń/zwiń wszystkie suplementy
 all_expanded_systemy: bool = False
+# Ukrywanie wierszy "System" gdy "Rozwiń wszystkie" jest włączone
+hide_systems_systemy: bool = False
+# Ukrywanie wierszy "System" gdy "Rozwiń wszystkie" jest włączone
+hide_systems_systemy: bool = False
 # Widoczność kolumn w tabeli systemów (klucz = nazwa kolumny, wartość = czy widoczna)
 active_visible_cols_systemy: Dict[str, bool] = {
     "Nazwa systemu": True,
@@ -63,6 +67,12 @@ active_visible_cols_systemy: Dict[str, bool] = {
     "Status": True,
     "Cena": True,
 }
+
+# Kolejność kolumn w tabeli systemów (tylko przestawiane, bez zawsze-widocznych ""/ID)
+active_col_order_systemy: List[str] = [
+    "Nazwa systemu", "Typ", "System główny", "Typ suplementu",
+    "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena",
+]
 
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SYSTEMY = {"", "ID"}
@@ -256,6 +266,26 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass  # Kolumna już istnieje
 
+        # Migracja cen per forma posiadania (v0.4.x)
+        # cena_zakupu → zostaje jako backup; cena_fiz kopiuje jej wartość
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN cena_fiz REAL")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN cena_pdf REAL")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN cena_vtt REAL")
+        except sqlite3.OperationalError:
+            pass
+        # Jednorazowe kopiowanie: cena_zakupu → cena_fiz (tylko gdy cena_fiz jeszcze NULL)
+        c.execute(
+            "UPDATE systemy_rpg SET cena_fiz = cena_zakupu "
+            "WHERE cena_fiz IS NULL AND cena_zakupu IS NOT NULL"
+        )
+
         conn.commit()
 
 
@@ -356,7 +386,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
                    s.status_gra, s.status_kolekcja,
                    s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy,
                    s.system_glowny_nazwa_custom,
-                   s.system_gry_id
+                   s.system_gry_id,
+                   s.cena_fiz, s.cena_pdf, s.cena_vtt
             FROM systemy_rpg s
             ORDER BY s.id ASC
         """
@@ -388,14 +419,29 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         )
         status_combined = f"{status_gra}, {status_kolekcja_display}"
 
-        # Formatuj cenę w zależności od statusu kolekcji
-        cena_str = ""
-        if status_kolekcja in ["W kolekcji", "Na sprzedaż"] and system[12]:  # cena_zakupu
-            waluta = system[13] if system[13] else "PLN"
-            cena_str = f"{system[12]:.2f} {waluta}"
-        elif status_kolekcja == "Sprzedane" and system[14]:  # cena_sprzedazy
-            waluta = system[15] if system[15] else "PLN"
-            cena_str = f"{system[14]:.2f} {waluta}"
+        # Formatuj cenę: pokaż niepuste ceny per forma z etykietą (fiz/pdf/vtt)
+        # + cena sprzedaży gdy status == Sprzedane
+        cena_fiz_val = system[18] if len(system) > 18 else None
+        cena_pdf_val = system[19] if len(system) > 19 else None
+        cena_vtt_val = system[20] if len(system) > 20 else None
+        waluta = system[13] if system[13] else "PLN"  # wspólna waluta z waluta_zakupu
+
+        cena_parts: List[str] = []
+        if status_kolekcja == "Sprzedane":
+            if system[14]:  # cena_sprzedazy
+                w_sp = system[15] if system[15] else "PLN"
+                cena_parts.append(f"sprzedaż: {system[14]:.2f} {w_sp}")
+        else:
+            if cena_fiz_val:
+                cena_parts.append(f"fiz: {cena_fiz_val:.2f} {waluta}")
+            if cena_pdf_val:
+                cena_parts.append(f"pdf: {cena_pdf_val:.2f} {waluta}")
+            if cena_vtt_val:
+                cena_parts.append(f"vtt: {cena_vtt_val:.2f} {waluta}")
+            # Fallback na starą kolumnę gdy brak nowych (stara baza bez migracji)
+            if not cena_parts and system[12] and status_kolekcja in ("W kolekcji", "Na sprzedaż"):
+                cena_parts.append(f"{system[12]:.2f} {waluta}")
+        cena_str = " / ".join(cena_parts)
 
         # Formatuj VTT - nazwy VTT oddzielone przecinkami
         vtt_str = system[8] if system[8] else ""
@@ -1015,25 +1061,38 @@ def dodaj_system_rpg(
     )
     status_kolekcja_combo.grid(row=10, column=1, pady=8, sticky="w")
 
-    # Cena zakupu (dla statusu "W kolekcji")
-    cena_zakupu_label = ctk.CTkLabel(main_frame, text="Cena zakupu")
-    cena_zakupu_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
+    # Cena zakupu (dla statusu "W kolekcji") — per forma posiadania
+    cena_row_label = ctk.CTkLabel(main_frame, text="Cena zakupu")
+    cena_row_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="nw")
 
-    cena_zakupu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_zakupu_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
+    cena_fields_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    cena_fields_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
-    cena_zakupu_entry = ctk.CTkEntry(cena_zakupu_frame, width=100)
-    cena_zakupu_entry.pack(side=tk.LEFT, padx=(0, 5))
-
-    waluta_zakupu_var = tk.StringVar(value="PLN")
-    waluta_zakupu_combo = ctk.CTkComboBox(
-        cena_zakupu_frame,
-        variable=waluta_zakupu_var,
+    waluta_cena_var = tk.StringVar(value="PLN")
+    waluta_cena_combo = ctk.CTkComboBox(
+        cena_fields_frame,
+        variable=waluta_cena_var,
         values=["PLN", "USD", "EUR", "GBP"],
         state="readonly",
         width=70,
     )
-    waluta_zakupu_combo.pack(side=tk.LEFT)
+    waluta_cena_combo.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+    # Wiersz fiz
+    cena_fiz_lbl = ctk.CTkLabel(cena_fields_frame, text="Fiz:", width=40, anchor="w")
+    cena_fiz_lbl.grid(row=1, column=0, sticky="w", pady=2)
+    cena_fiz_entry = ctk.CTkEntry(cena_fields_frame, width=100)
+    cena_fiz_entry.grid(row=1, column=1, sticky="w", pady=2, padx=(4, 0))
+    # Wiersz pdf
+    cena_pdf_lbl = ctk.CTkLabel(cena_fields_frame, text="PDF:", width=40, anchor="w")
+    cena_pdf_lbl.grid(row=2, column=0, sticky="w", pady=2)
+    cena_pdf_entry = ctk.CTkEntry(cena_fields_frame, width=100)
+    cena_pdf_entry.grid(row=2, column=1, sticky="w", pady=2, padx=(4, 0))
+    # Wiersz vtt
+    cena_vtt_lbl = ctk.CTkLabel(cena_fields_frame, text="VTT:", width=40, anchor="w")
+    cena_vtt_lbl.grid(row=3, column=0, sticky="w", pady=2)
+    cena_vtt_entry = ctk.CTkEntry(cena_fields_frame, width=100)
+    cena_vtt_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(4, 0))
 
     # Cena sprzedaży (dla statusu "Sprzedane")
     cena_sprzedazy_label = ctk.CTkLabel(main_frame, text="Cena sprzedaży")
@@ -1055,37 +1114,60 @@ def dodaj_system_rpg(
     )
     waluta_sprzedazy_combo.pack(side=tk.LEFT)
 
-    # Początkowo ukryj oba pola ceny
-    cena_zakupu_label.grid_remove()
-    cena_zakupu_frame.grid_remove()
+    # Początkowo ukryj wszystko
+    cena_row_label.grid_remove()
+    cena_fields_frame.grid_remove()
     cena_sprzedazy_label.grid_remove()
     cena_sprzedazy_frame.grid_remove()
 
-    def on_status_kolekcja_change(*args: Any) -> None:
-        """Obsługuje zmianę statusu kolekcji - pokazuje odpowiednie pole ceny"""
+    def _update_cena_fields(*_args: Any) -> None:
+        """Pokazuje/ukrywa wiersze cen zakupu zależnie od posiadania i statusu."""
         status = status_kolekcja_var.get()
+        has_fiz = fizyczny_var.get()
+        has_pdf = pdf_var.get()
+        has_vtt = vtt_var.get()
 
-        if status == "W kolekcji":
-            # Pokaż cenę zakupu, ukryj cenę sprzedaży
-            cena_zakupu_label.grid()
-            cena_zakupu_frame.grid()
-            cena_sprzedazy_label.grid_remove()
-            cena_sprzedazy_frame.grid_remove()
-        elif status == "Sprzedane":
-            # Pokaż cenę sprzedaży, ukryj cenę zakupu
-            cena_zakupu_label.grid_remove()
-            cena_zakupu_frame.grid_remove()
+        if status == "Sprzedane":
+            cena_row_label.grid_remove()
+            cena_fields_frame.grid_remove()
             cena_sprzedazy_label.grid()
             cena_sprzedazy_frame.grid()
-        else:
-            # Ukryj oba pola dla innych statusów
-            cena_zakupu_label.grid_remove()
-            cena_zakupu_frame.grid_remove()
-            cena_sprzedazy_label.grid_remove()
-            cena_sprzedazy_frame.grid_remove()
+            return
 
-    status_kolekcja_var.trace_add('write', on_status_kolekcja_change)
-    on_status_kolekcja_change()  # Ustaw początkowy stan
+        cena_sprzedazy_label.grid_remove()
+        cena_sprzedazy_frame.grid_remove()
+
+        if status in ("W kolekcji", "Na sprzedaż") and (has_fiz or has_pdf or has_vtt):
+            cena_row_label.grid()
+            cena_fields_frame.grid()
+            # Pokaż/ukryj wiersze per forma
+            if has_fiz:
+                cena_fiz_lbl.grid()
+                cena_fiz_entry.grid()
+            else:
+                cena_fiz_lbl.grid_remove()
+                cena_fiz_entry.grid_remove()
+            if has_pdf:
+                cena_pdf_lbl.grid()
+                cena_pdf_entry.grid()
+            else:
+                cena_pdf_lbl.grid_remove()
+                cena_pdf_entry.grid_remove()
+            if has_vtt:
+                cena_vtt_lbl.grid()
+                cena_vtt_entry.grid()
+            else:
+                cena_vtt_lbl.grid_remove()
+                cena_vtt_entry.grid_remove()
+        else:
+            cena_row_label.grid_remove()
+            cena_fields_frame.grid_remove()
+
+    status_kolekcja_var.trace_add('write', _update_cena_fields)
+    fizyczny_var.trace_add('write', _update_cena_fields)
+    pdf_var.trace_add('write', _update_cena_fields)
+    vtt_var.trace_add('write', _update_cena_fields)
+    _update_cena_fields()  # stan początkowy
 
     def on_typ_change(*args: Any) -> None:
         """Obsługuje zmianę typu (Podręcznik Główny/Suplement)"""
@@ -1148,29 +1230,43 @@ def dodaj_system_rpg(
         if wydawca_var.get():
             wydawca_id = int(wydawca_var.get().split(' - ')[0])
 
-        # Pobierz ceny w zależności od statusu
-        cena_zakupu = None
-        waluta_zakupu = None
-        cena_sprzedazy = None
-        waluta_sprzedazy = None
+        # Pobierz ceny w zależności od statusu i formy posiadania
+        cena_fiz_new: Optional[float] = None
+        cena_pdf_new: Optional[float] = None
+        cena_vtt_new: Optional[float] = None
+        cena_sprzedazy: Optional[float] = None
+        waluta_sprzedazy: Optional[str] = None
+        waluta_cena_new: Optional[str] = None
+
+        def _parse_cena_add(entry: ctk.CTkEntry, label: str) -> Optional[float]:
+            s = entry.get().strip().replace(',', '.')
+            if not s:
+                return None
+            try:
+                return float(s)
+            except ValueError:
+                messagebox.showerror("Błąd", f"Cena {label} musi być liczbą.", parent=dialog)
+                raise
 
         if status_kolekcja_var.get() in ["W kolekcji", "Na sprzedaż"]:
-            cena_str = cena_zakupu_entry.get().strip().replace(',', '.')
-            if cena_str:
-                try:
-                    cena_zakupu = float(cena_str)
-                    waluta_zakupu = waluta_zakupu_var.get()
-                except ValueError:
-                    messagebox.showerror("Błąd", "Cena zakupu musi być liczbą.", parent=dialog)  # type: ignore
-                    return
+            waluta_cena_new = waluta_cena_var.get()
+            try:
+                if fizyczny_var.get():
+                    cena_fiz_new = _parse_cena_add(cena_fiz_entry, "fiz.")
+                if pdf_var.get():
+                    cena_pdf_new = _parse_cena_add(cena_pdf_entry, "PDF")
+                if vtt_var.get():
+                    cena_vtt_new = _parse_cena_add(cena_vtt_entry, "VTT")
+            except ValueError:
+                return
         elif status_kolekcja_var.get() == "Sprzedane":
-            cena_str = cena_sprzedazy_entry.get().strip().replace(',', '.')
-            if cena_str:
+            cena_str_sp = cena_sprzedazy_entry.get().strip().replace(',', '.')
+            if cena_str_sp:
                 try:
-                    cena_sprzedazy = float(cena_str)
+                    cena_sprzedazy = float(cena_str_sp)
                     waluta_sprzedazy = waluta_sprzedazy_var.get()
                 except ValueError:
-                    messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog)  # type: ignore
+                    messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog)
                     return
 
         # Zbierz wybrane platformy VTT
@@ -1186,14 +1282,15 @@ def dodaj_system_rpg(
             c = conn.cursor()
             c.execute(
                 """
-                INSERT INTO systemy_rpg (id, nazwa, typ, system_glowny_id, typ_suplementu, 
+                INSERT INTO systemy_rpg (id, nazwa, typ, system_glowny_id, typ_suplementu,
                                        wydawca_id, fizyczny, pdf, vtt, jezyk,
                                        status_gra, status_kolekcja,
                                        cena_zakupu, waluta_zakupu, cena_sprzedazy,
                                        waluta_sprzedazy,
                                        system_glowny_nazwa_custom,
-                                       system_gry_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       system_gry_id,
+                                       cena_fiz, cena_pdf, cena_vtt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     reserved_id,
@@ -1208,12 +1305,15 @@ def dodaj_system_rpg(
                     jezyk if jezyk else None,
                     status_gra_var.get(),
                     status_kolekcja_var.get(),
-                    cena_zakupu,
-                    waluta_zakupu,
+                    cena_fiz_new,   # cena_zakupu (backup = fiz)
+                    waluta_cena_new,
                     cena_sprzedazy,
                     waluta_sprzedazy,
                     None,
                     game_id_to_save,
+                    cena_fiz_new,
+                    cena_pdf_new,
+                    cena_vtt_new,
                 ),
             )
             conn.commit()
@@ -1353,32 +1453,43 @@ def fill_systemy_rpg_tab(
     search_var: tk.StringVar = tk.StringVar()
 
     def _apply_record_filters(recs: List[Any]) -> List[Any]:
+        def _fl(key: str) -> List[str]:
+            """Pobierz listę wybranych wartości filtra (backward-compat ze starymi stringami)."""
+            v = active_filters_systemy.get(key, [])
+            if isinstance(v, str):
+                return [] if v == 'Wszystkie' else [v]
+            return list(v)
+
         result = []
         for rec in recs:
-            if active_filters_systemy.get('typ', 'Wszystkie') not in ('Wszystkie', rec[2]):
+            typ_list = _fl('typ')
+            if typ_list and rec[2] not in typ_list:
                 continue
-            if active_filters_systemy.get('wydawca', 'Wszystkie') not in (
-                'Wszystkie',
-                rec[5] or '',
-            ):
+            wyd_list = _fl('wydawca')
+            if wyd_list and (rec[5] or '') not in wyd_list:
                 continue
-            pf = active_filters_systemy.get('posiadanie', 'Wszystkie')
-            if pf == 'Fizyczny' and not rec[6]:
+            pf_list = _fl('posiadanie')
+            if pf_list:
+                match = False
+                for pf in pf_list:
+                    if pf == 'Fizyczny' and rec[6]:
+                        match = True
+                    elif pf == 'PDF' and rec[7]:
+                        match = True
+                    elif pf == 'Fizyczny i PDF' and rec[6] and rec[7]:
+                        match = True
+                    elif pf == 'Żadne' and not rec[6] and not rec[7]:
+                        match = True
+                if not match:
+                    continue
+            sf_list = _fl('status')
+            if sf_list and not any(sf in (rec[10] or '') for sf in sf_list):
                 continue
-            if pf == 'PDF' and not rec[7]:
+            wf_list = _fl('waluta')
+            if wf_list and not any(wf in (rec[11] or '') for wf in wf_list):
                 continue
-            if pf == 'Fizyczny i PDF' and not (rec[6] and rec[7]):
-                continue
-            if pf == 'Żadne' and (rec[6] or rec[7]):
-                continue
-            sf = active_filters_systemy.get('status', 'Wszystkie')
-            if sf != 'Wszystkie' and sf not in (rec[10] or ''):
-                continue
-            wf = active_filters_systemy.get('waluta', 'Wszystkie')
-            if wf != 'Wszystkie' and wf not in (rec[11] or ''):
-                continue
-            jf = active_filters_systemy.get('jezyk', 'Wszystkie')
-            if jf not in ('Wszystkie', rec[9] or ''):
+            jf_list = _fl('jezyk')
+            if jf_list and (rec[9] or '') not in jf_list:
                 continue
             result.append(rec)
         return result  # type: ignore[return-value]
@@ -1536,7 +1647,8 @@ def fill_systemy_rpg_tab(
                 "",          # status
                 "",          # cena
             ]
-            data_h.append(game_row)
+            if not hide_systems_systemy:
+                data_h.append(game_row)
 
             if expanded_state.get(gid):
                 # Podręczniki Główne (pierwsze, sortowane po nazwie)
@@ -1738,7 +1850,7 @@ def fill_systemy_rpg_tab(
         _apply_and_draw()
 
     def _refresh_filter_btn() -> None:
-        active = sum(1 for v in active_filters_systemy.values() if v != 'Wszystkie')
+        active = sum(1 for v in active_filters_systemy.values() if v)
         filter_btn.configure(text=f"Filtruj ({active})" if active else "Filtruj")
 
     # ── Kolorowanie wierszy ──────────────────────────────────────────────
@@ -1803,7 +1915,7 @@ def fill_systemy_rpg_tab(
             logger.exception("_on_edit: błąd otwierania edycji")
             messagebox.showerror("Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab)
 
-    def _on_cell_click(row_idx: int, col_idx: int, row_data: List[Any]) -> None:
+    def _on_cell_click(row_idx: int, col_idx: int, row_data: List[Any]) -> None:  # Tk callback
         if col_idx != 0:
             return
         symbol = row_data[0] if row_data else ""
@@ -1816,20 +1928,84 @@ def fill_systemy_rpg_tab(
             typ = row_data[3] if len(row_data) > 3 else ""
 
             if typ == "System" or str(raw_id).startswith("G"):
+                # ── System: O(k) expand/collapse przez toggle_expand ──────────
                 gid_str = str(raw_id)[1:] if str(raw_id).startswith("G") else str(raw_id)
                 try:
                     gid = int(gid_str)
                 except ValueError:
                     return
-                expanded_state[gid] = not expanded_state.get(gid, False)
+                new_expanded = not expanded_state.get(gid, False)
+                expanded_state[gid] = new_expanded
+
+                def _is_system_child(row: List[Any]) -> bool:
+                    """Zwraca True gdy wiersz jest dzieckiem systemu (PG/Suplement pod systemem)."""
+                    sym = str(row[0]) if row and row[0] is not None else ""
+                    rid = str(row[1]) if len(row) > 1 else ""
+                    # Wiersz-dziecko systemu ma zawsze symbol "   " (3 spacje) i ID bez prefiksu G
+                    return sym == "   " and not rid.startswith("G")
+
+                if new_expanded:
+                    # Zbuduj child_rows tylko dla tego systemu (bez pełnego rebuild)
+                    pgs_here = pg_by_game.get(gid, [])
+                    supls_here_loc: List[Any] = []
+                    for pg in pgs_here:
+                        supls_here_loc.extend(supl_by_pg.get(pg[0], []))
+                    direct_supls_here = supl_direct_by_game.get(gid, [])
+                    game_data = games.get(gid)
+                    game_name_loc: str = game_data[1] if game_data else ""
+
+                    child_rows: List[List[Any]] = []
+                    for pg in sorted(pgs_here, key=lambda x: (x[1] or "").lower()):
+                        child_rows.append([
+                            "   ", str(pg[0]), "  " + (pg[1] or ""),
+                            "Podr\u0119cznik G\u0142\u00f3wny", game_name_loc, "",
+                            pg[5] or "",
+                            "Tak" if pg[6] else "Nie",
+                            "Tak" if pg[7] else "Nie",
+                            pg[8] or "", pg[9] or "", pg[10] or "", pg[11] or "",
+                        ])
+                    for supl in sorted(supls_here_loc, key=lambda x: (x[1] or "").lower()):
+                        parent_pg_name = ""
+                        for pg in pgs_here:
+                            if pg[0] == supl[3]:
+                                parent_pg_name = pg[1] or ""
+                                break
+                        child_rows.append([
+                            "   ", str(supl[0]), "  " + (supl[1] or ""),
+                            "Suplement", parent_pg_name, supl[4] or "",
+                            supl[5] or "",
+                            "Tak" if supl[6] else "Nie",
+                            "Tak" if supl[7] else "Nie",
+                            supl[8] or "", supl[9] or "", supl[10] or "", supl[11] or "",
+                        ])
+                    for supl in sorted(direct_supls_here, key=lambda x: (x[1] or "").lower()):
+                        child_rows.append([
+                            "   ", str(supl[0]), "  " + (supl[1] or ""),
+                            "Suplement", "", supl[4] or "",
+                            supl[5] or "",
+                            "Tak" if supl[6] else "Nie",
+                            "Tak" if supl[7] else "Nie",
+                            supl[8] or "", supl[9] or "", supl[10] or "", supl[11] or "",
+                        ])
+                    _table[0].toggle_expand(
+                        parent_id=f"G{gid}",
+                        expand=True,
+                        child_rows=child_rows,
+                    )
+                else:
+                    _table[0].toggle_expand(
+                        parent_id=f"G{gid}",
+                        expand=False,
+                        is_child_fn=_is_system_child,
+                    )
             else:
+                # ── Osierocony PG: pełny rebuild (rzadka operacja) ────────────
                 try:
                     main_id = int(raw_id)
                 except ValueError:
                     return
                 expanded_state[main_id] = not expanded_state.get(main_id, False)
-
-            _table[0].set_data(_build_hierarchical_data())
+                _table[0].set_data(_build_hierarchical_data())
         except (ValueError, IndexError):
             pass
 
@@ -2046,15 +2222,30 @@ def fill_systemy_rpg_tab(
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
 
     expand_var = tk.BooleanVar(value=all_expanded_systemy)
+    hide_systems_var = tk.BooleanVar(value=hide_systems_systemy)
+    hide_switch_ref: List[Any] = [None]
 
     def _on_toggle_expand_all() -> None:
-        global all_expanded_systemy
+        global all_expanded_systemy, hide_systems_systemy
         all_expanded_systemy = bool(expand_var.get())
         if all_expanded_systemy:
             for gid in games:
                 expanded_state[gid] = True
+            if hide_switch_ref[0] is not None:
+                hide_switch_ref[0].configure(state="normal")
         else:
             expanded_state.clear()
+            # Gdy zwijamy wszystko — wyłącz też ukrywanie systemów
+            hide_systems_systemy = False
+            hide_systems_var.set(False)
+            if hide_switch_ref[0] is not None:
+                hide_switch_ref[0].configure(state="disabled")
+        if _table[0] is not None:
+            _table[0].set_data(_build_hierarchical_data())
+
+    def _on_toggle_hide_systems() -> None:
+        global hide_systems_systemy
+        hide_systems_systemy = bool(hide_systems_var.get())
         if _table[0] is not None:
             _table[0].set_data(_build_hierarchical_data())
 
@@ -2069,6 +2260,20 @@ def fill_systemy_rpg_tab(
         width=50,
     )
     expand_switch.pack(side=tk.LEFT, padx=4)
+
+    hide_sw = ctk.CTkSwitch(
+        top_bar,
+        text="Ukryj systemy",
+        variable=hide_systems_var,
+        command=_on_toggle_hide_systems,
+        onvalue=True,
+        offvalue=False,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10)),
+        width=50,
+        state="normal" if all_expanded_systemy else "disabled",
+    )
+    hide_sw.pack(side=tk.LEFT, padx=4)
+    hide_switch_ref[0] = hide_sw
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
     tk.Label(top_bar, text="Wyszukaj:", bg=bg_top, fg=fg_top, font=FONT).pack(
         side=tk.LEFT, padx=(0, 4)
@@ -2100,6 +2305,16 @@ def fill_systemy_rpg_tab(
 
     _col_w = list(active_col_widths_systemy) if len(active_col_widths_systemy) == len(_HEADERS) else _compute_widths(initial_data)
 
+    def _compute_col_order() -> List[int]:
+        """Zwraca permutację kolumn: [0, 1, ...] wg active_col_order_systemy."""
+        fixed = [h for h in _HEADERS if h in _ALWAYS_VISIBLE_SYSTEMY]
+        ordered = [h for h in active_col_order_systemy if h in _HEADERS and h not in _ALWAYS_VISIBLE_SYSTEMY]
+        missing = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SYSTEMY and h not in ordered]
+        ordered += missing
+        display_order = fixed + ordered
+        hdr_idx = {h: i for i, h in enumerate(_HEADERS)}
+        return [hdr_idx[h] for h in display_order if h in hdr_idx]
+
     def _on_col_resize_systemy(widths: List[int]) -> None:
         active_col_widths_systemy.clear()
         active_col_widths_systemy.extend(widths)
@@ -2120,6 +2335,7 @@ def fill_systemy_rpg_tab(
         show_row_numbers=True,
         hidden_cols=_compute_hidden_cols(),
         resize_callback=_on_col_resize_systemy,
+        col_order=_compute_col_order(),
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
@@ -2139,53 +2355,99 @@ def fill_systemy_rpg_tab(
         dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj systemy RPG")
         dlg.transient(tab.winfo_toplevel())
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 420, 380)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 560, 400)
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         cur = records_ref[0]
         rows_cfg = [
-            ("Typ:", 'typ', ['Wszystkie', 'Podręcznik Główny', 'Suplement']),
-            ("Wydawca:", 'wydawca', ['Wszystkie'] + sorted({str(r[5]) for r in cur if r[5]})),
-            (
-                "Posiadanie:",
-                'posiadanie',
-                ['Wszystkie', 'Fizyczny', 'PDF', 'Fizyczny i PDF', 'Żadne'],
-            ),
-            ("Język:", 'jezyk', ['Wszystkie'] + sorted({str(r[9]) for r in cur if r[9]})),
-            (
-                "Status:",
-                'status',
-                [
-                    'Wszystkie',
-                    'Grane',
-                    'Nie grane',
-                    'W kolekcji',
-                    'Na sprzedaż',
-                    'Sprzedane',
-                    'Nieposiadane',
-                    'Do kupienia',
-                ],
-            ),
-            ("Waluta:", 'waluta', ['Wszystkie', 'PLN', 'USD', 'EUR', 'GBP']),
+            ("Typ:", 'typ', ['Podręcznik Główny', 'Suplement']),
+            ("Wydawca:", 'wydawca', sorted({str(r[5]) for r in cur if r[5]})),
+            ("Posiadanie:", 'posiadanie', ['Fizyczny', 'PDF', 'Fizyczny i PDF', 'Żadne']),
+            ("Język:", 'jezyk', sorted({str(r[9]) for r in cur if r[9]})),
+            ("Status:", 'status', ['Grane', 'Nie grane', 'W kolekcji', 'Na sprzedaż', 'Sprzedane', 'Nieposiadane', 'Do kupienia']),
+            ("Waluta:", 'waluta', ['PLN', 'USD', 'EUR', 'GBP']),
         ]
-        vars_: Dict[str, tk.StringVar] = {}
-        for ri, (label, key, vals) in enumerate(rows_cfg):
-            ctk.CTkLabel(mf, text=label).grid(row=ri, column=0, sticky="w", pady=8)
-            v = tk.StringVar(value=active_filters_systemy.get(key, 'Wszystkie'))
-            vars_[key] = v
-            ttk.Combobox(mf, textvariable=v, values=vals, width=24, state="readonly").grid(
-                row=ri, column=1, sticky="ew", pady=8, padx=(10, 0)
-            )
-        mf.columnconfigure(1, weight=1)
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.grid(row=len(rows_cfg), column=0, columnspan=2, pady=(20, 0))
+        # selected[key] = zbiór aktualnie wybranych wartości
+        selected: Dict[str, set] = {}
+
+        def _get_existing(key: str) -> set:
+            v = active_filters_systemy.get(key, [])
+            if isinstance(v, str):
+                return set() if v == 'Wszystkie' else {v}
+            return set(v)
+
+        def _add_toggle_row(parent: Any, row_idx: int, label: str, key: str, vals: List[str]) -> None:
+            selected[key] = _get_existing(key)
+            ctk.CTkLabel(parent, text=label, anchor="w", width=80).grid(
+                row=row_idx, column=0, sticky="nw", pady=(6, 2), padx=(0, 6)
+            )
+            wrap = ctk.CTkFrame(parent, fg_color="transparent", height=30)
+            wrap.grid(row=row_idx, column=1, sticky="ew", pady=(6, 2))
+            wrap.grid_propagate(False)
+
+            btns: List[ctk.CTkButton] = []
+
+            def _make_btn(val: str) -> ctk.CTkButton:
+                active = val in selected[key]
+                btn = ctk.CTkButton(
+                    wrap,
+                    text=val,
+                    width=max(50, len(val) * 8),
+                    height=26,
+                    fg_color="#2E7D32" if active else "#555555",
+                    hover_color="#1B5E20" if active else "#444444",
+                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(9)),
+                )
+
+                def _toggle(b: ctk.CTkButton = btn, v: str = val) -> None:
+                    if v in selected[key]:
+                        selected[key].discard(v)
+                        b.configure(fg_color="#555555", hover_color="#444444")
+                    else:
+                        selected[key].add(v)
+                        b.configure(fg_color="#2E7D32", hover_color="#1B5E20")
+
+                btn.configure(command=_toggle)
+                return btn
+
+            for val in vals:
+                btns.append(_make_btn(val))
+
+            def _reflow(event: Any = None) -> None:
+                avail = wrap.winfo_width()
+                if avail <= 1:
+                    wrap.after(50, _reflow)
+                    return
+                x, y, row_h = 0, 0, 0
+                for b in btns:
+                    b.update_idletasks()
+                    w = b.winfo_reqwidth() + 4
+                    h = b.winfo_reqheight() + 2
+                    if x + w > avail and x > 0:
+                        x = 0
+                        y += row_h
+                        row_h = 0
+                    b.place(x=x, y=y)
+                    x += w
+                    row_h = max(row_h, h)
+                wrap.configure(height=max(y + row_h, 30))
+
+            wrap.bind("<Configure>", _reflow)
+            dlg.after(150, _reflow)
+
+        for ri, (label, key, vals) in enumerate(rows_cfg):
+            _add_toggle_row(outer, ri, label, key, vals)
+        outer.columnconfigure(1, weight=1)
+
+        bf = ctk.CTkFrame(dlg, fg_color="transparent")
+        bf.pack(pady=(6, 10))
 
         def _apply() -> None:
-            for key, v in vars_.items():
-                active_filters_systemy[key] = v.get()
+            for key in selected:
+                active_filters_systemy[key] = list(selected[key])
             _apply_and_draw()
             dlg.destroy()
 
@@ -2195,23 +2457,13 @@ def fill_systemy_rpg_tab(
             dlg.destroy()
 
         ctk.CTkButton(
-            bf,
-            text="Zastosuj",
-            command=_apply,
-            fg_color="#2E7D32",
-            hover_color="#1B5E20",
-            width=90,
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Resetuj", command=_reset, fg_color="#1976D2", hover_color="#1565C0", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf,
-            text="Anuluj",
-            command=dlg.destroy,
-            fg_color="#666666",
-            hover_color="#555555",
-            width=90,
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90
         ).pack(side=tk.LEFT, padx=5)
 
         dlg.after(
@@ -2225,55 +2477,93 @@ def fill_systemy_rpg_tab(
 
     # ── Dialog wyboru kolumn ─────────────────────────────────────────────
     def _open_columns_dialog() -> None:
-        """Otwiera dialog z checkboxami do wyboru widocznych kolumn tabeli systemów."""
+        """Otwiera dialog z checkboxami i przyciskami kolejności kolumn tabeli systemów."""
         dlg = create_ctk_toplevel(tab)
-        dlg.title("Widoczność kolumn – Systemy RPG")
+        dlg.title("Kolumny – Systemy RPG")
         dlg.transient(tab.winfo_toplevel())
 
-        # Kolumny z możliwością ukrycia (bez zawsze-widocznych)
-        toggleable = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SYSTEMY]
-        dialog_h = 80 + len(toggleable) * 38
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 280, dialog_h)
+        # Buduj listę w aktualnej kolejności (active_col_order_systemy) uzupełnioną o brakujące
+        toggleable_base = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_SYSTEMY]
+        ordered = [h for h in active_col_order_systemy if h in toggleable_base]
+        ordered += [h for h in toggleable_base if h not in ordered]
 
-        mf = ctk.CTkFrame(dlg)
-        mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=16)
+        dialog_h = min(120 + len(ordered) * 38, 520)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 340, dialog_h)
+
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         ctk.CTkLabel(
-            mf,
-            text="Wybierz widoczne kolumny:",
+            outer,
+            text="Widoczność i kolejność kolumn:",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w", pady=(0, 6))
 
-        vars_: Dict[str, tk.BooleanVar] = {}
-        for col_name in toggleable:
-            v = tk.BooleanVar(value=active_visible_cols_systemy.get(col_name, True))
-            vars_[col_name] = v
-            ctk.CTkCheckBox(mf, text=col_name, variable=v).pack(anchor="w", pady=2)
+        # Stan: lista [(col_name, BooleanVar)] zachowuje kolejność
+        order_list: List[str] = list(ordered)
+        vis_vars: Dict[str, tk.BooleanVar] = {
+            h: tk.BooleanVar(value=active_visible_cols_systemy.get(h, True))
+            for h in order_list
+        }
 
-        bf = ctk.CTkFrame(mf, fg_color="transparent")
-        bf.pack(pady=(14, 0))
+        rows_frame = ctk.CTkFrame(outer, fg_color="transparent")
+        rows_frame.pack(fill=tk.X)
+
+        def _rebuild_rows() -> None:
+            for w in rows_frame.winfo_children():
+                w.destroy()
+            for idx, col_name in enumerate(order_list):
+                rf = ctk.CTkFrame(rows_frame, fg_color="transparent")
+                rf.pack(fill=tk.X, pady=1)
+                ctk.CTkButton(
+                    rf, text="↑", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, -1),
+                ).pack(side=tk.LEFT, padx=(0, 2))
+                ctk.CTkButton(
+                    rf, text="↓", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, 1),
+                ).pack(side=tk.LEFT, padx=(0, 6))
+                ctk.CTkCheckBox(rf, text=col_name, variable=vis_vars[col_name],
+                                width=180).pack(side=tk.LEFT)
+
+        def _move(idx: int, direction: int) -> None:
+            new_idx = idx + direction
+            if 0 <= new_idx < len(order_list):
+                order_list[idx], order_list[new_idx] = order_list[new_idx], order_list[idx]
+                _rebuild_rows()
+
+        _rebuild_rows()
+
+        bf = ctk.CTkFrame(outer, fg_color="transparent")
+        bf.pack(pady=(12, 0))
 
         def _apply() -> None:
-            for col_name, v in vars_.items():
+            for col_name, v in vis_vars.items():
                 active_visible_cols_systemy[col_name] = bool(v.get())
+            active_col_order_systemy.clear()
+            active_col_order_systemy.extend(order_list)
             dlg.destroy()
             cache = getattr(tab, '_systemy_tab_cache', None)
             preloaded = cache['records_ref'][0] if cache else None
-            # Wymuś pełny rebuild tabeli (nowe hidden_cols pomija szybka ścieżka)
             if hasattr(tab, '_systemy_tab_cache'):
                 del tab._systemy_tab_cache  # type: ignore[attr-defined]
             fill_systemy_rpg_tab(tab, dark_mode=dark_mode, _preloaded_data=preloaded)
 
         def _reset() -> None:
-            for v in vars_.values():
+            for v in vis_vars.values():
                 v.set(True)
+            order_list.clear()
+            order_list.extend(toggleable_base)
+            _rebuild_rows()
 
         ctk.CTkButton(
             bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
-            bf, text="Zaznacz wszystkie", command=_reset, fg_color="#1976D2",
-            hover_color="#1565C0", width=130,
+            bf, text="Resetuj", command=_reset, fg_color="#1976D2",
+            hover_color="#1565C0", width=90,
         ).pack(side=tk.LEFT, padx=5)
         ctk.CTkButton(
             bf, text="Anuluj", command=dlg.destroy, fg_color="#666666",
@@ -2338,7 +2628,8 @@ def open_edit_system_dialog(
                 SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
                        wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
                        cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
-                       system_glowny_nazwa_custom, system_gry_id
+                       system_glowny_nazwa_custom, system_gry_id,
+                       cena_fiz, cena_pdf, cena_vtt
                 FROM systemy_rpg WHERE id = ?
             """,
                 (system_id,),
@@ -2706,27 +2997,47 @@ def open_edit_system_dialog(
     )
     status_kolekcja_combo.grid(row=10, column=1, pady=8, sticky="w")
 
-    # Cena zakupu (dla statusu "W kolekcji")
-    cena_zakupu_label = ctk.CTkLabel(main_frame, text="Cena zakupu")
-    cena_zakupu_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
+    # Cena zakupu — per forma posiadania
+    cena_row_label_e = ctk.CTkLabel(main_frame, text="Cena zakupu")
+    cena_row_label_e.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="nw")
 
-    cena_zakupu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_zakupu_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
+    cena_fields_frame_e = ctk.CTkFrame(main_frame, fg_color="transparent")
+    cena_fields_frame_e.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
-    cena_zakupu_entry = ctk.CTkEntry(cena_zakupu_frame, width=100)
-    cena_zakupu_entry.pack(side=tk.LEFT, padx=(0, 5))
-    if system_data[12]:  # cena_zakupu
-        cena_zakupu_entry.insert(0, f"{system_data[12]:.2f}")
-
-    waluta_zakupu_var = tk.StringVar(value=system_data[13] if system_data[13] else "PLN")
-    waluta_zakupu_combo = ctk.CTkComboBox(
-        cena_zakupu_frame,
-        variable=waluta_zakupu_var,
+    _db_waluta_cena = system_data[13] if system_data[13] else "PLN"
+    waluta_cena_e_var = tk.StringVar(value=_db_waluta_cena)
+    waluta_cena_e_combo = ctk.CTkComboBox(
+        cena_fields_frame_e,
+        variable=waluta_cena_e_var,
         values=["PLN", "USD", "EUR", "GBP"],
         state="readonly",
         width=70,
     )
-    waluta_zakupu_combo.pack(side=tk.LEFT)
+    waluta_cena_e_combo.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
+    cena_fiz_e_lbl = ctk.CTkLabel(cena_fields_frame_e, text="Fiz:", width=40, anchor="w")
+    cena_fiz_e_lbl.grid(row=1, column=0, sticky="w", pady=2)
+    cena_fiz_e_entry = ctk.CTkEntry(cena_fields_frame_e, width=100)
+    cena_fiz_e_entry.grid(row=1, column=1, sticky="w", pady=2, padx=(4, 0))
+    _cf = system_data[18] if len(system_data) > 18 and system_data[18] else None
+    if _cf:
+        cena_fiz_e_entry.insert(0, f"{_cf:.2f}")
+
+    cena_pdf_e_lbl = ctk.CTkLabel(cena_fields_frame_e, text="PDF:", width=40, anchor="w")
+    cena_pdf_e_lbl.grid(row=2, column=0, sticky="w", pady=2)
+    cena_pdf_e_entry = ctk.CTkEntry(cena_fields_frame_e, width=100)
+    cena_pdf_e_entry.grid(row=2, column=1, sticky="w", pady=2, padx=(4, 0))
+    _cp = system_data[19] if len(system_data) > 19 and system_data[19] else None
+    if _cp:
+        cena_pdf_e_entry.insert(0, f"{_cp:.2f}")
+
+    cena_vtt_e_lbl = ctk.CTkLabel(cena_fields_frame_e, text="VTT:", width=40, anchor="w")
+    cena_vtt_e_lbl.grid(row=3, column=0, sticky="w", pady=2)
+    cena_vtt_e_entry = ctk.CTkEntry(cena_fields_frame_e, width=100)
+    cena_vtt_e_entry.grid(row=3, column=1, sticky="w", pady=2, padx=(4, 0))
+    _cv = system_data[20] if len(system_data) > 20 and system_data[20] else None
+    if _cv:
+        cena_vtt_e_entry.insert(0, f"{_cv:.2f}")
 
     # Cena sprzedaży (dla statusu "Sprzedane")
     cena_sprzedazy_label = ctk.CTkLabel(main_frame, text="Cena sprzedaży")
@@ -2750,37 +3061,59 @@ def open_edit_system_dialog(
     )
     waluta_sprzedazy_combo.pack(side=tk.LEFT)
 
-    # Początkowo ukryj oba pola ceny
-    cena_zakupu_label.grid_remove()
-    cena_zakupu_frame.grid_remove()
+    # Początkowo ukryj
+    cena_row_label_e.grid_remove()
+    cena_fields_frame_e.grid_remove()
     cena_sprzedazy_label.grid_remove()
     cena_sprzedazy_frame.grid_remove()
 
-    def on_status_kolekcja_change(*args: Any) -> None:
-        """Obsługuje zmianę statusu kolekcji - pokazuje odpowiednie pole ceny"""
+    def _update_cena_fields_e(*_args: Any) -> None:
+        """Pokazuje/ukrywa wiersze cen zakupu zależnie od posiadania i statusu (edycja)."""
         status = status_kolekcja_var.get()
+        has_fiz = fizyczny_var.get()
+        has_pdf = pdf_var.get()
+        has_vtt = vtt_var.get()
 
-        if status in ["W kolekcji", "Na sprzedaż"]:
-            # Pokaż cenę zakupu, ukryj cenę sprzedaży
-            cena_zakupu_label.grid()
-            cena_zakupu_frame.grid()
-            cena_sprzedazy_label.grid_remove()
-            cena_sprzedazy_frame.grid_remove()
-        elif status == "Sprzedane":
-            # Pokaż cenę sprzedaży, ukryj cenę zakupu
-            cena_zakupu_label.grid_remove()
-            cena_zakupu_frame.grid_remove()
+        if status == "Sprzedane":
+            cena_row_label_e.grid_remove()
+            cena_fields_frame_e.grid_remove()
             cena_sprzedazy_label.grid()
             cena_sprzedazy_frame.grid()
-        else:
-            # Ukryj oba pola dla innych statusów
-            cena_zakupu_label.grid_remove()
-            cena_zakupu_frame.grid_remove()
-            cena_sprzedazy_label.grid_remove()
-            cena_sprzedazy_frame.grid_remove()
+            return
 
-    status_kolekcja_var.trace_add('write', on_status_kolekcja_change)
-    on_status_kolekcja_change()  # Ustaw początkowy stan
+        cena_sprzedazy_label.grid_remove()
+        cena_sprzedazy_frame.grid_remove()
+
+        if status in ("W kolekcji", "Na sprzedaż") and (has_fiz or has_pdf or has_vtt):
+            cena_row_label_e.grid()
+            cena_fields_frame_e.grid()
+            if has_fiz:
+                cena_fiz_e_lbl.grid()
+                cena_fiz_e_entry.grid()
+            else:
+                cena_fiz_e_lbl.grid_remove()
+                cena_fiz_e_entry.grid_remove()
+            if has_pdf:
+                cena_pdf_e_lbl.grid()
+                cena_pdf_e_entry.grid()
+            else:
+                cena_pdf_e_lbl.grid_remove()
+                cena_pdf_e_entry.grid_remove()
+            if has_vtt:
+                cena_vtt_e_lbl.grid()
+                cena_vtt_e_entry.grid()
+            else:
+                cena_vtt_e_lbl.grid_remove()
+                cena_vtt_e_entry.grid_remove()
+        else:
+            cena_row_label_e.grid_remove()
+            cena_fields_frame_e.grid_remove()
+
+    status_kolekcja_var.trace_add('write', _update_cena_fields_e)
+    fizyczny_var.trace_add('write', _update_cena_fields_e)
+    pdf_var.trace_add('write', _update_cena_fields_e)
+    vtt_var.trace_add('write', _update_cena_fields_e)
+    _update_cena_fields_e()  # stan początkowy
 
     # Flaga inicjalizacji - zapobiega wywołaniu update_dialog_size() podczas budowania dialogu
     _initializing: List[bool] = [True]
@@ -2858,26 +3191,40 @@ def open_edit_system_dialog(
         if wydawca_var.get():
             wydawca_id = int(wydawca_var.get().split(' - ')[0])
 
-        # Pobierz ceny w zależności od statusu
-        cena_zakupu = None
-        waluta_zakupu = None
-        cena_sprzedazy = None
-        waluta_sprzedazy = None
+        # Pobierz ceny w zależności od statusu i formy posiadania
+        cena_fiz_save: Optional[float] = None
+        cena_pdf_save: Optional[float] = None
+        cena_vtt_save: Optional[float] = None
+        cena_sprzedazy: Optional[float] = None
+        waluta_sprzedazy: Optional[str] = None
+        waluta_cena_save: Optional[str] = None
+
+        def _parse_cena_edit(entry: ctk.CTkEntry, label: str) -> Optional[float]:
+            s = entry.get().strip().replace(',', '.')
+            if not s:
+                return None
+            try:
+                return float(s)
+            except ValueError:
+                messagebox.showerror("Błąd", f"Cena {label} musi być liczbą.", parent=dialog)
+                raise
 
         if status_kolekcja_var.get() in ["W kolekcji", "Na sprzedaż"]:
-            cena_str = cena_zakupu_entry.get().strip().replace(',', '.')
-            if cena_str:
-                try:
-                    cena_zakupu = float(cena_str)
-                    waluta_zakupu = waluta_zakupu_var.get()
-                except ValueError:
-                    messagebox.showerror("Błąd", "Cena zakupu musi być liczbą.", parent=dialog)
-                    return
+            waluta_cena_save = waluta_cena_e_var.get()
+            try:
+                if fizyczny_var.get():
+                    cena_fiz_save = _parse_cena_edit(cena_fiz_e_entry, "fiz.")
+                if pdf_var.get():
+                    cena_pdf_save = _parse_cena_edit(cena_pdf_e_entry, "PDF")
+                if vtt_var.get():
+                    cena_vtt_save = _parse_cena_edit(cena_vtt_e_entry, "VTT")
+            except ValueError:
+                return
         elif status_kolekcja_var.get() == "Sprzedane":
-            cena_str = cena_sprzedazy_entry.get().strip().replace(',', '.')
-            if cena_str:
+            cena_str_sp = cena_sprzedazy_entry.get().strip().replace(',', '.')
+            if cena_str_sp:
                 try:
-                    cena_sprzedazy = float(cena_str)
+                    cena_sprzedazy = float(cena_str_sp)
                     waluta_sprzedazy = waluta_sprzedazy_var.get()
                 except ValueError:
                     messagebox.showerror("Błąd", "Cena sprzedaży musi być liczbą.", parent=dialog)
@@ -2896,12 +3243,13 @@ def open_edit_system_dialog(
             c = conn.cursor()
             c.execute(
                 """
-                UPDATE systemy_rpg 
-                SET nazwa=?, typ=?, system_glowny_id=?, typ_suplementu=?, 
+                UPDATE systemy_rpg
+                SET nazwa=?, typ=?, system_glowny_id=?, typ_suplementu=?,
                     wydawca_id=?, fizyczny=?, pdf=?, vtt=?, jezyk=?,
                     status_gra=?, status_kolekcja=?,
                     cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?,
-                    waluta_sprzedazy=?, system_gry_id=?
+                    waluta_sprzedazy=?, system_gry_id=?,
+                    cena_fiz=?, cena_pdf=?, cena_vtt=?
                 WHERE id=?
             """,
                 (
@@ -2916,11 +3264,14 @@ def open_edit_system_dialog(
                     jezyk if jezyk else None,
                     status_gra_var.get(),
                     status_kolekcja_var.get(),
-                    cena_zakupu,
-                    waluta_zakupu,
+                    cena_fiz_save,  # cena_zakupu (backup = fiz)
+                    waluta_cena_save,
                     cena_sprzedazy,
                     waluta_sprzedazy,
                     game_id_to_save,
+                    cena_fiz_save,
+                    cena_pdf_save,
+                    cena_vtt_save,
                     system_data[0],
                 ),
             )
@@ -3084,14 +3435,13 @@ def open_add_game_dialog(
 ) -> None:
     """Otwiera dialog dodawania nowego Systemu (systemy_gry)."""
     init_db()
-    publishers = get_all_publishers()
 
     dlg = create_ctk_toplevel(parent)
     dlg.withdraw()
     dlg.title("Dodaj System (nowy wpis w katalogu systemów)")
     dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
     dlg.resizable(True, True)
-    apply_safe_geometry(dlg, parent, 600, 320)
+    apply_safe_geometry(dlg, parent, 600, 230)
 
     mf = ctk.CTkScrollableFrame(dlg)
     mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -3102,22 +3452,6 @@ def open_add_game_dialog(
     nazwa_entry = ctk.CTkEntry(mf, placeholder_text="np. Delta Green, D&D 5e")
     nazwa_entry.grid(row=row, column=1, pady=8, sticky="ew")
     dlg.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
-    row += 1
-
-    ctk.CTkLabel(mf, text="Wydawca").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
-    wydawca_var = tk.StringVar()
-    wydawca_combo = ctk.CTkComboBox(mf, variable=wydawca_var, state="readonly")
-    if publishers:
-        wydawca_combo.configure(values=[f"{p[0]} - {p[1]}" for p in publishers])
-    wydawca_combo.grid(row=row, column=1, pady=8, sticky="ew")
-    row += 1
-
-    ctk.CTkLabel(mf, text="Język").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
-    jezyk_var = tk.StringVar(value="PL")
-    ctk.CTkComboBox(
-        mf, variable=jezyk_var,
-        values=["PL", "ENG", "DE", "FR", "ES", "IT"], state="readonly", width=100,
-    ).grid(row=row, column=1, pady=8, sticky="w")
     row += 1
 
     ctk.CTkLabel(mf, text="Notatki").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="nw")
@@ -3133,21 +3467,13 @@ def open_add_game_dialog(
         if not nazwa:
             messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dlg)
             return
-        wydawca_id: Optional[int] = None
-        wval = wydawca_var.get()
-        if wval:
-            try:
-                wydawca_id = int(wval.split(" - ")[0])
-            except (ValueError, IndexError):
-                pass
-        jezyk = jezyk_var.get() or None
         notatki = notatki_entry.get("1.0", tk.END).strip() or None
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 conn.execute("PRAGMA foreign_keys = ON")
                 conn.execute(
-                    "INSERT INTO systemy_gry (nazwa, wydawca_id, jezyk, notatki) VALUES (?,?,?,?)",
-                    (nazwa, wydawca_id, jezyk, notatki),
+                    "INSERT INTO systemy_gry (nazwa, notatki) VALUES (?,?)",
+                    (nazwa, notatki),
                 )
                 conn.commit()
             dlg.destroy()
@@ -3176,7 +3502,7 @@ def open_edit_game_dialog(
         with sqlite3.connect(DB_FILE) as conn:
             conn.row_factory = sqlite3.Row
             c = conn.cursor()
-            c.execute("SELECT id, nazwa, wydawca_id, jezyk, notatki FROM systemy_gry WHERE id=?", (game_id,))
+            c.execute("SELECT id, nazwa, notatki FROM systemy_gry WHERE id=?", (game_id,))
             gdata = c.fetchone()
     except sqlite3.Error as e:
         messagebox.showerror("Błąd", f"Nie można odczytać danych systemu:\n{e}", parent=parent)
@@ -3185,14 +3511,12 @@ def open_edit_game_dialog(
         messagebox.showerror("Błąd", "Nie znaleziono systemu w bazie.", parent=parent)
         return
 
-    publishers = get_all_publishers()
-
     dlg = create_ctk_toplevel(parent)
     dlg.withdraw()
     dlg.title(f"Edytuj System: {gdata[1]}")
     dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
     dlg.resizable(True, True)
-    apply_safe_geometry(dlg, parent, 600, 340)
+    apply_safe_geometry(dlg, parent, 600, 360)
 
     mf = ctk.CTkScrollableFrame(dlg)
     mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
@@ -3210,31 +3534,10 @@ def open_edit_game_dialog(
     nazwa_entry.grid(row=row, column=1, pady=8, sticky="ew")
     row += 1
 
-    ctk.CTkLabel(mf, text="Wydawca").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
-    wydawca_var = tk.StringVar()
-    wydawca_combo = ctk.CTkComboBox(mf, variable=wydawca_var, state="readonly")
-    pub_values = [f"{p[0]} - {p[1]}" for p in publishers]
-    wydawca_combo.configure(values=pub_values)
-    if gdata[2]:
-        for v in pub_values:
-            if v.startswith(str(gdata[2]) + " - "):
-                wydawca_var.set(v)
-                break
-    wydawca_combo.grid(row=row, column=1, pady=8, sticky="ew")
-    row += 1
-
-    ctk.CTkLabel(mf, text="Język").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
-    jezyk_var = tk.StringVar(value=gdata[3] or "PL")
-    ctk.CTkComboBox(
-        mf, variable=jezyk_var,
-        values=["PL", "ENG", "DE", "FR", "ES", "IT"], state="readonly", width=100,
-    ).grid(row=row, column=1, pady=8, sticky="w")
-    row += 1
-
     ctk.CTkLabel(mf, text="Notatki").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="nw")
     notatki_entry = ctk.CTkTextbox(mf, height=60)
-    if gdata[4]:
-        notatki_entry.insert("1.0", gdata[4])
+    if gdata[2]:
+        notatki_entry.insert("1.0", gdata[2])
     notatki_entry.grid(row=row, column=1, pady=8, sticky="ew")
     row += 1
 
@@ -3246,21 +3549,13 @@ def open_edit_game_dialog(
         if not nazwa:
             messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dlg)
             return
-        wydawca_id: Optional[int] = None
-        wval = wydawca_var.get()
-        if wval:
-            try:
-                wydawca_id = int(wval.split(" - ")[0])
-            except (ValueError, IndexError):
-                pass
-        jezyk = jezyk_var.get() or None
         notatki = notatki_entry.get("1.0", tk.END).strip() or None
         try:
             with sqlite3.connect(DB_FILE) as conn:
                 conn.execute("PRAGMA foreign_keys = ON")
                 conn.execute(
-                    "UPDATE systemy_gry SET nazwa=?, wydawca_id=?, jezyk=?, notatki=? WHERE id=?",
-                    (nazwa, wydawca_id, jezyk, notatki, game_id),
+                    "UPDATE systemy_gry SET nazwa=?, notatki=? WHERE id=?",
+                    (nazwa, notatki, game_id),
                 )
                 conn.commit()
             dlg.destroy()

@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.16-blue)
+![Version](https://img.shields.io/badge/version-0.4.20-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -74,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.16-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.20-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.16.exe`
+4. Uruchom `Sesyjka-v0.4.20.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -102,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.16.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.16.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.20.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.20.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -193,6 +193,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.4.20 (21.04.2026)
+- 💰 **Ceny per forma posiadania**: nowe pola Cena Fizyczna / Cena PDF / Cena VTT w dialogach dodawania i edycji systemu — wyświetlane dynamicznie po zaznaczeniu odpowiedniej formy; automatyczna migracja istniejących danych z `cena_zakupu`
+- 🎛️ **Multi-select filtry we wszystkich zakładkach**: toggle-buttony zamiast combobox — można zaznaczyć wiele opcji jednocześnie (Typ, Język, Status, Wydawca, Posiadanie, Rok, System, MG, Płeć, Kraj)
+- 📐 **Zawijanie przycisków filtrów**: przy dużej liczbie opcji przyciski automatycznie zawijają się do nowych wierszy — brak ucinania opcji
+- 🔧 **Naprawa dialogu edycji systemu**: poprawiony rozmiar okna i inicjalizacja pól cen przy otwarciu
 
 ### v0.4.16 (21.04.2026)
 - 🔧 **Przebudowa dialogu edycji systemu**: pole „Przypisz do systemu” (powiązanie z katalogiem gier) zamiast tekstowego pola nazwy systemu głównego; przycisk ➕ Dodaj system bez zamykania formularza

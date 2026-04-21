@@ -661,7 +661,7 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
                                 _conn_sys.row_factory = sqlite3.Row
                                 _c_sys = _conn_sys.cursor()
                                 _c_sys.execute(
-                                    f"SELECT id, nazwa FROM systemy_rpg"
+                                    f"SELECT id, nazwa FROM systemy_gry"
                                     f" WHERE id IN ({ids_ph})",
                                     list(system_id_counts.keys()),
                                 )

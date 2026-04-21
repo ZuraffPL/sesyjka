@@ -13,6 +13,8 @@ import wydawcy
 import statystyki  # type: ignore
 import about_dialog
 import apphistory
+import help_dialog
+import splash_screen
 import database_manager
 import font_scaling
 from font_scaling import scale_font_size
@@ -26,7 +28,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.3.34"
+APP_VERSION = "0.4.16"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -316,12 +318,34 @@ class SesyjkaApp(ctk.CTk):
             btn_frame = ctk.CTkFrame(group, fg_color="transparent")
             btn_frame.pack(side=tk.TOP)
 
+            # Dla Systemów RPG: najpierw "Dodaj System" (niebieski), potem "Dodaj PG/Suplement" (zielony)
+            if name == "Systemy RPG":
+                add_sys_btn = ctk.CTkButton(
+                    btn_frame,
+                    text="✚ Dodaj System",
+                    command=lambda: systemy_rpg.open_add_game_dialog(
+                        self,
+                        refresh_callback=lambda **kwargs: (  # type: ignore[arg-type]
+                            systemy_rpg.fill_systemy_rpg_tab(
+                                self.tabs["Systemy RPG"], dark_mode=self.dark_mode
+                            ),
+                            self.refresh_statistics(),
+                        ),
+                    ),
+                    width=110,
+                    height=32,
+                    font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
+                    fg_color="#1565C0",
+                    hover_color="#0D47A1",
+                )
+                add_sys_btn.pack(side=tk.LEFT, padx=(0, 6))
+
             # Przycisk Dodaj (zielony)
             add_btn = ctk.CTkButton(
                 btn_frame,
-                text="✚ Dodaj",
+                text="✚ Dodaj PG/Suplement" if name == "Systemy RPG" else "✚ Dodaj",
                 command=add_func,
-                width=90,
+                width=130 if name == "Systemy RPG" else 90,
                 height=32,
                 font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
                 fg_color="#2E7D32",
@@ -353,6 +377,17 @@ class SesyjkaApp(ctk.CTk):
         # Górny rząd - przyciski O programie i Historia wersji
         top_row = ctk.CTkFrame(right_buttons_frame, fg_color="transparent")
         top_row.pack(side=tk.TOP, pady=(0, 4))
+
+        # Przycisk "Pomoc"
+        help_btn = ctk.CTkButton(
+            top_row,
+            text="❓ Pomoc",
+            command=self.show_help,
+            width=100,
+            height=28,
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11)),
+        )
+        help_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         # Przycisk "O programie"
         about_btn = ctk.CTkButton(
@@ -551,6 +586,10 @@ class SesyjkaApp(ctk.CTk):
             self.update_idletasks()  # wyrenderuj wszystko zanim okno wróci
             self.attributes('-alpha', 1)
 
+    def show_help(self) -> None:
+        """Wyświetla okno instrukcji obsługi"""
+        help_dialog.show_help_dialog(self)  # type: ignore
+
     def show_about(self) -> None:
         """Wyświetla okno 'O programie'"""
         about_dialog.show_about_dialog(self, APP_NAME, APP_VERSION)  # type: ignore
@@ -621,6 +660,18 @@ if __name__ == "__main__":
     setup_dpi_scaling()
 
     app = SesyjkaApp()
+    app.withdraw()
+    _splash = splash_screen.SplashScreen(version=APP_VERSION, parent=app)
+    _splash.show()
+    _splash.set_status("Inicjalizacja interfejsu...")
+    _splash.update()
+    app.after(2000, _splash.close)
+
+    # Kreator migracji — uruchom po pełnym zainicjowaniu okna
+    def _run_migration_wizard() -> None:
+        if systemy_rpg.needs_migration_wizard():
+            systemy_rpg.show_migration_wizard(app)
+    app.after(500, _run_migration_wizard)
     try:
         app.mainloop()
     finally:

@@ -259,9 +259,7 @@ def get_all_systems() -> List[Tuple[int, str]]:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute(
-                "SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa"
-            )
+            c.execute("SELECT id, nazwa FROM systemy_gry ORDER BY nazwa")
             return c.fetchall()
     except sqlite3.Error:
         return []
@@ -319,7 +317,7 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
             sys_conn.row_factory = sqlite3.Row
             sys_conn.execute("PRAGMA foreign_keys = ON")
             sc = sys_conn.cursor()
-            sc.execute("SELECT id, nazwa FROM systemy_rpg")
+            sc.execute("SELECT id, nazwa FROM systemy_gry")
             systems_map = {row[0]: row[1] for row in sc.fetchall()}
     except sqlite3.Error:
         pass

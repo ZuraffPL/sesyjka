@@ -238,6 +238,24 @@ def init_db() -> None:
             # Kolumna już istnieje
             pass
 
+        # ── Nowy poziom hierarchii: systemy_gry ──────────────────────────
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS systemy_gry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nazwa TEXT NOT NULL,
+                wydawca_id INTEGER,
+                jezyk TEXT,
+                notatki TEXT
+            )
+        """
+        )
+
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN system_gry_id INTEGER REFERENCES systemy_gry(id)")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
+
         conn.commit()
 
 
@@ -337,7 +355,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
                    s.wydawca_id, s.fizyczny, s.pdf, s.vtt, s.jezyk,
                    s.status_gra, s.status_kolekcja,
                    s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy,
-                   s.system_glowny_nazwa_custom
+                   s.system_glowny_nazwa_custom,
+                   s.system_gry_id
             FROM systemy_rpg s
             ORDER BY s.id ASC
         """
@@ -399,10 +418,75 @@ def get_all_systems() -> list[tuple[Any, ...]]:
                 status_combined,  # status
                 cena_str,  # cena (zakupu lub sprzedaży w zależności od statusu)
                 system[16] if len(system) > 16 else None,  # system_glowny_nazwa_custom
+                system[17] if len(system) > 17 else None,  # system_gry_id
             )
         )  # type: ignore
 
     return result  # type: ignore
+
+
+def get_all_games() -> list[tuple[Any, ...]]:
+    """Pobiera wszystkie gry (systemy_gry – najwyższy poziom hierarchii) z bazy."""
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            c = conn.cursor()
+            c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='systemy_gry'"
+            )
+            if not c.fetchone():
+                return []
+            c.execute(
+                "SELECT id, nazwa, wydawca_id, jezyk, notatki FROM systemy_gry ORDER BY id"
+            )
+            games = c.fetchall()
+    except sqlite3.Error:
+        return []
+
+    publishers_map: Dict[int, str] = {}
+    try:
+        with sqlite3.connect(get_db_path("wydawcy.db")) as wconn:
+            wconn.row_factory = sqlite3.Row
+            wc = wconn.cursor()
+            wc.execute("SELECT id, nazwa FROM wydawcy")
+            publishers_map = {row[0]: row[1] for row in wc.fetchall()}
+    except sqlite3.Error:
+        pass
+
+    return [
+        (
+            g[0],  # 0: id
+            g[1],  # 1: nazwa
+            publishers_map.get(g[2], "") if g[2] else "",  # 2: wydawca_nazwa
+            g[3] or "",  # 3: jezyk
+            g[4] or "",  # 4: notatki
+        )
+        for g in games
+    ]
+
+
+def needs_migration_wizard() -> bool:
+    """Zwraca True jeśli istnieją PG bez przypisanego system_gry_id (migracja wymagana)."""
+    import os
+    if not os.path.exists(DB_FILE):
+        return False
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='systemy_gry'"
+            )
+            if not c.fetchone():
+                return False
+            c.execute(
+                "SELECT COUNT(*) FROM systemy_rpg "
+                "WHERE typ='Podręcznik Główny' AND (system_gry_id IS NULL OR system_gry_id=0)"
+            )
+            count = c.fetchone()[0]
+            return count > 0
+    except sqlite3.Error:
+        return False
 
 
 def get_main_systems() -> list[tuple[int, str]]:
@@ -430,16 +514,251 @@ def get_all_publishers() -> list[tuple[int, str]]:
         return []
 
 
-def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., None]] = None) -> None:  # type: ignore
-    """Otwiera okno dodawania nowego systemu RPG"""
+def show_migration_wizard(parent: tk.Misc) -> None:
+    """Kreator migracji jednorazowej: przypisuje istniejące Podręczniki Główne do systemy_gry.
+
+    Wyświetla listę wszystkich PG bez system_gry_id i pozwala użytkownikowi
+    wpisać nazwę systemu dla każdego PG.  PG z tą samą nazwą systemu zostaną
+    pogrupowane pod jednym wpisem w tabeli systemy_gry.
+
+    Po zatwierdzeniu:
+    - Tworzy rekordy w systemy_gry
+    - Aktualizuje systemy_rpg.system_gry_id
+    - Aktualizuje sesje_rpg.system_id (z PG-id na system_gry-id)
+    """
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return
+
+    # Pobierz PG bez system_gry_id
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, nazwa FROM systemy_rpg "
+                "WHERE typ='Podręcznik Główny' AND (system_gry_id IS NULL OR system_gry_id=0) "
+                "ORDER BY nazwa"
+            )
+            pgs = [(row[0], row[1]) for row in c.fetchall()]
+    except sqlite3.Error:
+        return
+
+    if not pgs:
+        return
+
+    dlg = create_ctk_toplevel(parent)
+    dlg.title("Kreator migracji — przypisz Podręczniki Główne do Systemów")
+    dlg.transient(parent if isinstance(parent, tk.Tk) else parent.winfo_toplevel())
+    dlg.resizable(True, True)
+    dlg.grab_set()  # blokuj rodzica
+    apply_safe_geometry(dlg, parent if isinstance(parent, tk.Tk) else parent.winfo_toplevel(), 760, 560)
+
+    dlg.columnconfigure(0, weight=1)
+    dlg.rowconfigure(1, weight=1)
+
+    # Nagłówek
+    hdr = ctk.CTkFrame(dlg, fg_color="transparent")
+    hdr.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
+    ctk.CTkLabel(
+        hdr,
+        text="Nowa hierarchia: System → Podręczniki i Suplementy",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(14), weight="bold"),
+    ).pack(anchor="w")
+    ctk.CTkLabel(
+        hdr,
+        text=(
+            "Wpisz nazwę systemu dla każdego Podręcznika Głównego.\n"
+            "Podręczniki z tą samą nazwą systemu zostaną pogrupowane pod jednym Systemem.\n"
+            "Możesz zmienić nazwy po zakończeniu kreatora."
+        ),
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10)),
+        justify="left",
+    ).pack(anchor="w", pady=(4, 0))
+
+    # Scrollable frame z wierszami
+    sf = ctk.CTkScrollableFrame(dlg)
+    sf.grid(row=1, column=0, sticky="nsew", padx=20, pady=12)
+    sf.columnconfigure(0, weight=1)
+    sf.columnconfigure(1, weight=2)
+
+    ctk.CTkLabel(sf, text="Podręcznik Główny", font=ctk.CTkFont(weight="bold")).grid(
+        row=0, column=0, sticky="w", pady=(0, 6), padx=(0, 12)
+    )
+    ctk.CTkLabel(sf, text="Nazwa systemu (edytuj)", font=ctk.CTkFont(weight="bold")).grid(
+        row=0, column=1, sticky="w", pady=(0, 6)
+    )
+
+    entry_vars: List[tk.StringVar] = []
+    for i, (pg_id, pg_nazwa) in enumerate(pgs, start=1):
+        ctk.CTkLabel(
+            sf,
+            text=pg_nazwa,
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10)),
+            anchor="w",
+        ).grid(row=i, column=0, sticky="w", pady=3, padx=(0, 12))
+        # Domyślna nazwa systemu = nazwa PG (użytkownik może skrócić / ujednolicić)
+        var = tk.StringVar(value=pg_nazwa)
+        entry_vars.append(var)
+        ctk.CTkEntry(sf, textvariable=var, width=320).grid(row=i, column=1, sticky="ew", pady=3)
+
+    # Przyciski dolne
+    bf = ctk.CTkFrame(dlg, fg_color="transparent")
+    bf.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 16))
+
+    migration_done = [False]
+
+    def _apply_migration() -> None:
+        """Wykonuje migrację na podstawie wartości z pól tekstowych."""
+        # Zbierz mapę: pg_id → nazwa_systemu
+        assignments: Dict[int, str] = {}
+        for (pg_id, _), var in zip(pgs, entry_vars):
+            sysname = var.get().strip()
+            if not sysname:
+                messagebox.showerror(
+                    "Błąd", "Każdy Podręcznik Główny musi mieć podaną nazwę systemu.", parent=dlg
+                )
+                return
+            assignments[pg_id] = sysname
+
+        # Unikalne nazwy systemów → utwórz rekordy w systemy_gry
+        unique_names = dict.fromkeys(assignments.values())  # zachowuje kolejność
+        name_to_gry_id: Dict[str, int] = {}
+
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.row_factory = sqlite3.Row
+                conn.execute("PRAGMA foreign_keys = ON")
+                c = conn.cursor()
+
+                for sysname in unique_names:
+                    # Sprawdź czy System o tej nazwie już istnieje
+                    c.execute("SELECT id FROM systemy_gry WHERE nazwa=?", (sysname,))
+                    row = c.fetchone()
+                    if row:
+                        name_to_gry_id[sysname] = row[0]
+                    else:
+                        c.execute(
+                            "INSERT INTO systemy_gry (nazwa) VALUES (?)", (sysname,)
+                        )
+                        name_to_gry_id[sysname] = c.lastrowid  # type: ignore[assignment]
+
+                # Aktualizuj systemy_rpg.system_gry_id dla każdego PG
+                for pg_id, sysname in assignments.items():
+                    gry_id = name_to_gry_id[sysname]
+                    c.execute(
+                        "UPDATE systemy_rpg SET system_gry_id=? WHERE id=?",
+                        (gry_id, pg_id),
+                    )
+
+                # Propaguj system_gry_id do suplementów przez system_glowny_id
+                for pg_id, sysname in assignments.items():
+                    gry_id = name_to_gry_id[sysname]
+                    c.execute(
+                        "UPDATE systemy_rpg SET system_gry_id=? "
+                        "WHERE typ='Suplement' AND system_glowny_id=?",
+                        (gry_id, pg_id),
+                    )
+
+                conn.commit()
+
+            # Aktualizuj sesje_rpg.system_id: z PG-id → system_gry-id
+            # Budujemy mapę: pg_id → system_gry_id
+            pg_to_gry: Dict[int, int] = {}
+            for pg_id, sysname in assignments.items():
+                pg_to_gry[pg_id] = name_to_gry_id[sysname]
+
+            sesje_db = get_db_path("sesje_rpg.db")
+            if os.path.exists(sesje_db):
+                with sqlite3.connect(sesje_db) as sconn:
+                    sc = sconn.cursor()
+                    sc.execute("SELECT id, system_id FROM sesje_rpg")
+                    sessions = sc.fetchall()
+                    for sess_id, old_sys_id in sessions:
+                        new_sys_id = pg_to_gry.get(old_sys_id)
+                        if new_sys_id:
+                            sc.execute(
+                                "UPDATE sesje_rpg SET system_id=? WHERE id=?",
+                                (new_sys_id, sess_id),
+                            )
+                    sconn.commit()
+
+            migration_done[0] = True
+            messagebox.showinfo(
+                "Migracja zakończona",
+                f"Utworzono {len(unique_names)} systemów i przypisano {len(pgs)} Podręczników Głównych.",
+                parent=dlg,
+            )
+            dlg.destroy()
+
+        except sqlite3.Error as e:
+            messagebox.showerror("Błąd migracji", f"Nie udało się wykonać migracji:\n{e}", parent=dlg)
+
+    def _skip_migration() -> None:
+        if messagebox.askyesno(
+            "Pomiń migrację",
+            "Czy na pewno chcesz pominąć kreator migracji?\n"
+            "Podręczniki bez przypisanego Systemu będą widoczne jako 'Osierocone PG'.\n"
+            "Możesz uruchomić kreator ponownie przez przycisk 'Migruj dane' w ribbonie Systemy RPG.",
+            parent=dlg,
+        ):
+            dlg.destroy()
+
+    ctk.CTkButton(
+        bf,
+        text="Wykonaj migrację",
+        command=_apply_migration,
+        fg_color="#2E7D32",
+        hover_color="#1B5E20",
+        width=160,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).pack(side=tk.LEFT, padx=(0, 10))
+    ctk.CTkButton(
+        bf,
+        text="Pomiń na razie",
+        command=_skip_migration,
+        fg_color="#666666",
+        hover_color="#555555",
+        width=120,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).pack(side=tk.LEFT)
+
+    dlg.wait_window()
+
+
+def dodaj_system_rpg(
+    parent: Any,
+    refresh_callback: Optional[Callable[..., None]] = None,
+    preset_game_id: Optional[int] = None,
+) -> None:
+    """Otwiera okno dodawania nowego systemu RPG.
+
+    Args:
+        preset_game_id: Jeśli podany, nowy wpis zostanie automatycznie przypisany
+                        do tego Systemu (systemy_gry.id) i typ zostanie podpowiedziany.
+    """
 
     init_db()
     reserved_id = get_first_free_id()
     publishers = get_all_publishers()
 
+    # Pobierz nazwę systemu jeśli preset_game_id podany
+    _preset_game_name = ""
+    if preset_game_id is not None:
+        try:
+            with sqlite3.connect(DB_FILE) as _pc:
+                _row = _pc.execute("SELECT nazwa FROM systemy_gry WHERE id=?", (preset_game_id,)).fetchone()
+                _preset_game_name = _row[0] if _row else ""
+        except sqlite3.Error:
+            pass
+
     dialog = create_ctk_toplevel(parent)
     dialog.withdraw()  # ukryj podczas budowania – eliminuje czarną ramkę
-    dialog.title("Dodaj system RPG do bazy")
+    if preset_game_id is not None and _preset_game_name:
+        dialog.title(f"Dodaj do systemu: {_preset_game_name}")
+    else:
+        dialog.title("Dodaj podręcznik lub suplement")
     dialog.transient(parent)
     dialog.resizable(True, True)
 
@@ -457,7 +776,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky="w")
 
     # Nazwa systemu (obowiązkowe)
-    ctk.CTkLabel(main_frame, text="Nazwa systemu *").grid(
+    ctk.CTkLabel(main_frame, text="Nazwa/Tytuł *").grid(
         row=1, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     nazwa_entry = ctk.CTkEntry(main_frame, placeholder_text="Wprowadź nazwę systemu")
@@ -472,27 +791,25 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     )
     typ_combo.grid(row=2, column=1, pady=8, sticky="ew")
 
-    # System główny (dla suplementów) - początkowo ukryte, opcjonalne
-    system_glowny_label = ctk.CTkLabel(main_frame, text="System główny (opcjonalnie)")
-    system_glowny_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
-    system_glowny_var = tk.StringVar()
-    system_glowny_combo = ctk.CTkComboBox(main_frame, variable=system_glowny_var, state="readonly")
-    system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
-
-    # Niestandardowa nazwa systemu głównego (dla suplementów bez systemu w kolekcji)
-    # - w tym samym rzędzie
-    system_glowny_custom_label = ctk.CTkLabel(main_frame, text="lub wpisz nazwę:")
-    system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
-    system_glowny_custom_entry = ctk.CTkEntry(
-        main_frame, placeholder_text="Nazwa systemu spoza kolekcji", width=200
-    )
-    system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
+    # Przypisz do systemu (systemy_gry) — widoczne gdy brak preset_game_id
+    all_games_list = get_all_games() if preset_game_id is None else []
+    przypisz_label = ctk.CTkLabel(main_frame, text="Przypisz do systemu *")
+    przypisz_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
+    przypisz_var = tk.StringVar()
+    przypisz_combo = ctk.CTkComboBox(main_frame, variable=przypisz_var, state="readonly")
+    if all_games_list:
+        game_values = [f"{g[0]} - {g[1]}" for g in all_games_list]
+        przypisz_combo.configure(values=game_values)
+    przypisz_combo.grid(row=3, column=1, pady=8, sticky="w")
+    if preset_game_id is not None:
+        przypisz_label.grid_remove()
+        przypisz_combo.grid_remove()
 
     # Typ suplementu - początkowo ukryte, obowiązkowe dla suplementów (wielokrotny wybór)
     typ_suplementu_label = ctk.CTkLabel(main_frame, text="Typ suplementu *")
-    typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
+    typ_suplementu_label.grid(row=5, column=0, pady=8, padx=(0, 10), sticky="nw")
     typ_suplementu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
+    typ_suplementu_frame.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Słownik do przechowywania zmiennych checkboxów
     typ_suplementu_vars = {}
@@ -514,7 +831,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
     # Wydawca
     ctk.CTkLabel(main_frame, text="Wydawca").grid(
-        row=5, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=6, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     wydawca_var = tk.StringVar()
     wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
@@ -532,6 +849,24 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         else:
             wydawca_combo.configure(values=[])
 
+    def _after_add_publisher(**_kw: Any) -> None:
+        """Po dodaniu wydawcy odświeża listę i zaznacza nowego wydawcę."""
+        nonlocal publishers
+        old_ids = {pub[0] for pub in publishers}
+        publishers = get_all_publishers()
+        if publishers:
+            wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
+            wydawca_combo.configure(values=wydawca_values)
+            new_pub = next((pub for pub in publishers if pub[0] not in old_ids), None)
+            if new_pub:
+                wydawca_var.set(f"{new_pub[0]} - {new_pub[1]}")
+        else:
+            wydawca_combo.configure(values=[])
+
+    def _open_add_publisher() -> None:
+        import wydawcy as _wydawcy
+        _wydawcy.dodaj_wydawce(dialog, refresh_callback=_after_add_publisher)
+
     # Inicjalne załadowanie listy
     if publishers:
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
@@ -539,14 +874,26 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
     # Odśwież listę wydawców przy każdym kliknięciu w combobox
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
-    wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
+    wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
+
+    # Przycisk dodania nowego wydawcy inline
+    ctk.CTkButton(
+        main_frame,
+        text="➕ Dodaj wydawcę",
+        command=_open_add_publisher,
+        width=130,
+        height=28,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).grid(row=6, column=2, pady=8, padx=(10, 0), sticky="w")
 
     # Posiadanie
     ctk.CTkLabel(main_frame, text="Posiadanie").grid(
-        row=6, column=0, pady=8, padx=(0, 10), sticky="nw"
+        row=7, column=0, pady=8, padx=(0, 10), sticky="nw"
     )
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=3)
+    posiadanie_frame.grid(row=7, column=1, pady=8, sticky="w", columnspan=3)
     posiadanie_frame.columnconfigure(1, weight=1)
 
     fizyczny_var = tk.BooleanVar()
@@ -629,7 +976,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     vtt_var.trace_add('write', on_vtt_change)
 
     # Język
-    ctk.CTkLabel(main_frame, text="Język").grid(row=7, column=0, pady=8, padx=(0, 10), sticky="w")
+    ctk.CTkLabel(main_frame, text="Język").grid(row=8, column=0, pady=8, padx=(0, 10), sticky="w")
     jezyk_var = tk.StringVar(value="PL")
     jezyk_combo = ctk.CTkComboBox(
         main_frame,
@@ -638,11 +985,11 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         state="readonly",
         width=100,
     )
-    jezyk_combo.grid(row=7, column=1, pady=8, sticky="w")
+    jezyk_combo.grid(row=8, column=1, pady=8, sticky="w")
 
     # Status gry
     ctk.CTkLabel(main_frame, text="Status gry").grid(
-        row=8, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=9, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     status_gra_var = tk.StringVar(value="Nie grane")
     status_gra_combo = ctk.CTkComboBox(
@@ -652,11 +999,11 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         state="readonly",
         width=150,
     )
-    status_gra_combo.grid(row=8, column=1, pady=8, sticky="w")
+    status_gra_combo.grid(row=9, column=1, pady=8, sticky="w")
 
     # Status kolekcji
     ctk.CTkLabel(main_frame, text="Status kolekcji").grid(
-        row=9, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=10, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     status_kolekcja_var = tk.StringVar(value="W kolekcji")
     status_kolekcja_combo = ctk.CTkComboBox(
@@ -666,14 +1013,14 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
         state="readonly",
         width=150,
     )
-    status_kolekcja_combo.grid(row=9, column=1, pady=8, sticky="w")
+    status_kolekcja_combo.grid(row=10, column=1, pady=8, sticky="w")
 
     # Cena zakupu (dla statusu "W kolekcji")
     cena_zakupu_label = ctk.CTkLabel(main_frame, text="Cena zakupu")
-    cena_zakupu_label.grid(row=9, column=2, pady=8, padx=(20, 5), sticky="w")
+    cena_zakupu_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
 
     cena_zakupu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_zakupu_frame.grid(row=9, column=3, pady=8, padx=10, sticky="w")
+    cena_zakupu_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
     cena_zakupu_entry = ctk.CTkEntry(cena_zakupu_frame, width=100)
     cena_zakupu_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -690,10 +1037,10 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
     # Cena sprzedaży (dla statusu "Sprzedane")
     cena_sprzedazy_label = ctk.CTkLabel(main_frame, text="Cena sprzedaży")
-    cena_sprzedazy_label.grid(row=9, column=2, pady=8, padx=(20, 5), sticky="w")
+    cena_sprzedazy_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
 
     cena_sprzedazy_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_sprzedazy_frame.grid(row=9, column=3, pady=8, padx=10, sticky="w")
+    cena_sprzedazy_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
     cena_sprzedazy_entry = ctk.CTkEntry(cena_sprzedazy_frame, width=100)
     cena_sprzedazy_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -743,24 +1090,9 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
     def on_typ_change(*args: Any) -> None:
         """Obsługuje zmianę typu (Podręcznik Główny/Suplement)"""
         if typ_var.get() == "Suplement":
-            # Pokaż pola dla suplementu z oryginalnymi parametrami grid
-            system_glowny_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
-            system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
-            system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
-            system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
             typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
             typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
-            # Załaduj systemy główne
-            main_systems = get_main_systems()
-            if main_systems:
-                system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems]
-                system_glowny_combo.configure(values=system_values)
         else:
-            # Ukryj pola dla suplementu
-            system_glowny_label.grid_remove()
-            system_glowny_combo.grid_remove()
-            system_glowny_custom_label.grid_remove()
-            system_glowny_custom_entry.grid_remove()
             typ_suplementu_label.grid_remove()
             typ_suplementu_frame.grid_remove()
         update_dialog_size()
@@ -778,9 +1110,28 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
             messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dialog)  # type: ignore
             return
 
+        # Określ system_gry_id: preset ma priorytet, potem wybór z dropdown
+        if preset_game_id is not None:
+            game_id_to_save: Optional[int] = preset_game_id
+        elif przypisz_var.get():
+            try:
+                game_id_to_save = int(przypisz_var.get().split(' - ')[0])
+            except (ValueError, IndexError):
+                game_id_to_save = None
+        else:
+            game_id_to_save = None
+
+        # Walidacja: PG musi mieć przypisany system
+        if typ == "Podręcznik Główny" and game_id_to_save is None:
+            messagebox.showerror(
+                "Błąd",
+                "Podręcznik Główny musi być przypisany do systemu gry.",
+                parent=dialog,
+            )
+            return
+
         system_glowny_id = None
         typ_suplementu = None
-        system_glowny_custom = None
 
         if typ == "Suplement":
             # Zbierz wybrane typy suplementu
@@ -792,13 +1143,6 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
             # Połącz wybrane typy separatorem
             typ_suplementu = " | ".join(wybrane_typy)  # type: ignore
-
-            # System główny jest opcjonalny - może być pusty dla osieroconych suplementów
-            if system_glowny_var.get():
-                system_glowny_id = int(system_glowny_var.get().split(' - ')[0])
-            elif system_glowny_custom_entry.get().strip():
-                # Jeśli nie wybrano z listy, ale wpisano niestandardową nazwę
-                system_glowny_custom = system_glowny_custom_entry.get().strip()
 
         wydawca_id = None
         if wydawca_var.get():
@@ -847,8 +1191,9 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
                                        status_gra, status_kolekcja,
                                        cena_zakupu, waluta_zakupu, cena_sprzedazy,
                                        waluta_sprzedazy,
-                                       system_glowny_nazwa_custom) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       system_glowny_nazwa_custom,
+                                       system_gry_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     reserved_id,
@@ -867,7 +1212,8 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
                     waluta_zakupu,
                     cena_sprzedazy,
                     waluta_sprzedazy,
-                    system_glowny_custom,
+                    None,
+                    game_id_to_save,
                 ),
             )
             conn.commit()
@@ -882,7 +1228,7 @@ def dodaj_system_rpg(parent: tk.Tk, refresh_callback: Optional[Callable[..., Non
 
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=10, column=0, columnspan=4, pady=15, sticky="ew")
+    button_frame.grid(row=11, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
 
@@ -904,6 +1250,7 @@ def fill_systemy_rpg_tab(
     tab: tk.Frame,
     dark_mode: bool = False,
     _preloaded_data: Optional[List[Any]] = None,
+    _preloaded_games: Optional[List[Any]] = None,
 ) -> None:  # type: ignore
     """Wypełnia zakładkę systemów RPG danymi z bazy – CTkDataTable."""
     init_db()
@@ -921,29 +1268,35 @@ def fill_systemy_rpg_tab(
 
                     def _bg_fast_sys() -> None:
                         data = get_all_systems()
+                        games = get_all_games()
                         tab.after(
                             0,
                             lambda: fill_systemy_rpg_tab(
-                                tab, dark_mode, _preloaded_data=data
+                                tab, dark_mode, _preloaded_data=data, _preloaded_games=games
                             ),
                         )
 
                     threading.Thread(target=_bg_fast_sys, daemon=True).start()
                     return
                 cache['records_ref'][0] = _preloaded_data
+                if _preloaded_games is not None:
+                    cache['games_ref'][0] = _preloaded_games
                 cache['rebuild_fn']()
                 return
         except Exception:
             pass
         del tab._systemy_tab_cache  # type: ignore[attr-defined]
 
-    if _preloaded_data is None:
+    if _preloaded_data is None or _preloaded_games is None:
 
         def _bg_full_sys() -> None:
             data = get_all_systems()
+            games = get_all_games()
             tab.after(
                 0,
-                lambda: fill_systemy_rpg_tab(tab, dark_mode, _preloaded_data=data),
+                lambda: fill_systemy_rpg_tab(
+                    tab, dark_mode, _preloaded_data=data, _preloaded_games=games
+                ),
             )
 
         threading.Thread(target=_bg_full_sys, daemon=True).start()
@@ -953,6 +1306,7 @@ def fill_systemy_rpg_tab(
         widget.destroy()
 
     records_ref: List[List[Any]] = [_preloaded_data]  # type: ignore
+    games_ref: List[List[Any]] = [_preloaded_games]  # type: ignore
 
     _HEADERS = [
         "",
@@ -981,9 +1335,18 @@ def fill_systemy_rpg_tab(
     # ── Hierarchia i stan ─────────────────────────────────────────────────
     from collections import OrderedDict
 
-    main_systems: OrderedDict[Any, Any] = OrderedDict()
-    supplements: Dict[Any, List[Any]] = {}
-    orphaned_supplements: List[Any] = []
+    # games: OrderedDict[game_id → game_tuple (0=id,1=nazwa,2=wydawca,3=jezyk,4=notatki)]
+    games: OrderedDict[Any, Any] = OrderedDict()
+    # pg_by_game: game_id → [PG records] (filtrowane)
+    pg_by_game: Dict[Any, List[Any]] = {}
+    # supl_by_pg: pg_id → [Suplement records]
+    supl_by_pg: Dict[Any, List[Any]] = {}
+    # supl_direct_by_game: game_id → [Suplement records] przypisane bezpośrednio do systemu (bez PG-rodzica)
+    supl_direct_by_game: Dict[Any, List[Any]] = {}
+    # orphaned_pgs: PG bez system_gry_id
+    orphaned_pgs: List[Any] = []
+    # orphaned_supls: Suplementy bez żadnego przypisania
+    orphaned_supls: List[Any] = []
     expanded_state: Dict[Any, bool] = {}
     current_sort_reverse: List[bool] = [active_sort_systemy.get("reverse", False)]
     _table: List[Optional[CTkDataTable]] = [None]
@@ -1021,53 +1384,233 @@ def fill_systemy_rpg_tab(
         return result  # type: ignore[return-value]
 
     def _rebuild_groups() -> None:
-        nonlocal main_systems, supplements, orphaned_supplements
+        nonlocal games, pg_by_game, supl_by_pg, supl_direct_by_game, orphaned_pgs, orphaned_supls
         filtered = _apply_record_filters(records_ref[0])
         phrase = search_var.get().strip().lower()
-        all_main: OrderedDict[Any, Any] = OrderedDict()
-        all_supps: Dict[Any, List[Any]] = {}
-        all_orph: List[Any] = []
+
+        # Podziel rekordy systemy_rpg na PG i Suplementy
+        all_pgs: Dict[int, Any] = {}   # pg_id → rec
+        all_supls: Dict[int, List[Any]] = {}  # pg_id → [supl]
+        orph_pgs: List[Any] = []
+        # Suplementy bez PG-rodzica: z system_gry_id (direct) lub całkowicie osierocone
+        direct_supls: Dict[int, List[Any]] = {}  # game_id → [supl]
+        true_orph_supls: List[Any] = []
+
         for rec in filtered:
             if rec[2] == "Podręcznik Główny":
-                all_main[rec[0]] = rec
+                all_pgs[rec[0]] = rec
             elif rec[2] == "Suplement":
-                pid = rec[3]
-                if pid and pid in all_main:
-                    all_supps.setdefault(pid, []).append(rec)
+                pid = rec[3]  # system_glowny_id (PG-rodzic)
+                if pid is not None and pid in all_pgs:
+                    all_supls.setdefault(pid, []).append(rec)
                 else:
-                    all_orph.append(rec)
-        main_systems.clear()
-        supplements.clear()
-        orphaned_supplements.clear()
+                    # Suplement bez PG-rodzica — sprawdź czy ma system_gry_id
+                    sgid = rec[13] if len(rec) > 13 else None
+                    if sgid:
+                        direct_supls.setdefault(sgid, []).append(rec)
+                    else:
+                        true_orph_supls.append(rec)
+
+        # Sprawdź, które PG mają system_gry_id  (index 13)
+        for pg_id, rec in list(all_pgs.items()):
+            sgid = rec[13] if len(rec) > 13 else None
+            if not sgid:
+                orph_pgs.append(rec)
+                del all_pgs[pg_id]
+
+        # Załaduj systemy_gry (games) z games_ref
+        raw_games = games_ref[0] if games_ref else []
+        games.clear()
+        pg_by_game.clear()
+        supl_by_pg.clear()
+        supl_direct_by_game.clear()
+        orphaned_pgs.clear()
+        orphaned_supls.clear()
+
         if not phrase:
-            main_systems.update(all_main)
-            supplements.update(all_supps)
-            orphaned_supplements.extend(all_orph)
+            for g in raw_games:
+                games[g[0]] = g
+            for pg_id, rec in all_pgs.items():
+                sgid = rec[13]
+                pg_by_game.setdefault(sgid, []).append(rec)
+            for pg_id, supls in all_supls.items():
+                supl_by_pg[pg_id] = supls
+            for gid, supls in direct_supls.items():
+                supl_direct_by_game[gid] = supls
+            orphaned_pgs.extend(orph_pgs)
+            orphaned_supls.extend(true_orph_supls)
         else:
-            for mid, rec in all_main.items():
-                name_match = phrase in (rec[1] or '').lower()
-                supps = all_supps.get(mid, [])
-                matching_supps = [s for s in supps if phrase in (s[1] or '').lower()]
-                if name_match or matching_supps:
-                    main_systems[mid] = rec
-                    supplements[mid] = supps if name_match else matching_supps
-            for rec in all_orph:
+            # Z frazą: włącz grę, jeśli dopasowano jej nazwę LUB któryś z PG/Supl
+            for g in raw_games:
+                gid = g[0]
+                gname = (g[1] or '').lower()
+                pgs_in_game = [rec for rec in all_pgs.values() if rec[13] == gid]
+                supls_in_game: List[Any] = []
+                for p in pgs_in_game:
+                    supls_in_game.extend(all_supls.get(p[0], []))
+                direct_in_game = direct_supls.get(gid, [])
+
+                game_name_match = phrase in gname
+                matching_pgs = [p for p in pgs_in_game if phrase in (p[1] or '').lower()]
+                matching_supls = [s for s in supls_in_game if phrase in (s[1] or '').lower()]
+                matching_direct = [s for s in direct_in_game if phrase in (s[1] or '').lower()]
+
+                if game_name_match or matching_pgs or matching_supls or matching_direct:
+                    games[gid] = g
+                    show_pgs = pgs_in_game if game_name_match else matching_pgs
+                    for p in show_pgs:
+                        pg_by_game.setdefault(gid, []).append(p)
+                    for p in (pgs_in_game if game_name_match else matching_pgs):
+                        pg_supls = all_supls.get(p[0], [])
+                        supl_by_pg[p[0]] = pg_supls if game_name_match else [
+                            s for s in pg_supls if phrase in (s[1] or '').lower()
+                        ]
+                    supl_direct_by_game[gid] = direct_in_game if game_name_match else matching_direct
+            for rec in orph_pgs:
                 if phrase in (rec[1] or '').lower():
-                    orphaned_supplements.append(rec)
+                    orphaned_pgs.append(rec)
+            for rec in true_orph_supls:
+                if phrase in (rec[1] or '').lower():
+                    orphaned_supls.append(rec)
 
     def _build_hierarchical_data() -> List[List[Any]]:
+        """Buduje płaską listę wierszy dla CTkDataTable (3-poziomowa hierarchia).
+
+        Poziom 1: System (systemy_gry) — z symbolem [+]/[-]/[ ]
+        Poziom 2: Podręczniki Główne i Suplementy na TYM SAMYM poziomie wcięcia,
+                  PG wyświetlane jako pierwsze, następnie Suplementy (oba sortowane po nazwie).
+        """
         data_h: List[List[Any]] = []
-        for main_id in main_systems:
-            rec = main_systems[main_id]
-            has_supps = main_id in supplements
-            scnt = len(supplements.get(main_id, []))
-            symbol = "[-]" if expanded_state.get(main_id) else ("[+]" if has_supps else "   ")
-            name = (rec[1] or "") + (f" ({scnt} supl.)" if has_supps else "")
-            row: List[Any] = [
+
+        for gid in games:
+            game = games[gid]
+            pgs_here = pg_by_game.get(gid, [])
+            supls_here: List[Any] = []
+            for pg in pgs_here:
+                supls_here.extend(supl_by_pg.get(pg[0], []))
+            # Suplementy bezpośrednio pod systemem (bez PG-rodzica)
+            direct_supls_here = supl_direct_by_game.get(gid, [])
+
+            has_children = bool(pgs_here) or bool(supls_here) or bool(direct_supls_here)
+            symbol = "[-]" if expanded_state.get(gid) else ("[+]" if has_children else "   ")
+
+            # Agreguj posiadanie z PG i suplementów bezpośrednich (logika OR)
+            agg_fiz = any(p[6] for p in pgs_here) if pgs_here else (
+                any(s[6] for s in direct_supls_here) if direct_supls_here else False
+            )
+            agg_pdf = any(p[7] for p in pgs_here) if pgs_here else (
+                any(s[7] for s in direct_supls_here) if direct_supls_here else False
+            )
+            vtt_set = {p[8] for p in pgs_here if p[8]}
+            vtt_set.update(s[8] for s in direct_supls_here if s[8])
+            agg_vtt = ", ".join(sorted(vtt_set))
+            pg_cnt = len(pgs_here)
+            supl_cnt = len(supls_here) + len(direct_supls_here)
+            cnt_label = ""
+            if pg_cnt:
+                cnt_label += f"{pg_cnt} PG"
+            if supl_cnt:
+                cnt_label += (", " if cnt_label else "") + f"{supl_cnt} supl."
+
+            # Agreguj Wydawcę i Język z PG i suplementów bezpośrednich (unikalne wartości)
+            wydawca_set = {p[5] for p in pgs_here if p[5]}
+            wydawca_set.update(s[5] for s in direct_supls_here if s[5])
+            agg_wydawca = ", ".join(sorted(wydawca_set)) if wydawca_set else (game[2] or "")
+            jezyk_set = {p[9] for p in pgs_here if p[9]}
+            jezyk_set.update(s[9] for s in direct_supls_here if s[9])
+            agg_jezyk = ", ".join(sorted(jezyk_set)) if jezyk_set else (game[3] or "")
+
+            game_name = (game[1] or "") + (f" ({cnt_label})" if cnt_label else "")
+            game_row: List[Any] = [
                 symbol,
+                f"G{gid}",   # prefix G = game (odróżnia od PG id)
+                game_name,
+                "System",
+                "",          # brak systemu nadrzędnego
+                "",          # brak typ_suplementu
+                agg_wydawca,
+                "Tak" if agg_fiz else "Nie",
+                "Tak" if agg_pdf else "Nie",
+                agg_vtt,
+                agg_jezyk,
+                "",          # status
+                "",          # cena
+            ]
+            data_h.append(game_row)
+
+            if expanded_state.get(gid):
+                # Podręczniki Główne (pierwsze, sortowane po nazwie)
+                for pg in sorted(pgs_here, key=lambda x: (x[1] or "").lower()):
+                    pg_row: List[Any] = [
+                        "   ",
+                        str(pg[0]),
+                        "  " + (pg[1] or ""),
+                        "Podręcznik Główny",
+                        game[1] or "",   # system główny = nazwa gry
+                        "",
+                        pg[5] or "",
+                        "Tak" if pg[6] else "Nie",
+                        "Tak" if pg[7] else "Nie",
+                        pg[8] or "",
+                        pg[9] or "",
+                        pg[10] or "",
+                        pg[11] or "",
+                    ]
+                    data_h.append(pg_row)
+
+                # Suplementy (po PG, sortowane po nazwie — ten sam poziom wcięcia)
+                for supl in sorted(supls_here, key=lambda x: (x[1] or "").lower()):
+                    # Znajdź nazwę PG-rodzica
+                    parent_pg_name = ""
+                    for pg in pgs_here:
+                        if pg[0] == supl[3]:
+                            parent_pg_name = pg[1] or ""
+                            break
+                    supl_row: List[Any] = [
+                        "   ",
+                        str(supl[0]),
+                        "  " + (supl[1] or ""),
+                        "Suplement",
+                        parent_pg_name,  # system główny = PG
+                        supl[4] or "",
+                        supl[5] or "",
+                        "Tak" if supl[6] else "Nie",
+                        "Tak" if supl[7] else "Nie",
+                        supl[8] or "",
+                        supl[9] or "",
+                        supl[10] or "",
+                        supl[11] or "",
+                    ]
+                    data_h.append(supl_row)
+
+                # Suplementy bezpośrednio pod systemem (bez PG-rodzica, sortowane po nazwie)
+                for supl in sorted(direct_supls_here, key=lambda x: (x[1] or "").lower()):
+                    data_h.append([
+                        "   ",
+                        str(supl[0]),
+                        "  " + (supl[1] or ""),
+                        "Suplement",
+                        "",  # brak PG-rodzica
+                        supl[4] or "",
+                        supl[5] or "",
+                        "Tak" if supl[6] else "Nie",
+                        "Tak" if supl[7] else "Nie",
+                        supl[8] or "",
+                        supl[9] or "",
+                        supl[10] or "",
+                        supl[11] or "",
+                    ])
+
+        # Osierocone Podręczniki Główne (bez system_gry_id)
+        for rec in sorted(orphaned_pgs, key=lambda r: (r[1] or '').lower()):
+            scnt = len(supl_by_pg.get(rec[0], []))
+            name = (rec[1] or "") + (f" ({scnt} supl.)" if scnt else "")
+            symbol_oph = "[-]" if expanded_state.get(rec[0]) else ("[+]" if scnt else "   !")
+            data_h.append([
+                symbol_oph,
                 str(rec[0]),
                 name,
-                rec[2] or "",
+                "Podręcznik Główny",
                 "",
                 "",
                 rec[5] or "",
@@ -1077,54 +1620,33 @@ def fill_systemy_rpg_tab(
                 rec[9] or "",
                 rec[10] or "",
                 rec[11] or "",
-            ]
-            data_h.append(row)
-            if expanded_state.get(main_id) and main_id in supplements:
-                for sr in sorted(supplements[main_id], key=lambda x: x[1] or ""):
-                    mn = main_systems[main_id][1] if main_id in main_systems else ""
-                    sr_row: List[Any] = [
-                        "   →",
-                        str(sr[0]),
-                        "  " + (sr[1] or ""),
-                        sr[2] or "",
-                        mn,
-                        sr[4] or "",
-                        sr[5] or "",
-                        "Tak" if sr[6] else "Nie",
-                        "Tak" if sr[7] else "Nie",
-                        sr[8] or "",
-                        sr[9] or "",
-                        sr[10] or "",
-                        sr[11] or "",
-                    ]
-                    data_h.append(sr_row)
-        for rec in sorted(
-            orphaned_supplements,
-            key=lambda r: (r[1] or '').lower(),
-            reverse=current_sort_reverse[0],
-        ):
-            mn = ""
-            if rec[3]:
-                try:
-                    with sqlite3.connect(DB_FILE) as conn:
-                        conn.row_factory = sqlite3.Row
-                        conn.execute("PRAGMA foreign_keys = ON")
-                        row_r = (
-                            conn.cursor()
-                            .execute("SELECT nazwa FROM systemy_rpg WHERE id=?", (rec[3],))
-                            .fetchone()
-                        )
-                        if row_r:
-                            mn = row_r[0]
-                except sqlite3.Error:
-                    pass
-            elif rec[12]:
-                mn = rec[12]
-            oph_row: List[Any] = [
+            ])
+            if expanded_state.get(rec[0]):
+                for supl in sorted(supl_by_pg.get(rec[0], []), key=lambda x: (x[1] or "").lower()):
+                    data_h.append([
+                        "   \u2192",
+                        str(supl[0]),
+                        "  " + (supl[1] or ""),
+                        "Suplement",
+                        rec[1] or "",
+                        supl[4] or "",
+                        supl[5] or "",
+                        "Tak" if supl[6] else "Nie",
+                        "Tak" if supl[7] else "Nie",
+                        supl[8] or "",
+                        supl[9] or "",
+                        supl[10] or "",
+                        supl[11] or "",
+                    ])
+
+        # Osierocone Suplementy (bez PG)
+        for rec in sorted(orphaned_supls, key=lambda r: (r[1] or '').lower()):
+            mn = rec[12] or ""  # system_glowny_nazwa_custom
+            data_h.append([
                 "   !",
                 str(rec[0]),
                 rec[1] or "",
-                rec[2] or "",
+                "Suplement",
                 mn,
                 rec[4] or "",
                 rec[5] or "",
@@ -1134,8 +1656,7 @@ def fill_systemy_rpg_tab(
                 rec[9] or "",
                 rec[10] or "",
                 rec[11] or "",
-            ]
-            data_h.append(oph_row)
+            ])
         return data_h
 
     displayed_data: List[List[Any]] = []
@@ -1144,46 +1665,67 @@ def fill_systemy_rpg_tab(
         sort_by = sort_var.get()
 
         def _key(x: Any) -> Any:
+            g = games.get(x)
+            if g is None:
+                return ""
             if sort_by == "Nazwa systemu":
-                return (main_systems[x][1] or '').lower()
+                return (g[1] or '').lower()
             elif sort_by == "Wydawca":
-                return (main_systems[x][5] or '').lower()
+                pgs_here = pg_by_game.get(x, [])
+                direct_here = supl_direct_by_game.get(x, [])
+                wydawca_set = {p[5] for p in pgs_here if p[5]}
+                wydawca_set.update(s[5] for s in direct_here if s[5])
+                agg = ", ".join(sorted(wydawca_set)) if wydawca_set else (g[2] or "")
+                return agg.lower()
             elif sort_by == "Język":
-                return (main_systems[x][9] or '').lower()
+                pgs_here = pg_by_game.get(x, [])
+                direct_here = supl_direct_by_game.get(x, [])
+                jezyk_set = {p[9] for p in pgs_here if p[9]}
+                jezyk_set.update(s[9] for s in direct_here if s[9])
+                agg = ", ".join(sorted(jezyk_set)) if jezyk_set else (g[3] or "")
+                return agg.lower()
             elif sort_by == "Status":
-                return (main_systems[x][10] or '').lower()
+                pgs_here = pg_by_game.get(x, [])
+                direct_here = supl_direct_by_game.get(x, [])
+                status_set = {p[10] for p in pgs_here if p[10]}
+                status_set.update(s[10] for s in direct_here if s[10])
+                return ", ".join(sorted(status_set)).lower()
             elif sort_by == "Posiadanie":
-                r = main_systems[x]
-                if r[6] and r[7]:
-                    return "1"
-                elif r[6]:
-                    return "2"
-                elif r[7]:
-                    return "3"
-                return "4"
+                pgs_here = pg_by_game.get(x, [])
+                direct_here = supl_direct_by_game.get(x, [])
+                agg_fiz = any(p[6] for p in pgs_here) or any(s[6] for s in direct_here)
+                agg_pdf = any(p[7] for p in pgs_here) or any(s[7] for s in direct_here)
+                # Sortuj: oba=2, jedno=1, żadne=0
+                return int(agg_fiz) + int(agg_pdf)
             elif sort_by == "Cena":
-                s = main_systems[x][11] or ""
-                try:
-                    return float(s.split()[0])
-                except:
-                    return 0.0
+                pgs_here = pg_by_game.get(x, [])
+                direct_here = supl_direct_by_game.get(x, [])
+                total = 0.0
+                for p in pgs_here + direct_here:
+                    cena_str = p[11] if len(p) > 11 else ""
+                    if cena_str:
+                        try:
+                            total += float(cena_str.split()[0])
+                        except (ValueError, IndexError):
+                            pass
+                return total
             else:  # ID (default)
                 try:
-                    return int(main_systems[x][0])
-                except:
+                    return int(g[0])
+                except Exception:
                     return 0
 
-        sorted_ids = sorted(main_systems.keys(), key=_key, reverse=reverse)
-        new_ms: OrderedDict[Any, Any] = OrderedDict((k, main_systems[k]) for k in sorted_ids)
-        main_systems.clear()
-        main_systems.update(new_ms)
+        sorted_ids = sorted(games.keys(), key=_key, reverse=reverse)
+        new_games: OrderedDict[Any, Any] = OrderedDict((k, games[k]) for k in sorted_ids)
+        games.clear()
+        games.update(new_games)
 
     def _apply_and_draw() -> None:
         nonlocal displayed_data
         _rebuild_groups()
         if search_var.get().strip() or all_expanded_systemy:
-            for mid in main_systems:
-                expanded_state[mid] = True
+            for gid in games:
+                expanded_state[gid] = True
         _do_sort_main_systems(current_sort_reverse[0])
         active_sort_systemy["column"] = sort_var.get()
         active_sort_systemy["reverse"] = current_sort_reverse[0]
@@ -1204,6 +1746,27 @@ def fill_systemy_rpg_tab(
         symbol = row[0] if row else ""
         typ = row[3] if len(row) > 3 else ""
         status = row[11] if len(row) > 11 else ""
+        if typ == "System":
+            row_id = row[1] if len(row) > 1 else ""
+            gid_str = str(row_id)[1:] if str(row_id).startswith("G") else None
+            has_pg = False
+            has_direct_supl = False
+            if gid_str:
+                try:
+                    gid_int = int(gid_str)
+                    has_pg = bool(pg_by_game.get(gid_int))
+                    has_direct_supl = bool(supl_direct_by_game.get(gid_int))
+                except ValueError:
+                    pass
+            if has_pg:
+                # System z PG (i opcjonalnie suplementami) — złoty/amber
+                return ("#4a3000" if dark_mode else "#fff8e1", "#ffcc80" if dark_mode else "#e65100")
+            elif has_direct_supl:
+                # System tylko z suplementami bezpośrednimi (bez PG) — niebieskawa zieleń
+                return ("#003040" if dark_mode else "#e0f7fa", "#4dd0e1" if dark_mode else "#006064")
+            else:
+                # System bez żadnych pozycji — szary
+                return ("#2a2a2a" if dark_mode else "#eeeeee", "#757575" if dark_mode else "#9e9e9e")
         if "Na sprzedaż" in status:
             return ("#660000" if dark_mode else "#ff6666", "#ffcccc" if dark_mode else "#ffffff")
         if "Nieposiadane" in status:
@@ -1212,10 +1775,8 @@ def fill_systemy_rpg_tab(
             return ("#4a1a4a" if dark_mode else "#e6b3ff", "#e6b3e6" if dark_mode else "#4a004a")
         if typ == "Podręcznik Główny":
             if symbol in ("[+]", "[-]"):
-                return (
-                    "#5d4e00" if dark_mode else "#ffa500",
-                    "#ffd700" if dark_mode else "#4d2d00",
-                )
+                # Osierocony PG z symbolem rozwinięcia
+                return ("#5d4e00" if dark_mode else "#ffa500", "#ffd700" if dark_mode else "#4d2d00")
             return ("#1a3d1a" if dark_mode else "#d4edda", "#90ee90" if dark_mode else "#155724")
         if typ == "Suplement":
             return ("#1a2a3d" if dark_mode else "#f0f8ff", "#87ceeb" if dark_mode else "#2c5282")
@@ -1229,14 +1790,18 @@ def fill_systemy_rpg_tab(
 
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
         sid = row_data[1] if len(row_data) > 1 else ""
-        if sid:
-            try:
+        typ = row_data[3] if len(row_data) > 3 else ""
+        if not sid:
+            return
+        try:
+            if typ == "System" or str(sid).startswith("G"):
+                gid_str = str(sid)[1:] if str(sid).startswith("G") else str(sid)
+                open_edit_game_dialog(tab, int(gid_str), refresh_callback=_systemy_refresh)
+            else:
                 open_edit_system_dialog(tab, [str(sid)], refresh_callback=_systemy_refresh)
-            except Exception as e:
-                logger.exception("_on_edit: błąd otwierania edycji")
-                messagebox.showerror(
-                    "Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab
-                )
+        except Exception as e:
+            logger.exception("_on_edit: błąd otwierania edycji")
+            messagebox.showerror("Błąd edycji", f"Nie można otworzyć okna edycji:\n{e}", parent=tab)
 
     def _on_cell_click(row_idx: int, col_idx: int, row_data: List[Any]) -> None:
         if col_idx != 0:
@@ -1244,55 +1809,27 @@ def fill_systemy_rpg_tab(
         symbol = row_data[0] if row_data else ""
         if symbol not in ("[+]", "[-]"):
             return
+        if _table[0] is None:
+            return
         try:
-            import time as _t
+            raw_id = row_data[1]
+            typ = row_data[3] if len(row_data) > 3 else ""
 
-            _ts_click = _t.perf_counter()
-            main_id = int(row_data[1])
-            is_expanding = not expanded_state.get(main_id, False)
-            expanded_state[main_id] = is_expanding
-            if _table[0] is None:
-                return
-
-            if is_expanding:
-                # Pobierz tylko wiersze suplementów dla tego systemu
-                supp_rows: List[List[Any]] = []
-                for sr in sorted(supplements.get(main_id, []), key=lambda x: x[1] or ""):
-                    mn = main_systems[main_id][1] if main_id in main_systems else ""
-                    supp_rows.append(
-                        [
-                            "   \u2192",
-                            str(sr[0]),
-                            "  " + (sr[1] or ""),
-                            sr[2] or "",
-                            mn,
-                            sr[4] or "",
-                            sr[5] or "",
-                            "Tak" if sr[6] else "Nie",
-                            "Tak" if sr[7] else "Nie",
-                            sr[8] or "",
-                            sr[9] or "",
-                            sr[10] or "",
-                            sr[11] or "",
-                        ]
-                    )
-                _table[0].toggle_expand(str(main_id), True, supp_rows)
+            if typ == "System" or str(raw_id).startswith("G"):
+                gid_str = str(raw_id)[1:] if str(raw_id).startswith("G") else str(raw_id)
+                try:
+                    gid = int(gid_str)
+                except ValueError:
+                    return
+                expanded_state[gid] = not expanded_state.get(gid, False)
             else:
-                _table[0].toggle_expand(str(main_id), False)
+                try:
+                    main_id = int(raw_id)
+                except ValueError:
+                    return
+                expanded_state[main_id] = not expanded_state.get(main_id, False)
 
-            _ts_done = _t.perf_counter()
-
-            def _after_render(_ts: float = _ts_click, _td: float = _ts_done) -> None:
-                logger.debug(
-                    "[toggle_expand fast] expand=%s  elapsed=%.1f ms"
-                    "  render=%.1f ms  TOTAL=%.1f ms",
-                    is_expanding,
-                    (_td - _ts) * 1000,
-                    (_t.perf_counter() - _td) * 1000,
-                    (_t.perf_counter() - _ts) * 1000,
-                )
-
-            tab.after(0, _after_render)
+            _table[0].set_data(_build_hierarchical_data())
         except (ValueError, IndexError):
             pass
 
@@ -1325,7 +1862,7 @@ def fill_systemy_rpg_tab(
         sid = row_data[1] if len(row_data) > 1 else ""
         sname = row_data[2] if len(row_data) > 2 else ""
         stype = row_data[3] if len(row_data) > 3 else ""
-        clean_name = sname.split(" (")[0] if (" (" in sname and " supl.)" in sname) else sname
+        clean_name = sname.strip().split(" (")[0] if (" (" in sname) else sname.strip()
 
         def _edit() -> None:
             _on_edit(row_idx, row_data)
@@ -1333,52 +1870,107 @@ def fill_systemy_rpg_tab(
         def _delete() -> None:
             if not sid:
                 return
-            is_main = stype == "Podręcznik Główny"
-            warn = f"Czy na pewno chcesz usunąć system: {clean_name}?"
+            if stype == "System":
+                gid_str = str(sid)[1:] if str(sid).startswith("G") else str(sid)
+                try:
+                    gid_int = int(gid_str)
+                except ValueError:
+                    return
+                pgs_under = pg_by_game.get(gid_int, [])
+                warn = f"Czy na pewno chcesz usunąć System: {clean_name}?"
+                if pgs_under:
+                    warn += (
+                        f"\n\nUWAGA: System ma {len(pgs_under)} Podręcznik(ów) Główny(ch)"
+                        " — ich system_gry_id zostanie wyczyszczony (staną się osierocone)."
+                    )
+                if not messagebox.askyesno("Usuń System", warn, parent=tab):
+                    return
+                try:
+                    with sqlite3.connect(DB_FILE) as conn:
+                        conn.execute("PRAGMA foreign_keys = ON")
+                        cur = conn.cursor()
+                        cur.execute(
+                            "UPDATE systemy_rpg SET system_gry_id=NULL WHERE system_gry_id=?",
+                            (gid_int,),
+                        )
+                        cur.execute("DELETE FROM systemy_gry WHERE id=?", (gid_int,))
+                        conn.commit()
+                    fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
+                except sqlite3.Error as e:
+                    messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć:\n{e}", parent=tab)
+                return
+
+            is_pg = stype == "Podręcznik Główny"
+            warn = f"Czy na pewno chcesz usunąć: {clean_name}?"
             sid_int: Optional[int] = None
             try:
-                sid_int = int(sid)
-                if is_main and sid_int in supplements:
-                    cnt = len(supplements[sid_int])
-                    warn += (
-                        f"\n\nUWAGA: Ten podręcznik główny ma {cnt} suplementów,"
-                        " które również zostaną usunięte!"
-                    )
+                sid_int = int(str(sid))
+                if is_pg:
+                    supl_cnt = len(supl_by_pg.get(sid_int, []))
+                    if supl_cnt:
+                        warn += (
+                            f"\n\nUWAGA: Podręcznik główny ma {supl_cnt} suplement(ów)."
+                            " Suplementy NIE zostaną usunięte — pozostaną w systemie bez PG-rodzica."
+                        )
             except ValueError:
                 pass
-            if messagebox.askyesno("Usuń system RPG", warn, parent=tab):
+            if messagebox.askyesno("Usuń", warn, parent=tab):
                 try:
                     with sqlite3.connect(DB_FILE) as conn:
                         conn.row_factory = sqlite3.Row
                         conn.execute("PRAGMA foreign_keys = ON")
                         cur = conn.cursor()
-                        if is_main and sid_int is not None:
+                        if is_pg and sid_int is not None:
+                            # Orphan supplements — nie usuwaj, tylko odłącz od PG
                             cur.execute(
-                                "DELETE FROM systemy_rpg WHERE system_glowny_id=?", (sid_int,)
+                                "UPDATE systemy_rpg SET system_glowny_id=NULL WHERE system_glowny_id=?",
+                                (sid_int,),
                             )
-                        cur.execute("DELETE FROM systemy_rpg WHERE id=?", (sid,))
+                        cur.execute("DELETE FROM systemy_rpg WHERE id=?", (str(sid),))
                         conn.commit()
                     fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
                 except sqlite3.Error as e:
-                    messagebox.showerror(
-                        "Błąd bazy danych", f"Nie udało się usunąć:\n{e}", parent=tab
-                    )
+                    messagebox.showerror("Błąd bazy danych", f"Nie udało się usunąć:\n{e}", parent=tab)
 
         def _toggle() -> None:
             _on_cell_click(row_idx, 0, row_data)
 
-        def _add_supp() -> None:
-            if sid:
-                dodaj_suplement_do_systemu(
-                    tab.winfo_toplevel(), int(sid), clean_name, refresh_callback=_systemy_refresh
-                )
+        def _dodaj_do_systemu(raw_sid: Any) -> None:
+            """Otwiera dialog dodawania PG lub Suplementu bezpośrednio do Systemu."""
+            gid_str = str(raw_sid)[1:] if str(raw_sid).startswith("G") else str(raw_sid)
+            try:
+                gid = int(gid_str)
+            except ValueError:
+                return
+            dodaj_system_rpg(tab.winfo_toplevel(), refresh_callback=_systemy_refresh, preset_game_id=gid)
+
+        def _assign_pg_to_game() -> None:
+            """Otwiera dialog do przypisania PG do Systemu."""
+            if not sid:
+                return
+            try:
+                pg_id = int(str(sid))
+            except ValueError:
+                return
+            _open_assign_pg_dialog(tab, pg_id, clean_name, _systemy_refresh)
 
         ctx = tk.Menu(tab, tearoff=0)
         ctx.add_command(label="Edytuj", command=_edit)
-        if stype == "Podręcznik Główny":
-            ctx.add_command(label="Dodaj suplement do podręcznika głównego", command=_add_supp)
+        if stype == "System":
             if symbol in ("[+]", "[-]"):
                 ctx.add_command(label="Zwiń" if symbol == "[-]" else "Rozwiń", command=_toggle)
+            ctx.add_command(
+                label="Dodaj Podręcznik Główny/Suplement do systemu",
+                command=lambda cap_sid=sid: _dodaj_do_systemu(cap_sid),
+            )
+        elif stype == "Podręcznik Główny":
+            ctx.add_command(label="Przypisz do Systemu...", command=_assign_pg_to_game)
+        elif stype == "Suplement":
+            ctx.add_command(
+                label="Przypisz do Systemu...",
+                command=lambda: _open_assign_supl_dialog(tab, int(str(sid)), clean_name, _systemy_refresh)
+                if sid else None,
+            )
         ctx.add_separator()
         ctx.add_command(label="Usuń", command=_delete)
         ctx.tk_popup(event.x_root, event.y_root)
@@ -1459,8 +2051,8 @@ def fill_systemy_rpg_tab(
         global all_expanded_systemy
         all_expanded_systemy = bool(expand_var.get())
         if all_expanded_systemy:
-            for mid in main_systems:
-                expanded_state[mid] = True
+            for gid in games:
+                expanded_state[gid] = True
         else:
             expanded_state.clear()
         if _table[0] is not None:
@@ -1491,12 +2083,9 @@ def fill_systemy_rpg_tab(
     # ── Tabela ───────────────────────────────────────────────────────────
     _rebuild_groups()
     if all_expanded_systemy:
-        for mid in main_systems:
-            expanded_state[mid] = True
-    if active_sort_systemy.get("column", "ID") != "ID" or active_sort_systemy.get(
-        "reverse", False
-    ):
-        _do_sort_main_systems(active_sort_systemy.get("reverse", False))
+        for gid in games:
+            expanded_state[gid] = True
+    _do_sort_main_systems(active_sort_systemy.get("reverse", False))
     initial_data = _build_hierarchical_data()
 
     def _compute_hidden_cols() -> List[int]:
@@ -1539,6 +2128,7 @@ def fill_systemy_rpg_tab(
 
     tab._systemy_tab_cache = {  # type: ignore[attr-defined]
         'records_ref': records_ref,
+        'games_ref': games_ref,
         'rebuild_fn': _rebuild_fn,
         'table_ref': tbl,
         'dark_mode': dark_mode,
@@ -1748,7 +2338,7 @@ def open_edit_system_dialog(
                 SELECT id, nazwa, typ, system_glowny_id, typ_suplementu, 
                        wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
                        cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
-                       system_glowny_nazwa_custom
+                       system_glowny_nazwa_custom, system_gry_id
                 FROM systemy_rpg WHERE id = ?
             """,
                 (system_id,),
@@ -1820,8 +2410,8 @@ def open_edit_system_dialog(
         row=0, column=0, columnspan=2, pady=(0, 8), sticky="w"
     )
 
-    # Nazwa systemu (obowiązkowe)
-    ctk.CTkLabel(main_frame, text="Nazwa systemu *").grid(
+    # Nazwa/Tytuł (obowiązkowe)
+    ctk.CTkLabel(main_frame, text="Nazwa/Tytuł *").grid(
         row=1, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     nazwa_entry = ctk.CTkEntry(main_frame, placeholder_text="Wprowadź nazwę systemu")
@@ -1837,28 +2427,55 @@ def open_edit_system_dialog(
     )
     typ_combo.grid(row=2, column=1, pady=8, sticky="ew")
 
-    # System główny (dla suplementów) - opcjonalne
-    system_glowny_label = ctk.CTkLabel(main_frame, text="System główny (opcjonalnie)")
-    system_glowny_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
-    system_glowny_var = tk.StringVar()
-    system_glowny_combo = ctk.CTkComboBox(main_frame, variable=system_glowny_var, state="readonly")
-    system_glowny_combo.grid(row=3, column=1, pady=8, sticky="ew")
+    # Przypisz do systemu gry (systemy_gry) - zawsze widoczne
+    all_games_edit = get_all_games()
+    przypisz_edit_label = ctk.CTkLabel(main_frame, text="Przypisz do systemu *")
+    przypisz_edit_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
+    przypisz_edit_var = tk.StringVar()
+    przypisz_edit_combo = ctk.CTkComboBox(main_frame, variable=przypisz_edit_var, state="readonly")
+    if all_games_edit:
+        game_edit_values = [f"{g[0]} - {g[1]}" for g in all_games_edit]
+        przypisz_edit_combo.configure(values=game_edit_values)
+        if system_data[17]:  # system_gry_id
+            for g in all_games_edit:
+                if g[0] == system_data[17]:
+                    przypisz_edit_var.set(f"{g[0]} - {g[1]}")
+                    break
+    przypisz_edit_combo.grid(row=3, column=1, pady=8, sticky="w")
 
-    # Niestandardowa nazwa systemu głównego (dla suplementów bez systemu w kolekcji)
-    system_glowny_custom_label = ctk.CTkLabel(main_frame, text="lub wpisz nazwę:")
-    system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
-    system_glowny_custom_entry = ctk.CTkEntry(
-        main_frame, placeholder_text="Nazwa systemu spoza kolekcji", width=200
-    )
-    system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
-    if system_data[16]:  # system_glowny_nazwa_custom
-        system_glowny_custom_entry.insert(0, system_data[16] or "")
+    def _after_add_game_edit(**_kw: Any) -> None:
+        """Odświeża listę systemów gry po dodaniu nowego."""
+        nonlocal all_games_edit
+        current_val = przypisz_edit_var.get()
+        all_games_edit = get_all_games()
+        if all_games_edit:
+            vals = [f"{g[0]} - {g[1]}" for g in all_games_edit]
+            przypisz_edit_combo.configure(values=vals)
+            if current_val and current_val in vals:
+                przypisz_edit_var.set(current_val)
+            else:
+                # Zaznacz nowo dodany system (ostatni z nowych ID)
+                old_ids = {g[0] for g in all_games_edit if f"{g[0]} - {g[1]}" != current_val}
+                new_game = next((g for g in all_games_edit if g[0] not in old_ids), None)
+                if new_game:
+                    przypisz_edit_var.set(f"{new_game[0]} - {new_game[1]}")
+
+    ctk.CTkButton(
+        main_frame,
+        text="➕ Dodaj system",
+        command=lambda: open_add_game_dialog(dialog, refresh_callback=_after_add_game_edit),  # type: ignore[arg-type]
+        width=130,
+        height=28,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).grid(row=3, column=2, pady=8, padx=(10, 0), sticky="w")
 
     # Typ suplementu - obowiązkowe dla suplementów (wielokrotny wybór)
     typ_suplementu_label = ctk.CTkLabel(main_frame, text="Typ suplementu *")
-    typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
+    typ_suplementu_label.grid(row=5, column=0, pady=8, padx=(0, 10), sticky="nw")
     typ_suplementu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
+    typ_suplementu_frame.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Słownik do przechowywania zmiennych checkboxów
     typ_suplementu_vars = {}
@@ -1886,7 +2503,7 @@ def open_edit_system_dialog(
 
     # Wydawca
     ctk.CTkLabel(main_frame, text="Wydawca").grid(
-        row=5, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=6, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     wydawca_var = tk.StringVar()
     wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
@@ -1904,6 +2521,24 @@ def open_edit_system_dialog(
         else:
             wydawca_combo.configure(values=[])
 
+    def _after_add_publisher(**_kw: Any) -> None:
+        """Po dodaniu wydawcy odświeża listę i zaznacza nowego wydawcę."""
+        nonlocal publishers
+        old_ids = {pub[0] for pub in publishers}
+        publishers = get_all_publishers()
+        if publishers:
+            wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
+            wydawca_combo.configure(values=wydawca_values)
+            new_pub = next((pub for pub in publishers if pub[0] not in old_ids), None)
+            if new_pub:
+                wydawca_var.set(f"{new_pub[0]} - {new_pub[1]}")
+        else:
+            wydawca_combo.configure(values=[])
+
+    def _open_add_publisher() -> None:
+        import wydawcy as _wydawcy
+        _wydawcy.dodaj_wydawce(dialog, refresh_callback=_after_add_publisher)
+
     # Inicjalne załadowanie listy i ustawienie obecnego wydawcy
     if publishers:
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
@@ -1917,14 +2552,26 @@ def open_edit_system_dialog(
 
     # Odśwież listę wydawców przy każdym kliknięciu w combobox
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
-    wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
+    wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
+
+    # Przycisk dodania nowego wydawcy inline
+    ctk.CTkButton(
+        main_frame,
+        text="➕ Dodaj wydawcę",
+        command=_open_add_publisher,
+        width=130,
+        height=28,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).grid(row=6, column=2, pady=8, padx=(10, 0), sticky="w")
 
     # Posiadanie
     ctk.CTkLabel(main_frame, text="Posiadanie").grid(
-        row=6, column=0, pady=8, padx=(0, 10), sticky="nw"
+        row=7, column=0, pady=8, padx=(0, 10), sticky="nw"
     )
     posiadanie_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    posiadanie_frame.grid(row=6, column=1, pady=8, sticky="w", columnspan=3)
+    posiadanie_frame.grid(row=7, column=1, pady=8, sticky="w", columnspan=3)
     posiadanie_frame.columnconfigure(1, weight=1)
 
     fizyczny_var = tk.BooleanVar(value=bool(system_data[6]))
@@ -2020,7 +2667,7 @@ def open_edit_system_dialog(
     vtt_var.trace_add('write', on_vtt_change)
 
     # Język
-    ctk.CTkLabel(main_frame, text="Język").grid(row=7, column=0, pady=8, padx=(0, 10), sticky="w")
+    ctk.CTkLabel(main_frame, text="Język").grid(row=8, column=0, pady=8, padx=(0, 10), sticky="w")
     jezyk_var = tk.StringVar(value=system_data[9] or "PL")
     jezyk_combo = ctk.CTkComboBox(
         main_frame,
@@ -2029,11 +2676,11 @@ def open_edit_system_dialog(
         state="readonly",
         width=100,
     )
-    jezyk_combo.grid(row=7, column=1, pady=8, sticky="w")
+    jezyk_combo.grid(row=8, column=1, pady=8, sticky="w")
 
     # Status gry
     ctk.CTkLabel(main_frame, text="Status gry").grid(
-        row=8, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=9, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     status_gra_var = tk.StringVar(value=system_data[10] or "Nie grane")
     status_gra_combo = ctk.CTkComboBox(
@@ -2043,11 +2690,11 @@ def open_edit_system_dialog(
         state="readonly",
         width=150,
     )
-    status_gra_combo.grid(row=8, column=1, pady=8, sticky="w")
+    status_gra_combo.grid(row=9, column=1, pady=8, sticky="w")
 
     # Status kolekcji
     ctk.CTkLabel(main_frame, text="Status kolekcji").grid(
-        row=9, column=0, pady=8, padx=(0, 10), sticky="w"
+        row=10, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     status_kolekcja_var = tk.StringVar(value=system_data[11] or "W kolekcji")
     status_kolekcja_combo = ctk.CTkComboBox(
@@ -2057,14 +2704,14 @@ def open_edit_system_dialog(
         state="readonly",
         width=150,
     )
-    status_kolekcja_combo.grid(row=9, column=1, pady=8, sticky="w")
+    status_kolekcja_combo.grid(row=10, column=1, pady=8, sticky="w")
 
     # Cena zakupu (dla statusu "W kolekcji")
     cena_zakupu_label = ctk.CTkLabel(main_frame, text="Cena zakupu")
-    cena_zakupu_label.grid(row=9, column=2, pady=8, padx=(20, 5), sticky="w")
+    cena_zakupu_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
 
     cena_zakupu_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_zakupu_frame.grid(row=9, column=3, pady=8, padx=10, sticky="w")
+    cena_zakupu_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
     cena_zakupu_entry = ctk.CTkEntry(cena_zakupu_frame, width=100)
     cena_zakupu_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -2083,10 +2730,10 @@ def open_edit_system_dialog(
 
     # Cena sprzedaży (dla statusu "Sprzedane")
     cena_sprzedazy_label = ctk.CTkLabel(main_frame, text="Cena sprzedaży")
-    cena_sprzedazy_label.grid(row=9, column=2, pady=8, padx=(20, 5), sticky="w")
+    cena_sprzedazy_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
 
     cena_sprzedazy_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_sprzedazy_frame.grid(row=9, column=3, pady=8, padx=10, sticky="w")
+    cena_sprzedazy_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
 
     cena_sprzedazy_entry = ctk.CTkEntry(cena_sprzedazy_frame, width=100)
     cena_sprzedazy_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -2144,68 +2791,12 @@ def open_edit_system_dialog(
         logger.debug(
             "on_typ_change: wywołano, typ=%r, _initializing=%r", current_typ, _initializing[0]
         )
-        try:
-            if current_typ == "Suplement":
-                # Pokaż pola dla suplementu
-                system_glowny_label.grid()
-                system_glowny_combo.grid()
-                system_glowny_custom_label.grid(row=3, column=2, pady=8, padx=(20, 10), sticky="w")
-                system_glowny_custom_entry.grid(row=3, column=3, pady=8, sticky="ew")
-                typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
-                typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
-                # Załaduj systemy główne
-                main_systems_list = get_main_systems()
-                logger.debug(
-                    "on_typ_change: pobrano %d systemów głównych, system_glowny_id=%r",
-                    len(main_systems_list) if main_systems_list else 0,
-                    system_data[3],
-                )
-                if main_systems_list:
-                    system_values = [f"{sys[0]} - {sys[1]}" for sys in main_systems_list]
-                    system_glowny_combo.configure(values=system_values)
-                    # Ustaw obecnie wybrany system główny lub jawnie wyczyść
-                    matched = False
-                    if system_data[3]:  # system_glowny_id
-                        for sys in main_systems_list:
-                            if sys[0] == system_data[3]:
-                                system_glowny_var.set(f"{sys[0]} - {sys[1]}")
-                                matched = True
-                                logger.debug(
-                                    "on_typ_change: dopasowano system główny id=%r", sys[0]
-                                )
-                                break
-                    if not matched:
-                        # Osierocony suplement - brak rodzica, wyczyść combo
-                        system_glowny_var.set("")
-                        logger.info(
-                            "on_typ_change: suplement id=%r nie ma dopasowanego systemu głównego "
-                            "(system_glowny_id=%r) – ustawiam pusty combo",
-                            system_data[0],
-                            system_data[3],
-                        )
-                else:
-                    # Brak podręczników głównych w bazie
-                    system_glowny_combo.configure(values=[])
-                    system_glowny_var.set("")
-                    logger.warning(
-                        "on_typ_change: brak podręczników głównych w bazie dla suplementu id=%r",
-                        system_data[0],
-                    )
-            else:
-                # Ukryj pola dla suplementu
-                system_glowny_label.grid_remove()
-                system_glowny_combo.grid_remove()
-                system_glowny_custom_label.grid_remove()
-                system_glowny_custom_entry.grid_remove()
-                typ_suplementu_label.grid_remove()
-                typ_suplementu_frame.grid_remove()
-        except Exception as _exc:
-            logger.exception(
-                "on_typ_change: nieoczekiwany wyjątek dla system_id=%r, typ=%r",
-                system_data[0] if system_data else '?',
-                current_typ,
-            )
-            raise
+        if current_typ == "Suplement":
+            typ_suplementu_label.grid(row=4, column=0, pady=8, padx=(0, 10), sticky="nw")
+            typ_suplementu_frame.grid(row=4, column=1, pady=8, sticky="ew")
+        else:
+            typ_suplementu_label.grid_remove()
+            typ_suplementu_frame.grid_remove()
 
         if not _initializing[0]:
             update_dialog_size()
@@ -2238,9 +2829,7 @@ def open_edit_system_dialog(
             messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dialog)
             return
 
-        system_glowny_id = None
         typ_suplementu = None
-        system_glowny_custom = None
 
         if typ == "Suplement":
             # Zbierz wybrane typy suplementu
@@ -2257,12 +2846,13 @@ def open_edit_system_dialog(
             # Połącz wybrane typy separatorem
             typ_suplementu = " | ".join(wybrane_typy)  # type: ignore
 
-            # System główny jest opcjonalny - może być pusty dla osieroconych suplementów
-            if system_glowny_var.get():
-                system_glowny_id = int(system_glowny_var.get().split(' - ')[0])
-
-            # Pobierz niestandardową nazwę systemu głównego
-            system_glowny_custom = system_glowny_custom_entry.get().strip() or None
+        # system_gry_id z dropdown Przypisz do systemu
+        game_id_to_save: Optional[int] = None
+        if przypisz_edit_var.get():
+            try:
+                game_id_to_save = int(przypisz_edit_var.get().split(' - ')[0])
+            except (ValueError, IndexError):
+                game_id_to_save = None
 
         wydawca_id = None
         if wydawca_var.get():
@@ -2311,13 +2901,13 @@ def open_edit_system_dialog(
                     wydawca_id=?, fizyczny=?, pdf=?, vtt=?, jezyk=?,
                     status_gra=?, status_kolekcja=?,
                     cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?,
-                    waluta_sprzedazy=?, system_glowny_nazwa_custom=?
+                    waluta_sprzedazy=?, system_gry_id=?
                 WHERE id=?
             """,
                 (
                     nazwa,
                     typ,
-                    system_glowny_id,
+                    None,
                     typ_suplementu,
                     wydawca_id,
                     int(fizyczny_var.get()),
@@ -2330,7 +2920,7 @@ def open_edit_system_dialog(
                     waluta_zakupu,
                     cena_sprzedazy,
                     waluta_sprzedazy,
-                    system_glowny_custom,
+                    game_id_to_save,
                     system_data[0],
                 ),
             )
@@ -2346,7 +2936,7 @@ def open_edit_system_dialog(
 
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=10, column=0, columnspan=4, pady=15, sticky="ew")
+    button_frame.grid(row=11, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
 
@@ -2486,6 +3076,369 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
     btn_close.pack()
 
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+
+
+def open_add_game_dialog(
+    parent: Any,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera dialog dodawania nowego Systemu (systemy_gry)."""
+    init_db()
+    publishers = get_all_publishers()
+
+    dlg = create_ctk_toplevel(parent)
+    dlg.withdraw()
+    dlg.title("Dodaj System (nowy wpis w katalogu systemów)")
+    dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
+    dlg.resizable(True, True)
+    apply_safe_geometry(dlg, parent, 600, 320)
+
+    mf = ctk.CTkScrollableFrame(dlg)
+    mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    mf.columnconfigure(1, weight=1)
+
+    row = 0
+    ctk.CTkLabel(mf, text="Nazwa systemu *").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    nazwa_entry = ctk.CTkEntry(mf, placeholder_text="np. Delta Green, D&D 5e")
+    nazwa_entry.grid(row=row, column=1, pady=8, sticky="ew")
+    dlg.after(100, lambda: nazwa_entry.focus_set() if nazwa_entry.winfo_exists() else None)
+    row += 1
+
+    ctk.CTkLabel(mf, text="Wydawca").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    wydawca_var = tk.StringVar()
+    wydawca_combo = ctk.CTkComboBox(mf, variable=wydawca_var, state="readonly")
+    if publishers:
+        wydawca_combo.configure(values=[f"{p[0]} - {p[1]}" for p in publishers])
+    wydawca_combo.grid(row=row, column=1, pady=8, sticky="ew")
+    row += 1
+
+    ctk.CTkLabel(mf, text="Język").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    jezyk_var = tk.StringVar(value="PL")
+    ctk.CTkComboBox(
+        mf, variable=jezyk_var,
+        values=["PL", "ENG", "DE", "FR", "ES", "IT"], state="readonly", width=100,
+    ).grid(row=row, column=1, pady=8, sticky="w")
+    row += 1
+
+    ctk.CTkLabel(mf, text="Notatki").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="nw")
+    notatki_entry = ctk.CTkTextbox(mf, height=60)
+    notatki_entry.grid(row=row, column=1, pady=8, sticky="ew")
+    row += 1
+
+    bf = ctk.CTkFrame(mf, fg_color="transparent")
+    bf.grid(row=row, column=0, columnspan=2, pady=(16, 0))
+
+    def _save() -> None:
+        nazwa = nazwa_entry.get().strip()
+        if not nazwa:
+            messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dlg)
+            return
+        wydawca_id: Optional[int] = None
+        wval = wydawca_var.get()
+        if wval:
+            try:
+                wydawca_id = int(wval.split(" - ")[0])
+            except (ValueError, IndexError):
+                pass
+        jezyk = jezyk_var.get() or None
+        notatki = notatki_entry.get("1.0", tk.END).strip() or None
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.execute(
+                    "INSERT INTO systemy_gry (nazwa, wydawca_id, jezyk, notatki) VALUES (?,?,?,?)",
+                    (nazwa, wydawca_id, jezyk, notatki),
+                )
+                conn.commit()
+            dlg.destroy()
+            if refresh_callback:
+                refresh_callback()
+        except sqlite3.Error as e:
+            messagebox.showerror("Błąd bazy danych", f"Nie udało się dodać Systemu:\n{e}", parent=dlg)
+
+    ctk.CTkButton(
+        bf, text="Zapisz", command=_save, fg_color="#2E7D32", hover_color="#1B5E20", width=100,
+    ).pack(side=tk.LEFT, padx=5)
+    ctk.CTkButton(
+        bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90,
+    ).pack(side=tk.LEFT, padx=5)
+    dlg.after(0, dlg.deiconify)
+
+
+def open_edit_game_dialog(
+    parent: Any,
+    game_id: int,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera dialog edycji Systemu (systemy_gry)."""
+    init_db()
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            conn.row_factory = sqlite3.Row
+            c = conn.cursor()
+            c.execute("SELECT id, nazwa, wydawca_id, jezyk, notatki FROM systemy_gry WHERE id=?", (game_id,))
+            gdata = c.fetchone()
+    except sqlite3.Error as e:
+        messagebox.showerror("Błąd", f"Nie można odczytać danych systemu:\n{e}", parent=parent)
+        return
+    if not gdata:
+        messagebox.showerror("Błąd", "Nie znaleziono systemu w bazie.", parent=parent)
+        return
+
+    publishers = get_all_publishers()
+
+    dlg = create_ctk_toplevel(parent)
+    dlg.withdraw()
+    dlg.title(f"Edytuj System: {gdata[1]}")
+    dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
+    dlg.resizable(True, True)
+    apply_safe_geometry(dlg, parent, 600, 340)
+
+    mf = ctk.CTkScrollableFrame(dlg)
+    mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    mf.columnconfigure(1, weight=1)
+
+    row = 0
+    ctk.CTkLabel(mf, text=f"ID systemu: {gdata[0]}", font=("Segoe UI", scale_font_size(11))).grid(
+        row=row, column=0, columnspan=2, pady=(0, 8), sticky="w"
+    )
+    row += 1
+
+    ctk.CTkLabel(mf, text="Nazwa systemu *").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    nazwa_entry = ctk.CTkEntry(mf)
+    nazwa_entry.insert(0, gdata[1] or "")
+    nazwa_entry.grid(row=row, column=1, pady=8, sticky="ew")
+    row += 1
+
+    ctk.CTkLabel(mf, text="Wydawca").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    wydawca_var = tk.StringVar()
+    wydawca_combo = ctk.CTkComboBox(mf, variable=wydawca_var, state="readonly")
+    pub_values = [f"{p[0]} - {p[1]}" for p in publishers]
+    wydawca_combo.configure(values=pub_values)
+    if gdata[2]:
+        for v in pub_values:
+            if v.startswith(str(gdata[2]) + " - "):
+                wydawca_var.set(v)
+                break
+    wydawca_combo.grid(row=row, column=1, pady=8, sticky="ew")
+    row += 1
+
+    ctk.CTkLabel(mf, text="Język").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="w")
+    jezyk_var = tk.StringVar(value=gdata[3] or "PL")
+    ctk.CTkComboBox(
+        mf, variable=jezyk_var,
+        values=["PL", "ENG", "DE", "FR", "ES", "IT"], state="readonly", width=100,
+    ).grid(row=row, column=1, pady=8, sticky="w")
+    row += 1
+
+    ctk.CTkLabel(mf, text="Notatki").grid(row=row, column=0, pady=8, padx=(0, 10), sticky="nw")
+    notatki_entry = ctk.CTkTextbox(mf, height=60)
+    if gdata[4]:
+        notatki_entry.insert("1.0", gdata[4])
+    notatki_entry.grid(row=row, column=1, pady=8, sticky="ew")
+    row += 1
+
+    bf = ctk.CTkFrame(mf, fg_color="transparent")
+    bf.grid(row=row, column=0, columnspan=2, pady=(16, 0))
+
+    def _save() -> None:
+        nazwa = nazwa_entry.get().strip()
+        if not nazwa:
+            messagebox.showerror("Błąd", "Nazwa systemu jest wymagana.", parent=dlg)
+            return
+        wydawca_id: Optional[int] = None
+        wval = wydawca_var.get()
+        if wval:
+            try:
+                wydawca_id = int(wval.split(" - ")[0])
+            except (ValueError, IndexError):
+                pass
+        jezyk = jezyk_var.get() or None
+        notatki = notatki_entry.get("1.0", tk.END).strip() or None
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.execute(
+                    "UPDATE systemy_gry SET nazwa=?, wydawca_id=?, jezyk=?, notatki=? WHERE id=?",
+                    (nazwa, wydawca_id, jezyk, notatki, game_id),
+                )
+                conn.commit()
+            dlg.destroy()
+            if refresh_callback:
+                refresh_callback()
+        except sqlite3.Error as e:
+            messagebox.showerror("Błąd bazy danych", f"Nie udało się zapisać:\n{e}", parent=dlg)
+
+    ctk.CTkButton(
+        bf, text="Zapisz", command=_save, fg_color="#2E7D32", hover_color="#1B5E20", width=100,
+    ).pack(side=tk.LEFT, padx=5)
+    ctk.CTkButton(
+        bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90,
+    ).pack(side=tk.LEFT, padx=5)
+    dlg.after(0, dlg.deiconify)
+
+
+def _open_assign_supl_dialog(
+    parent: Any,
+    supl_id: int,
+    supl_name: str,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera dialog do przypisania Suplementu do Systemu (system_gry_id)."""
+    init_db()
+    games_list = get_all_games()
+    if not games_list:
+        messagebox.showinfo("Brak systemów", "Nie ma żadnych Sistemów w bazie. Najpierw dodaj System.", parent=parent)
+        return
+
+    dlg = create_ctk_toplevel(parent)
+    dlg.withdraw()
+    dlg.title(f"Przypisz Suplement do Systemu: {supl_name}")
+    dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
+    dlg.resizable(True, True)
+    apply_safe_geometry(dlg, parent, 520, 260)
+
+    mf = ctk.CTkFrame(dlg)
+    mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    mf.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        mf, text=f"Suplement: {supl_name}",
+        font=ctk.CTkFont(weight="bold"),
+    ).grid(row=0, column=0, columnspan=2, pady=(0, 12), sticky="w")
+
+    ctk.CTkLabel(mf, text="Przypisz do Systemu:").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
+    game_var = tk.StringVar()
+    game_values = [f"{g[0]} — {g[1]}" for g in games_list]
+    ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="readonly", width=300).grid(
+        row=1, column=1, pady=8, sticky="ew"
+    )
+
+    # Pobierz aktualny system_gry_id
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            _row = conn.execute("SELECT system_gry_id FROM systemy_rpg WHERE id=?", (supl_id,)).fetchone()
+            cur_gid = _row[0] if _row else None
+    except sqlite3.Error:
+        cur_gid = None
+    if cur_gid:
+        for v in game_values:
+            if v.startswith(f"{cur_gid} — "):
+                game_var.set(v)
+                break
+
+    bf = ctk.CTkFrame(mf, fg_color="transparent")
+    bf.grid(row=2, column=0, columnspan=2, pady=(16, 0))
+
+    def _save() -> None:
+        val = game_var.get()
+        if not val:
+            messagebox.showerror("Błąd", "Wybierz System.", parent=dlg)
+            return
+        try:
+            gid = int(val.split(" — ")[0])
+        except (ValueError, IndexError):
+            messagebox.showerror("Błąd", "Nieprawidłowy wybór.", parent=dlg)
+            return
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.execute(
+                    "UPDATE systemy_rpg SET system_gry_id=? WHERE id=?", (gid, supl_id)
+                )
+                conn.commit()
+            dlg.destroy()
+            if refresh_callback:
+                refresh_callback()
+        except sqlite3.Error as e:
+            messagebox.showerror("Błąd", f"Nie udało się zapisać:\n{e}", parent=dlg)
+
+    ctk.CTkButton(bf, text="Zapisz", command=_save, fg_color="#2E7D32", hover_color="#1B5E20", width=100).pack(side=tk.LEFT, padx=5)
+    ctk.CTkButton(bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90).pack(side=tk.LEFT, padx=5)
+    dlg.after(0, dlg.deiconify)
+
+
+def _open_assign_pg_dialog(
+    parent: Any,
+    pg_id: int,
+    pg_name: str,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera dialog do przypisania Podręcznika Głównego do Systemu."""
+    init_db()
+    games_list = get_all_games()
+    dlg = create_ctk_toplevel(parent)
+    dlg.withdraw()
+    dlg.title(f"Przypisz PG do Systemu: {pg_name}")
+    dlg.transient(parent.winfo_toplevel() if hasattr(parent, 'winfo_toplevel') else parent)
+    dlg.resizable(True, True)
+    apply_safe_geometry(dlg, parent, 500, 280)
+
+    mf = ctk.CTkFrame(dlg)
+    mf.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    mf.columnconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        mf, text=f"Podręcznik Główny: {pg_name}",
+        font=ctk.CTkFont(weight="bold"),
+    ).grid(row=0, column=0, columnspan=2, pady=(0, 12), sticky="w")
+
+    ctk.CTkLabel(mf, text="Przypisz do Systemu:").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
+    game_var = tk.StringVar()
+    game_values = [f"{g[0]} — {g[1]}" for g in games_list]
+    game_combo = ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="readonly", width=280)
+    game_combo.grid(row=1, column=1, pady=8, sticky="ew")
+
+    # Pobierz aktualny system_gry_id
+    try:
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("SELECT system_gry_id FROM systemy_rpg WHERE id=?", (pg_id,))
+            row = c.fetchone()
+            cur_gid = row[0] if row else None
+    except sqlite3.Error:
+        cur_gid = None
+
+    if cur_gid:
+        for v in game_values:
+            if v.startswith(f"{cur_gid} — "):
+                game_var.set(v)
+                break
+
+    bf = ctk.CTkFrame(mf, fg_color="transparent")
+    bf.grid(row=3, column=0, columnspan=2, pady=(16, 0))
+
+    def _save() -> None:
+        val = game_var.get()
+        if not val:
+            messagebox.showerror("Błąd", "Wybierz System.", parent=dlg)
+            return
+        try:
+            gid = int(val.split(" — ")[0])
+        except (ValueError, IndexError):
+            messagebox.showerror("Błąd", "Nieprawidłowy wybór.", parent=dlg)
+            return
+        try:
+            with sqlite3.connect(DB_FILE) as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.execute(
+                    "UPDATE systemy_rpg SET system_gry_id=? WHERE id=?", (gid, pg_id)
+                )
+                # Propaguj też do suplementów tego PG
+                conn.execute(
+                    "UPDATE systemy_rpg SET system_gry_id=? WHERE system_glowny_id=?",
+                    (gid, pg_id),
+                )
+                conn.commit()
+            dlg.destroy()
+            if refresh_callback:
+                refresh_callback()
+        except sqlite3.Error as e:
+            messagebox.showerror("Błąd", f"Nie udało się zapisać:\n{e}", parent=dlg)
+
+    ctk.CTkButton(bf, text="Zapisz", command=_save, fg_color="#2E7D32", hover_color="#1B5E20", width=100).pack(side=tk.LEFT, padx=5)
+    ctk.CTkButton(bf, text="Anuluj", command=dlg.destroy, fg_color="#666666", hover_color="#555555", width=90).pack(side=tk.LEFT, padx=5)
+    dlg.after(0, dlg.deiconify)
 
 
 def dodaj_suplement_do_systemu(

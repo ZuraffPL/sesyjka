@@ -77,7 +77,7 @@ def get_all_systems() -> List[Tuple[int, str]]:
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
             c.execute(
-                "SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa"
+                "SELECT id, nazwa FROM systemy_gry ORDER BY nazwa"
             )
             return c.fetchall()
     except sqlite3.Error:

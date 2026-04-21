@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.3.34-blue)
+![Version](https://img.shields.io/badge/version-0.4.16-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -52,6 +52,13 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Dostosowanie do różnych rozdzielczości (1080p, 2K, 4K)
 - Ochrona czytelności (minimum 8px)
 - Skalowanie wykresów matplotlib
+- Tryb jasny/ciemny z natychmiastową zmianą i bez flickera
+
+### 🆕 UX i nawigacja
+- **Splash screen** w klimacie TTRPG przy starcie aplikacji
+- **Instrukcja obsługi** (❓ Pomoc) dostępna z ribbonu — opis wszystkich funkcji
+- Trójkolorowe wiersze Systemów: szary (brak pozycji), niebieski (tylko suplementy), złoty (ma PG)
+- Ręczna zmiana szerokości kolumn — zapamiętywana między uruchomieniami
 
 ### 🖥️ Wysokie DPI i skalowanie
 - Automatyczne skalowanie interfejsu do rozdzielczości ekranu
@@ -67,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.3.34-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.16-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.3.34.exe`
+4. Uruchom `Sesyjka-v0.4.16.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -95,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.3.34.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.3.34.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.16.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.16.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -150,6 +157,8 @@ sesyjka/
 ├── statystyki.py           # Moduł statystyk
 ├── about_dialog.py         # Dialog "O programie"
 ├── apphistory.py           # Historia wersji
+├── help_dialog.py          # Dialog instrukcji obsługi
+├── splash_screen.py        # Splash screen startowy
 ├── pyrightconfig.json      # Konfiguracja type checkera Pyright
 ├── Icons/                  # Ikony aplikacji (edit.png, ...)
 └── .github/                # Konfiguracja GitHub
@@ -185,7 +194,24 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 
 ## 📝 Changelog
 
-### v0.3.34 (20.04.2026)
+### v0.4.16 (21.04.2026)
+- 🔧 **Przebudowa dialogu edycji systemu**: pole „Przypisz do systemu” (powiązanie z katalogiem gier) zamiast tekstowego pola nazwy systemu głównego; przycisk ➕ Dodaj system bez zamykania formularza
+- 🗑️ **Usunięcie pola „System główny (opcjonalnie)”**: suplementy i PG są równorzędne względem systemu — hierarchia tylko przez „Przypisz do systemu”
+- 🐛 **Naprawa błędu edycji**: `tuple index out of range` przy otwieraniu dialogu edycji — brakująca kolumna `system_gry_id` w zapytaniu SELECT
+
+### v0.4.13 (21.04.2026)
+- 🏗️ **Przebudowa hierarchii Systemów RPG**: nowa trójpoziomowa struktura System → Podręczniki Główne → Suplementy z przyciskami rozwijania `[+]`/`[-]`; przyciski ribbonu przepisane (✚ Dodaj System / ✚ Dodaj PG/Suplement / 🗑 Usuń)
+- 🎨 **Trójkolorowe wiersze Systemu**: szary = brak pozycji, niebieski = tylko suplementy bezpośrednie, złoty = ma PG — łatwiejszy wzrokowy przegląd kolekcji
+- ➕ **Dodaj wydawcę z poziomu formularza PG**: przycisk ➕ w wierszu wydawcy otwiera formularz bez zamykania głównego okna; nowy wydawca jest od razu zaznaczony
+- ⚙️ **Kreator migracji**: przycisk ⚙ Migruj dane w ribbonie — widoczny tylko gdy istnieją dane do migracji, znika automatycznie po zakończeniu
+- 🔃 **Naprawione sortowanie**: Wydawca, Język (agregacja z pg_by_game), Status, Posiadanie, Cena — wszystkie kolumny sortowalne
+- 🐛 **Naprawa rozwijania wszystkich**: `_on_toggle_expand_all` iteruje po `games` (poprawny zasięg)
+- 🐛 **Naprawa routing suplementów**: suplementy przypisane bezpośrednio do systemu (`system_gry_id`, bez PG-rodzica) teraz poprawnie pojawiają się pod systemem w drzewie zamiast jako osierocone `(!)`
+- 🧹 **Uproszczony dialog dodawania**: pola „System główny (opcjonalnie)" i „lub wpisz nazwę:" ukryte gdy dialog otwiera się z kontekstu konkretnego systemu (✚ Dodaj PG/Suplement do systemu)
+- ⚡ **Naprawa flickera dark mode**: `_rebuild_tab()` przekazuje preloaded data z cache — rebuild synchroniczny, zero widocznego przebłysku
+- 🎬 **Splash screen TTRPG**: ciemne tło, złote runy, nazwa/wersja/autor — 2 sekundy po starcie
+- 📖 **Instrukcja obsługi** (❓ Pomoc): scrollowane okno z opisem wszystkich funkcjonalności, dostępne z ribbonu
+- 📐 **Ręczna zmiana szerokości kolumn**: przeciąganie krawędzi nagłówka, zapisywane w `settings.json`
 - 📅 **Graficzny kalendarz daty**: przycisk 📅 w dialogach dodawania/edycji sesji otwiera teraz okno z widgetem `tkcalendar` zamiast tekstowego pola — obsługa trybu ciemnego/jasnego, podwójne kliknięcie zatwierdza datę
 - 🗂️ **Dodaj sesję do istniejącej kampanii**: nowa opcja w menu PPM na sesji typu Kampania — prefilluje dane (system, gracze, MG, tytuł kampanii) do formularza nowej sesji
 - 🔧 **Konfiguracja VS Code**: poprawki `tasks.json` i `launch.json` — aktualne nazwy, usunięte przestarzałe opcje

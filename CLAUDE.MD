@@ -199,7 +199,23 @@ threading.Thread(target=_load_data_bg, daemon=True).start()
 
         przy generowaniu tekstu changeloga trzymać się istniejącego formatowania (punkty, emoji, sekcje „PROBLEM/ROZWIĄZANIE”) i nie skracać go automatycznie bez wyraźnej dyrektywy.
         **Uwaga dot. emoji i encodingu:** emoji w changelogu mogą powodować problemy z kodowaniem w `.exe` na starszych wersjach Windows (brak czcionki Segoe UI Emoji lub niepoprawne locale). Przy budowaniu EXE przez PyInstaller należy upewnić się, że plik źródłowy jest zapisany w UTF-8 i że `sys.stdout` jest odpowiednio skonfigurowany.
-## Zasady pracy z bazą danych (SQLite + database_manager)
+        **KRYTYCZNE — polskie cudzysłowy w `apphistory.py`:**
+        Narzędzia do edycji plików (replace_string_in_file, multi_replace_string_in_file) regularnie wstawiają cudzysłów zamykający `"` (U+201D) jako ASCII `"` (0x22), co kończy stringa Pythona przedwcześnie i powoduje błędy parsowania.
+
+        **Obowiązkowa zasada:** w stringach `version_history` w `apphistory.py` NIGDY nie używać typograficznych cudzysłowów bezpośrednio (`„` i `"`). Zamiast nich zawsze używać sekwencji escape Unicode:
+        - otwierający: `\u201e` (zamiast `„`)
+        - zamykający: `\u201d` (zamiast `"`)
+
+        Przykład poprawny:
+        ```python
+        "  \u2022 pole \u201ePrzypisz do systemu\u201d (powi\u0105zanie z katalogiem)"
+        ```
+        Przykład błędny (nie używać):
+        ```python
+        "  • pole „Przypisz do systemu" (powiązanie z katalogiem)"
+        ```
+
+        Po każdej edycji `apphistory.py` przez narzędzie — zawsze weryfikować `get_errors()` przed kontynuacją.## Zasady pracy z bazą danych (SQLite + database_manager)
 
     Wszystkie połączenia do baz:
 

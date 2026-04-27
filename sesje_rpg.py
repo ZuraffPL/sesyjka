@@ -139,6 +139,9 @@ active_col_order_sesje: List[str] = ["Data", "System", "Typ sesji", "Mistrz Gry"
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SESJE = {"ID"}
 
+# Widoczność przycisku edycji ✎ (przechowywana niezależnie od active_visible_cols)
+show_edit_btn_sesje: bool = True
+
 
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
@@ -247,12 +250,9 @@ def get_first_free_id() -> int:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute("SELECT id FROM sesje_rpg ORDER BY id ASC")
-        used_ids = [row[0] for row in c.fetchall()]
-    i = 1
-    while i in used_ids:
-        i += 1
-    return i
+        c.execute("SELECT MAX(id) FROM sesje_rpg")
+        result = c.fetchone()
+        return 1 if result[0] is None else result[0] + 1
 
 
 def get_all_systems() -> List[Tuple[int, str]]:
@@ -634,7 +634,17 @@ def fill_sesje_rpg_tab(
     )
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
-    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
+    _search_after_id: List[Optional[str]] = [None]
+
+    def _on_search_changed(*_: Any) -> None:
+        if _search_after_id[0] is not None:
+            try:
+                tab.after_cancel(_search_after_id[0])
+            except Exception:
+                pass
+        _search_after_id[0] = tab.after(200, _apply_and_draw)
+
+    search_var.trace_add('write', _on_search_changed)  # type: ignore[misc]
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
     cols_btn = ttk.Button(top_bar, text="Kolumny", command=lambda: _open_columns_dialog())
     cols_btn.pack(side=tk.LEFT, padx=4)
@@ -793,6 +803,7 @@ def fill_sesje_rpg_tab(
         hidden_cols=_compute_hidden_cols_sesje(),
         resize_callback=_on_col_resize_sesje,
         col_order=_compute_col_order_sesje(),
+        show_edit_button=show_edit_btn_sesje,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
@@ -995,14 +1006,30 @@ def fill_sesje_rpg_tab(
 
         _rebuild_rows()
 
+        # ── Sekcja przełącznika przycisku edycji ──────────────────────────
+        ctk.CTkLabel(
+            outer,
+            text="Opcje tabeli:",
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
+        ).pack(anchor="w", pady=(10, 4))
+        edit_btn_var = tk.BooleanVar(value=show_edit_btn_sesje)
+        ctk.CTkCheckBox(
+            outer,
+            text="Przycisk edycji ✎ w wierszu",
+            variable=edit_btn_var,
+            width=220,
+        ).pack(anchor="w", pady=2)
+
         bf = ctk.CTkFrame(outer, fg_color="transparent")
         bf.pack(pady=(12, 0))
 
         def _apply() -> None:
+            global show_edit_btn_sesje
             for col_name, v in vis_vars.items():
                 active_visible_cols_sesje[col_name] = bool(v.get())
             active_col_order_sesje.clear()
             active_col_order_sesje.extend(order_list)
+            show_edit_btn_sesje = bool(edit_btn_var.get())
             dlg.destroy()
             cache = getattr(tab, '_sesje_tab_cache', None)
             preloaded = cache['data_ref'][0] if cache else None
@@ -1013,6 +1040,7 @@ def fill_sesje_rpg_tab(
         def _reset() -> None:
             for v in vis_vars.values():
                 v.set(True)
+            edit_btn_var.set(True)
             order_list.clear()
             order_list.extend(toggleable_base)
             _rebuild_rows()

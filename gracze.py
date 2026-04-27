@@ -18,12 +18,63 @@ DB_FILE = get_db_path("gracze.db")
 # Moduł: Gracze
 # Tutaj będą funkcje i klasy związane z obsługą graczy
 
+_gracze_db_initialized: bool = False
+
+
+def _ensure_gracze_db() -> None:
+    """Jednorazowa inicjalizacja i migracja bazy gracze.db."""
+    global _gracze_db_initialized
+    if _gracze_db_initialized:
+        return
+    _gracze_db_initialized = True
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        c = conn.cursor()
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gracze (
+                id INTEGER PRIMARY KEY,
+                nick TEXT NOT NULL,
+                imie_nazwisko TEXT,
+                plec TEXT,
+                social TEXT,
+                glowny_uzytkownik INTEGER DEFAULT 0,
+                wazna INTEGER DEFAULT 0
+            )
+        """
+        )
+        # Migracja - dodaj kolumny jeśli nie istnieją
+        try:
+            c.execute("ALTER TABLE gracze ADD COLUMN glowny_uzytkownik INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
+        try:
+            c.execute("ALTER TABLE gracze ADD COLUMN wazna INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
+        conn.commit()
+
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_gracze: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
 active_sort_gracze: Dict[str, Any] = {"column": "ID", "reverse": False}
 # Zapisane szerokości kolumn (pusta lista = użyj auto-obliczonych)
 active_col_widths_gracze: List[int] = []
+# Widoczność przycisku edycji ✎
+show_edit_btn_gracze: bool = True
+# Widoczność kolumn w tabeli graczy (klucz = nazwa kolumny, wartość = czy widoczna)
+active_visible_cols_gracze: Dict[str, bool] = {
+    "Nick": True,
+    "Imię i nazwisko": True,
+    "Płeć": True,
+    "Social media": True,
+    "Status": True,
+}
+# Kolejność kolumn w tabeli graczy (bez "ID" który zawsze jest pierwszy)
+active_col_order_gracze: List[str] = ["Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
+# Kolumny, które zawsze są widoczne (nie można ich ukryć)
+_ALWAYS_VISIBLE_GRACZE = {"ID"}
 
 
 def get_dark_mode_from_tab(tab: tk.Widget) -> bool:
@@ -169,23 +220,11 @@ def dodaj_gracza(
             messagebox.showerror("Błąd", "Nick gracza jest wymagany.", parent=dialog)  # type: ignore
             return
 
+        _ensure_gracze_db()
         with sqlite3.connect(DB_FILE) as conn:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute(
-                """
-                CREATE TABLE IF NOT EXISTS gracze (
-                    id INTEGER PRIMARY KEY,
-                    nick TEXT NOT NULL,
-                    imie_nazwisko TEXT,
-                    plec TEXT,
-                    social TEXT,
-                    glowny_uzytkownik INTEGER DEFAULT 0,
-                    wazna INTEGER DEFAULT 0
-                )
-            """
-            )
 
             # Jeśli ustawiamy głównego użytkownika, usuń flagę z pozostałych
             if glowny == 1:
@@ -221,42 +260,17 @@ def get_first_free_id() -> int:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute("SELECT id FROM gracze ORDER BY id ASC")
-        used_ids = [row[0] for row in c.fetchall()]
-    i = 1
-    while i in used_ids:
-        i += 1
-    return i
+        c.execute("SELECT MAX(id) FROM gracze")
+        result = c.fetchone()
+        return 1 if result[0] is None else result[0] + 1
 
 
 def get_all_players() -> list[tuple[Any, ...]]:
+    _ensure_gracze_db()
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute(
-            """
-            CREATE TABLE IF NOT EXISTS gracze (
-                id INTEGER PRIMARY KEY,
-                nick TEXT NOT NULL,
-                imie_nazwisko TEXT,
-                plec TEXT,
-                social TEXT,
-                glowny_uzytkownik INTEGER DEFAULT 0,
-                wazna INTEGER DEFAULT 0
-            )
-        """
-        )
-        # Migracja - dodaj kolumny jeśli nie istnieją
-        try:
-            c.execute("ALTER TABLE gracze ADD COLUMN glowny_uzytkownik INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # Kolumna już istnieje
-        try:
-            c.execute("ALTER TABLE gracze ADD COLUMN wazna INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # Kolumna już istnieje
-
         c.execute(
             "SELECT id, nick, imie_nazwisko, plec, social,"
             " glowny_uzytkownik, wazna FROM gracze ORDER BY id ASC"
@@ -568,7 +582,20 @@ def fill_gracze_tab(
     )
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
-    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
+    _search_after_id: List[Optional[str]] = [None]
+
+    def _on_search_changed(*_: Any) -> None:
+        if _search_after_id[0] is not None:
+            try:
+                tab.after_cancel(_search_after_id[0])
+            except Exception:
+                pass
+        _search_after_id[0] = tab.after(200, _apply_and_draw)
+
+    search_var.trace_add('write', _on_search_changed)  # type: ignore[misc]
+    ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
+    cols_btn = ttk.Button(top_bar, text="Kolumny", command=lambda: _open_columns_dialog())
+    cols_btn.pack(side=tk.LEFT, padx=4)
 
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
@@ -635,6 +662,137 @@ def fill_gracze_tab(
         active_col_widths_gracze.clear()
         active_col_widths_gracze.extend(widths)
 
+    def _compute_hidden_cols() -> List[int]:
+        """Zwraca listę indeksów kolumn do ukrycia na podstawie active_visible_cols_gracze."""
+        hidden: List[int] = []
+        for idx, hdr in enumerate(_HEADERS):
+            if hdr in _ALWAYS_VISIBLE_GRACZE:
+                continue
+            if not active_visible_cols_gracze.get(hdr, True):
+                hidden.append(idx)
+        return hidden
+
+    def _compute_col_order() -> List[int]:
+        """Zwraca permutację kolumn wg active_col_order_gracze."""
+        fixed = [h for h in _HEADERS if h in _ALWAYS_VISIBLE_GRACZE]
+        ordered = [h for h in active_col_order_gracze if h in _HEADERS and h not in _ALWAYS_VISIBLE_GRACZE]
+        missing = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_GRACZE and h not in ordered]
+        ordered += missing
+        display_order = fixed + ordered
+        hdr_idx = {h: i for i, h in enumerate(_HEADERS)}
+        return [hdr_idx[h] for h in display_order if h in hdr_idx]
+
+    def _open_columns_dialog() -> None:
+        """Otwiera dialog z checkboxami i przyciskami kolejności kolumn tabeli graczy."""
+        dlg = create_ctk_toplevel(tab)
+        dlg.title("Kolumny – Gracze")
+        dlg.transient(tab.winfo_toplevel())
+
+        toggleable_base = [h for h in _HEADERS if h not in _ALWAYS_VISIBLE_GRACZE]
+        ordered = [h for h in active_col_order_gracze if h in toggleable_base]
+        ordered += [h for h in toggleable_base if h not in ordered]
+
+        dialog_h = min(120 + len(ordered) * 38 + 100, 520)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 340, dialog_h)
+
+        outer = ctk.CTkScrollableFrame(dlg)
+        outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        ctk.CTkLabel(
+            outer,
+            text="Widoczność i kolejność kolumn:",
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
+        ).pack(anchor="w", pady=(0, 6))
+
+        order_list: List[str] = list(ordered)
+        vis_vars: Dict[str, tk.BooleanVar] = {
+            h: tk.BooleanVar(value=active_visible_cols_gracze.get(h, True))
+            for h in order_list
+        }
+
+        rows_frame = ctk.CTkFrame(outer, fg_color="transparent")
+        rows_frame.pack(fill=tk.X)
+
+        def _rebuild_rows() -> None:
+            for w in rows_frame.winfo_children():
+                w.destroy()
+            for idx, col_name in enumerate(order_list):
+                rf = ctk.CTkFrame(rows_frame, fg_color="transparent")
+                rf.pack(fill=tk.X, pady=1)
+                ctk.CTkButton(
+                    rf, text="↑", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, -1),
+                ).pack(side=tk.LEFT, padx=(0, 2))
+                ctk.CTkButton(
+                    rf, text="↓", width=28, height=24,
+                    fg_color="#555", hover_color="#333",
+                    command=lambda i=idx: _move(i, 1),
+                ).pack(side=tk.LEFT, padx=(0, 6))
+                ctk.CTkCheckBox(rf, text=col_name, variable=vis_vars[col_name],
+                                width=180).pack(side=tk.LEFT)
+
+        def _move(idx: int, direction: int) -> None:
+            new_idx = idx + direction
+            if 0 <= new_idx < len(order_list):
+                order_list[idx], order_list[new_idx] = order_list[new_idx], order_list[idx]
+                _rebuild_rows()
+
+        _rebuild_rows()
+
+        # ── Sekcja przełącznika przycisku edycji ──────────────────────────
+        ctk.CTkLabel(
+            outer,
+            text="Opcje tabeli:",
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
+        ).pack(anchor="w", pady=(10, 4))
+        edit_btn_var = tk.BooleanVar(value=show_edit_btn_gracze)
+        ctk.CTkCheckBox(
+            outer,
+            text="Przycisk edycji ✎ w wierszu",
+            variable=edit_btn_var,
+            width=220,
+        ).pack(anchor="w", pady=2)
+
+        bf = ctk.CTkFrame(outer, fg_color="transparent")
+        bf.pack(pady=(12, 0))
+
+        def _apply() -> None:
+            global show_edit_btn_gracze
+            for col_name, v in vis_vars.items():
+                active_visible_cols_gracze[col_name] = bool(v.get())
+            active_col_order_gracze.clear()
+            active_col_order_gracze.extend(order_list)
+            show_edit_btn_gracze = bool(edit_btn_var.get())
+            dlg.destroy()
+            if hasattr(tab, '_gracze_tab_cache'):
+                del tab._gracze_tab_cache  # type: ignore[attr-defined]
+            fill_gracze_tab(tab, dark_mode=dark_mode)
+
+        def _reset() -> None:
+            for v in vis_vars.values():
+                v.set(True)
+            edit_btn_var.set(True)
+            order_list.clear()
+            order_list.extend(toggleable_base)
+            _rebuild_rows()
+
+        ctk.CTkButton(
+            bf, text="Zastosuj", command=_apply, fg_color="#2E7D32", hover_color="#1B5E20", width=90
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf, text="Resetuj", command=_reset, fg_color="#1976D2",
+            hover_color="#1565C0", width=90,
+        ).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(
+            bf, text="Anuluj", command=dlg.destroy, fg_color="#666666",
+            hover_color="#555555", width=90,
+        ).pack(side=tk.LEFT, padx=5)
+
+        dlg.after(
+            300, lambda: dlg.winfo_exists() and (dlg.deiconify(), dlg.lift(), dlg.focus_force())
+        )
+
     # ── Tabela ─────────────────────────────────────────────────────────────────
     tbl = CTkDataTable(
         tab,
@@ -652,6 +810,9 @@ def fill_gracze_tab(
         right_click_callback=_on_right_click,
         show_row_numbers=True,
         resize_callback=_on_col_resize_gracze,
+        show_edit_button=show_edit_btn_gracze,
+        hidden_cols=_compute_hidden_cols(),
+        col_order=_compute_col_order(),
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

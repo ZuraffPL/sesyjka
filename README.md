@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.22-blue)
+![Version](https://img.shields.io/badge/version-0.4.28-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -74,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.22-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.28-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.22.exe`
+4. Uruchom `Sesyjka-v0.4.28.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -102,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.22.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.22.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.28.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.28.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -193,6 +193,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.4.28 (27.04.2026)
+- 🖱️ **Podwójne kliknięcie — edycja**: dwuklik na dowolnym wierszu tabeli otwiera dialog edycji we wszystkich zakładkach (Systemy RPG, Sesje RPG, Gracze, Wydawcy)
+- 👁️ **Pokaż/ukryj przycisk edycji**: nowa opcja w dialogu „Kolumny" (sekcja Opcje tabeli) — ukrycie ikonki ✏️ gdy edycja przez dwuklik jest wystarczająca; ustawienie zapisywane w `settings.json`
+- 🔍 **Kolumny dla zakładki Gracze**: nowy przycisk „Kolumny" z dialogiem widoczności i kolejności kolumn (checkboxy + ↑/↓), osobna opcja „Pokaż przycisk edycji"
+- 🎲 **Filtrowalne pole systemu RPG w sesji**: wpisanie fragmentu nazwy zawęża listę propozycji w czasie rzeczywistym; walidacja sprawdza wybór z listy
+- ➕ **Dodaj system z formularza sesji**: przycisk ➕ obok pola systemu otwiera formularz dodawania; po zapisaniu lista i zakładka Systemy RPG odświeżają się automatycznie
+- 🔤 **Polska kolejność sortowania systemów**: ą, ć, ę, ł, ń, ó, ś, ź, ż sortowane w poprawnym miejscu alfabetu (wcześniej trafiały na koniec przez błąd sortowania SQLite)
 
 ### v0.4.22 (22.04.2026)
 - 🔧 **Uproszczenie hierarchii Systemów RPG**: 2-poziomowa struktura (System → wszystkie pozycje) zamiast 3-poziomowej; kolumna „System główny” zawsze pokazuje nazwę systemu gry; PG wyświetlane przed suplementami

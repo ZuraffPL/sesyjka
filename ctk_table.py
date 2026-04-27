@@ -269,6 +269,7 @@ class CTkDataTable(tk.Frame):
         hidden_cols: Optional[List[int]] = None,
         resize_callback: Optional[Callable[[List[int]], None]] = None,
         col_order: Optional[List[int]] = None,
+        show_edit_button: bool = True,
         **kw: Any,
     ) -> None:
         t = _D if dark_mode else _L
@@ -286,6 +287,7 @@ class CTkDataTable(tk.Frame):
         self._cell_cb = cell_click_callback
         self._rc_cb = right_click_callback
         self._show_row_num = show_row_numbers
+        self._show_edit_btn = show_edit_button
         self._hidden_cols: Set[int] = set(hidden_cols or [])
         self._col_order: List[int] = list(col_order) if col_order is not None else list(range(len(headers)))
         self._theme = t
@@ -346,7 +348,7 @@ class CTkDataTable(tk.Frame):
             if i in self._hidden_cols:
                 self._col_hdr_labels[i] = None
                 self._col_resize_handles[i] = None
-                if i == self._id_col:
+                if i == self._id_col and self._show_edit_btn:
                     edit_lbl = tk.Label(hf, text="", bg=t["hdr_bg"])
                     edit_lbl.place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
                     self._header_edit_label = edit_lbl
@@ -384,7 +386,7 @@ class CTkDataTable(tk.Frame):
             handle.bind("<ButtonRelease-1>", self._on_resize_release)
             self._col_resize_handles[i] = handle
 
-            if i == self._id_col:
+            if i == self._id_col and self._show_edit_btn:
                 # Wąska pusta kolumna ✎ w nagłówku
                 edit_lbl = tk.Label(hf, text="", bg=t["hdr_bg"])
                 edit_lbl.place(x=x, y=0, width=_EDIT_W, height=_HDR_H)
@@ -406,7 +408,7 @@ class CTkDataTable(tk.Frame):
         for i in self._col_order:
             w = self.col_widths[i]
             if i in self._hidden_cols:
-                if i == self._id_col and self._header_edit_label is not None:
+                if i == self._id_col and self._show_edit_btn and self._header_edit_label is not None:
                     self._header_edit_label.place_configure(x=x)
                     x += _EDIT_W
                 continue
@@ -417,7 +419,7 @@ class CTkDataTable(tk.Frame):
             handle = self._col_resize_handles.get(i)
             if handle is not None:
                 handle.place_configure(x=x - 3)
-            if i == self._id_col and self._header_edit_label is not None:
+            if i == self._id_col and self._show_edit_btn and self._header_edit_label is not None:
                 self._header_edit_label.place_configure(x=x)
                 x += _EDIT_W
         if self._header_filler is not None:
@@ -680,6 +682,11 @@ class CTkDataTable(tk.Frame):
         rf.bind("<Enter>", _on_enter)
         rf.bind("<Leave>", _on_leave)
         rf.bind("<Button-1>", _on_click)
+        ri_dbl, rd_dbl = i, list(row)
+        rf.bind(
+            "<Double-Button-1>",
+            lambda _e, ri=ri_dbl, rd=rd_dbl: self._edit_cb(ri, rd),
+        )
 
         if self._rc_cb is not None:
             ri, rd = i, list(row)
@@ -706,6 +713,11 @@ class CTkDataTable(tk.Frame):
             num_lbl.bind("<Enter>", _on_enter)
             num_lbl.bind("<Leave>", _on_leave)
             num_lbl.bind("<Button-1>", _on_click)
+            ri_dbl2, rd_dbl2 = i, list(row)
+            num_lbl.bind(
+                "<Double-Button-1>",
+                lambda _e, ri=ri_dbl2, rd=rd_dbl2: self._edit_cb(ri, rd),
+            )
             rf._row_num_lbl = num_lbl  # type: ignore[attr-defined]
             rf._cached_lp = str(i + 1)  # type: ignore[attr-defined]
             if self._rc_cb is not None:
@@ -720,7 +732,7 @@ class CTkDataTable(tk.Frame):
             val = row[j] if j < len(row) else ""
             w = self.col_widths[j]
             if j in self._hidden_cols:
-                if j == self._id_col:
+                if j == self._id_col and self._show_edit_btn:
                     # Przycisk edycji nawet gdy kolumna ID ukryta – wstawiamy przycisk bez kolumny
                     ri_, rd_ = i, list(row)
                     is_dark = t is _D
@@ -781,6 +793,11 @@ class CTkDataTable(tk.Frame):
             lbl.bind("<Enter>", _on_enter)
             lbl.bind("<Leave>", _on_leave)
             lbl.bind("<Button-1>", _on_click)
+            ri_dbl3, rd_dbl3 = i, list(row)
+            lbl.bind(
+                "<Double-Button-1>",
+                lambda _e, ri=ri_dbl3, rd=rd_dbl3: self._edit_cb(ri, rd),
+            )
 
             # Dodatkowy callback kliknięcia w komórkę
             if self._cell_cb is not None:
@@ -804,7 +821,7 @@ class CTkDataTable(tk.Frame):
             x += w
 
             # ── przycisk ✎ po kolumnie id_col ─────────────────────────
-            if j == self._id_col:
+            if j == self._id_col and self._show_edit_btn:
                 ri_, rd_ = i, list(row)
                 is_dark = t is _D
                 icon = _get_edit_photo(dark=is_dark)

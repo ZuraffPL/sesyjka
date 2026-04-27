@@ -77,6 +77,9 @@ active_col_order_systemy: List[str] = [
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SYSTEMY = {"", "ID"}
 
+# Widoczność przycisku edycji ✎ (przechowywana niezależnie od active_visible_cols)
+show_edit_btn_systemy: bool = True
+
 
 def _migrate_remove_cross_db_fks() -> None:
     """Jednorazowa migracja: usuwa cross-bazowy FK wydawcy z tabeli systemy_rpg.
@@ -355,12 +358,9 @@ def get_first_free_id() -> int:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute("SELECT id FROM systemy_rpg ORDER BY id ASC")
-        used_ids = [row[0] for row in c.fetchall()]
-    i = 1
-    while i in used_ids:
-        i += 1
-    return i
+        c.execute("SELECT MAX(id) FROM systemy_rpg")
+        result = c.fetchone()
+        return 1 if result[0] is None else result[0] + 1
 
 
 def get_all_systems() -> list[tuple[Any, ...]]:
@@ -2090,7 +2090,17 @@ def fill_systemy_rpg_tab(
     )
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
-    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
+    _search_after_id: List[Optional[str]] = [None]
+
+    def _on_search_changed(*_: Any) -> None:
+        if _search_after_id[0] is not None:
+            try:
+                tab.after_cancel(_search_after_id[0])
+            except Exception:
+                pass
+        _search_after_id[0] = tab.after(200, _apply_and_draw)
+
+    search_var.trace_add('write', _on_search_changed)  # type: ignore[misc]
     ttk.Separator(top_bar, orient=tk.VERTICAL).pack(side=tk.LEFT, padx=10, fill=tk.Y)
     cols_btn = ttk.Button(top_bar, text="Kolumny", command=lambda: _open_columns_dialog())
     cols_btn.pack(side=tk.LEFT, padx=4)
@@ -2146,6 +2156,7 @@ def fill_systemy_rpg_tab(
         hidden_cols=_compute_hidden_cols(),
         resize_callback=_on_col_resize_systemy,
         col_order=_compute_col_order(),
+        show_edit_button=show_edit_btn_systemy,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)
@@ -2346,14 +2357,30 @@ def fill_systemy_rpg_tab(
 
         _rebuild_rows()
 
+        # ── Sekcja przełącznika przycisku edycji ──────────────────────────
+        ctk.CTkLabel(
+            outer,
+            text="Opcje tabeli:",
+            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(10), weight="bold"),
+        ).pack(anchor="w", pady=(10, 4))
+        edit_btn_var = tk.BooleanVar(value=show_edit_btn_systemy)
+        ctk.CTkCheckBox(
+            outer,
+            text="Przycisk edycji ✎ w wierszu",
+            variable=edit_btn_var,
+            width=220,
+        ).pack(anchor="w", pady=2)
+
         bf = ctk.CTkFrame(outer, fg_color="transparent")
         bf.pack(pady=(12, 0))
 
         def _apply() -> None:
+            global show_edit_btn_systemy
             for col_name, v in vis_vars.items():
                 active_visible_cols_systemy[col_name] = bool(v.get())
             active_col_order_systemy.clear()
             active_col_order_systemy.extend(order_list)
+            show_edit_btn_systemy = bool(edit_btn_var.get())
             dlg.destroy()
             cache = getattr(tab, '_systemy_tab_cache', None)
             preloaded = cache['records_ref'][0] if cache else None
@@ -2364,6 +2391,7 @@ def fill_systemy_rpg_tab(
         def _reset() -> None:
             for v in vis_vars.values():
                 v.set(True)
+            edit_btn_var.set(True)
             order_list.clear()
             order_list.extend(toggleable_base)
             _rebuild_rows()

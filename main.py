@@ -28,7 +28,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.4.22"
+APP_VERSION = "0.4.28"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -634,6 +634,12 @@ if __name__ == "__main__":
     _vc = _saved.get("visible_columns", {})
     systemy_rpg.active_visible_cols_systemy.update(_vc.get("systemy", {}))
     sesje_rpg.active_visible_cols_sesje.update(_vc.get("sesje", {}))
+    gracze.active_visible_cols_gracze.update(_vc.get("gracze", {}))
+    _eb = _saved.get("show_edit_btn", {})
+    systemy_rpg.show_edit_btn_systemy = bool(_eb.get("systemy", True))
+    sesje_rpg.show_edit_btn_sesje = bool(_eb.get("sesje", True))
+    gracze.show_edit_btn_gracze = bool(_eb.get("gracze", True))
+    wydawcy.show_edit_btn_wydawcy = bool(_eb.get("wydawcy", True))
     _cw = _saved.get("column_widths", {})
     if _cw.get("systemy"):
         systemy_rpg.active_col_widths_systemy.extend(_cw["systemy"])
@@ -703,6 +709,13 @@ if __name__ == "__main__":
             "visible_columns": {
                 "systemy": dict(systemy_rpg.active_visible_cols_systemy),
                 "sesje": dict(sesje_rpg.active_visible_cols_sesje),
+                "gracze": dict(gracze.active_visible_cols_gracze),
+            },
+            "show_edit_btn": {
+                "systemy": systemy_rpg.show_edit_btn_systemy,
+                "sesje": sesje_rpg.show_edit_btn_sesje,
+                "gracze": gracze.show_edit_btn_gracze,
+                "wydawcy": wydawcy.show_edit_btn_wydawcy,
             },
             "column_widths": {
                 "systemy": list(systemy_rpg.active_col_widths_systemy) or None,

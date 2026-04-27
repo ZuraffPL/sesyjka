@@ -50,15 +50,16 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "w tabeli hierarchicznej."),
     ("li", "Szukaj — wyszukiwanie tekstowe w czasie rzeczywistym po nazwie systemu."),
     ("li", "Kolumny — umożliwia ukrycie/pokazanie wybranych kolumn tabeli oraz zmianę "
-           "ich kolejności przyciskami ↑/↓; ustawienie zapisywane w settings.json."),
+           "ich kolejności przyciskami \u2191/\u2193; ustawienie zapisywane w settings.json. "
+           "W sekcji Opcje tabeli znajduje się checkbox \u201ePokaż przycisk edycji\u201d \u2014 "
+           "po odznaczeniu ikona \u270f\ufe0f jest ukryta (edycja dostępna przez dwuklik)."),
     ("li", "Ukryj systemy — checkbox w pasku tabeli Systemy RPG; po włączeniu widoczne są "
            "tylko PG i suplementy (wiersze-systemy ukryte)."),
     ("h2", "Edycja rekordów"),
     ("li", "Kliknij ikonę ✏️ w wierszu lub dwukliknij wiersz, aby otworzyć dialog edycji."),
     ("li", "Kliknij nagłówek kolumny, aby posortować po danej kolumnie (przełącza rosnąco/malejąco)."),
     ("li", "Prawym przyciskiem myszy (PPM) na wierszu otwiera menu kontekstowe z opcjami edycji i usunięcia."),
-    ("h2", "Pola rekordu PG / Suplementu"),
-    ("li", "Nazwa/Tytuł * — wymagana nazwa podręcznika lub suplementu."),
+    ("h2", "Pola rekordu PG / Suplementu"),    ("li", "Nazwa/Tytuł * — wymagana nazwa podręcznika lub suplementu."),
     ("li", "Typ — Podręcznik Główny lub Suplement."),
     ("li", "System główny — dla suplementów: opcjonalny wybór systemu-rodzica z kolekcji."),
     ("li", "Wydawca — wybór z listy wydawców (można dodać nowego przyciskiem ➕ Dodaj wydawcę)."),
@@ -77,7 +78,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "🗑 Usuń — usuwa zaznaczoną sesję."),
     ("h2", "Pola sesji"),
     ("li", "Data — picker kalendarza, domyślnie dzisiaj."),
-    ("li", "System RPG — wybór z listy systemów w bazie."),
+    ("li", "System RPG — filtrowalne pole tekstowe: wpisz fragment nazwy, aby zawęzić "
+           "listę propozycji, a następnie kliknij lub wybierz z listy. "
+           "Przycisk ➕ obok pola otwiera formularz dodawania nowego systemu RPG "
+           "bez zamykania formularza sesji — lista systemów odświeża się automatycznie."),
     ("li", "Typ sesji — np. Kampania, One-shot, Konwentowa."),
     ("li", "Mistrz Gry — wybór gracza pełniącego funkcję MG."),
     ("li", "Gracze — lista graczy uczestniczących w sesji (wielokrotny wybór). "
@@ -96,6 +100,9 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "🗑 Usuń — usuwa gracza (uwaga: usunięcie gracza będącego MG sesji wymaga "
            "ręcznej korekty sesji)."),
     ("li", "Edycja — kliknij ikonę ✏️ lub dwukliknij wiersz."),
+    ("li", "Kolumny — przycisk w górnym pasku zakładki Gracze; otwiera dialog z "
+           "checkboxami widoczności kolumn i przyciskami \u2191/\u2193 do zmiany kolejności. "
+           "W sekcji Opcje tabeli: checkbox \u201ePokaż przycisk edycji\u201d. Ustawienia zapisywane w settings.json."),
     ("sep", ""),
 
     ("h1", "🏢 Zakładka: Wydawcy"),

@@ -15,6 +15,19 @@ _log = logging.getLogger(__name__)
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
 DB_FILE = get_db_path("sesje_rpg.db")
 
+# ── Polska kolejność alfabetyczna ─────────────────────────────────────────────
+# Mapuje polskie litery na sekwencje sortujące zgodnie z kolejnością polskiego alfabetu:
+# a ą b c ć d e ę f g h i j k l ł m n ń o ó p q r s ś t u v w x y z ź ż
+_PL_SORT_MAP: Dict[str, str] = {
+    'ą': 'a\x01', 'ć': 'c\x01', 'ę': 'e\x01', 'ł': 'l\x01', 'ń': 'n\x01',
+    'ó': 'o\x01', 'ś': 's\x01', 'ź': 'z\x01', 'ż': 'z\x02',
+}
+
+
+def _pl_sort_key(s: str) -> str:
+    """Zwraca klucz sortowania uwzględniający polską kolejność alfabetyczną."""
+    return ''.join(_PL_SORT_MAP.get(c, c) for c in s.lower())
+
 
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
@@ -22,7 +35,7 @@ def init_db() -> None:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        # Tabela główna sesji
+        # Tabela główna sesji — bez cross-bazowych FK (system_id/mg_id z innych plików .db)
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS sesje_rpg (
@@ -34,22 +47,20 @@ def init_db() -> None:
                 kampania INTEGER DEFAULT 0,
                 jednostrzal INTEGER DEFAULT 0,
                 tytul_kampanii TEXT,
-                tytul_przygody TEXT,
-                FOREIGN KEY (system_id) REFERENCES systemy_rpg(id),
-                FOREIGN KEY (mg_id) REFERENCES gracze(id)
+                tytul_przygody TEXT
             )
         """
         )
 
-        # Tabela relacji sesja-gracze
+        # Tabela relacji sesja-gracze — FK do sesje_rpg jest w tej samej bazie (OK)
+        # gracz_id pochodzi z gracze.db (inna baza) — walidacja po stronie Pythona
         c.execute(
             """
             CREATE TABLE IF NOT EXISTS sesje_gracze (
                 sesja_id INTEGER NOT NULL,
                 gracz_id INTEGER NOT NULL,
                 PRIMARY KEY (sesja_id, gracz_id),
-                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE,
-                FOREIGN KEY (gracz_id) REFERENCES gracze(id)
+                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE
             )
         """
         )
@@ -76,10 +87,10 @@ def get_all_systems() -> List[Tuple[int, str]]:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute(
-                "SELECT id, nazwa FROM systemy_gry ORDER BY nazwa"
-            )
-            return c.fetchall()
+            c.execute("SELECT id, nazwa FROM systemy_gry")
+            rows = c.fetchall()
+        # Sortuj po polsku (SQLite sortuje bajtowo – Ą/Ć/... trafiają na koniec)
+        return sorted(rows, key=lambda r: _pl_sort_key(r[1] or ""))
     except sqlite3.Error:
         return []
 
@@ -181,10 +192,10 @@ def dodaj_sesje_rpg(
     init_db()
 
     # Pobierz dane z baz
-    systems = get_all_systems()
+    systems_ref: List[List[Tuple[int, str]]] = [list(get_all_systems())]
     players = get_all_players()
 
-    if not systems:
+    if not systems_ref[0]:
         messagebox.showerror("Błąd", "Brak systemów RPG w bazie. Dodaj najpierw system RPG.", parent=dialog)  # type: ignore
         dialog.destroy()
         return
@@ -225,21 +236,69 @@ def dodaj_sesje_rpg(
     calendar_btn.grid(row=0, column=1)
     row += 1
 
-    # System RPG
+    # System RPG — frame z polem tekstowym (filtrowalnym) + przycisk Dodaj
     ctk.CTkLabel(main_frame, text="System RPG *:").grid(
         row=row, column=0, pady=8, padx=(0, 10), sticky="w"
     )
+    system_row_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    system_row_frame.grid(row=row, column=1, pady=8, sticky="ew")
+    system_row_frame.columnconfigure(0, weight=1)
+
     system_var = tk.StringVar(value="")
+    # Buduj wartości z pełną listą systemów
+    _all_sys_values: List[str] = [f"{s[1]} (ID: {s[0]})" for s in systems_ref[0]]
     system_combo = ctk.CTkComboBox(
-        main_frame,
+        system_row_frame,
         variable=system_var,
-        values=[f"{s[1]} (ID: {s[0]})" for s in systems],
-        state="readonly",
-        width=400,
+        values=_all_sys_values,
+        state="normal",
+        width=380,
     )
-    system_combo.grid(row=row, column=1, pady=8, sticky="ew")
-    if systems:
-        system_combo.set(f"{systems[0][1]} (ID: {systems[0][0]})")
+    system_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+    if systems_ref[0]:
+        system_combo.set(f"{systems_ref[0][0][1]} (ID: {systems_ref[0][0][0]})")
+
+    def _filter_systems_dodaj(*_: Any) -> None:
+        query = system_var.get().lower()
+        if query:
+            filtered = [v for v in _all_sys_values if query in v.lower()]
+            system_combo.configure(values=filtered if filtered else _all_sys_values)
+        else:
+            system_combo.configure(values=_all_sys_values)
+
+    system_combo.bind("<KeyRelease>", _filter_systems_dodaj)
+
+    def _after_add_system_dodaj() -> None:
+        """Odświeża listę systemów po dodaniu nowego z poziomu dialogu sesji."""
+        systems_ref[0] = list(get_all_systems())
+        new_values = [f"{s[1]} (ID: {s[0]})" for s in systems_ref[0]]
+        _all_sys_values.clear()
+        _all_sys_values.extend(new_values)
+        system_combo.configure(values=new_values)
+        # Odśwież też zakładkę Systemy RPG w głównym oknie
+        try:
+            import systemy_rpg as _sysmod
+            root = dialog.winfo_toplevel()
+            sys_tab = getattr(root, 'tabs', {}).get('Systemy RPG')
+            if sys_tab:
+                _sysmod.fill_systemy_rpg_tab(sys_tab, dark_mode=getattr(root, 'dark_mode', False))
+        except Exception:
+            pass
+
+    def _open_add_system_dodaj() -> None:
+        import systemy_rpg as _sysmod
+        _sysmod.open_add_game_dialog(dialog, refresh_callback=_after_add_system_dodaj)
+
+    ctk.CTkButton(
+        system_row_frame,
+        text="➕",
+        command=_open_add_system_dodaj,
+        width=36,
+        height=28,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12)),
+    ).grid(row=0, column=1, sticky="w")
     row += 1
 
     # Liczba graczy
@@ -268,16 +327,14 @@ def dodaj_sesje_rpg(
     )
     selected_players_label.grid(row=0, column=0, sticky="ew", padx=(0, 10))
 
+    # Słownik {id: nick} dla szybkiego wyszukiwania graczy
+    player_nick_map: Dict[int, str] = {pid: pnick for pid, pnick in players}  # type: ignore
+
     def update_selected_players_display() -> None:
         if not selected_players_list:
             selected_players_label.configure(text="Brak wybranych graczy")
         else:
-            player_names = []
-            for player_id in selected_players_list:
-                for pid, pnick in players:
-                    if pid == player_id:
-                        player_names.append(pnick)  # type: ignore
-                        break
+            player_names = [player_nick_map.get(pid, f"ID:{pid}") for pid in selected_players_list]
             selected_players_label.configure(text=", ".join(player_names))  # type: ignore
 
     def open_players_selection() -> None:
@@ -316,21 +373,20 @@ def dodaj_sesje_rpg(
         player_checkboxes: Dict[int, ctk.CTkCheckBox] = {}
 
         def validate_players_selection() -> None:
-            selected = sum(1 for v in player_vars.values() if v.get())
             max_p = int(liczba_var.get())
-            if selected > max_p:
-                count = 0
-                for pid, v in player_vars.items():
-                    if v.get():
-                        count += 1
-                        if count > max_p:
-                            v.set(False)
-            count = sum(1 for v in player_vars.values() if v.get())
+            # Jeden przebieg: odznacz nadmiarowych (jeśli zaznaczono za dużo)
+            count = 0
+            for pid, v in player_vars.items():
+                if v.get():
+                    count += 1
+                    if count > max_p:
+                        v.set(False)
+                        count -= 1
+            # Jeden przebieg: włącz/wyłącz checkboxy
+            at_max = count >= max_p
             for pid, cb in player_checkboxes.items():
                 cb.configure(
-                    state=(
-                        "disabled" if (not player_vars[pid].get() and count >= max_p) else "normal"
-                    )
+                    state=("disabled" if (at_max and not player_vars[pid].get()) else "normal")
                 )
 
         def _apply_filter(*_args: Any) -> None:
@@ -675,6 +731,9 @@ def dodaj_sesje_rpg(
         if not system_var.get():
             messagebox.showerror("Błąd", "Wybierz system RPG.", parent=dialog)
             return False
+        if not re.search(r'ID: \d+', system_var.get()):
+            messagebox.showerror("Błąd", "Wybierz system RPG z listy (wpisz fragment nazwy, a następnie kliknij propozycję).", parent=dialog)
+            return False
 
         # Sprawdź graczy
         expected_count = int(liczba_var.get())
@@ -796,7 +855,7 @@ def dodaj_sesje_rpg(
     if prefill:
         pf_system_id: Optional[int] = prefill.get("system_id")
         if pf_system_id is not None:
-            for s in systems:
+            for s in systems_ref[0]:
                 if s[0] == pf_system_id:
                     system_combo.set(f"{s[1]} (ID: {s[0]})")
                     break
@@ -880,10 +939,10 @@ def open_edit_session_dialog(
         return
 
     # Pobierz dane z baz
-    systems = get_all_systems()
+    systems_ref: List[List[Tuple[int, str]]] = [list(get_all_systems())]
     players = get_all_players()
 
-    if not systems:
+    if not systems_ref[0]:
         messagebox.showerror("Błąd", "Brak systemów RPG w bazie.", parent=dialog)
         dialog.destroy()
         return
@@ -924,26 +983,72 @@ def open_edit_session_dialog(
     calendar_btn.grid(row=0, column=1)
     row += 1
 
-    # System RPG
+    # System RPG — frame z polem tekstowym (filtrowalnym) + przycisk Dodaj
     ctk.CTkLabel(main_frame, text="System RPG *:").grid(
         row=row, column=0, pady=8, padx=(0, 10), sticky="w"
     )
+    system_row_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    system_row_frame.grid(row=row, column=1, pady=8, sticky="ew")
+    system_row_frame.columnconfigure(0, weight=1)
+
     system_var = tk.StringVar(value="")
+    _all_sys_values_e: List[str] = [f"{s[1]} (ID: {s[0]})" for s in systems_ref[0]]
     system_combo = ctk.CTkComboBox(
-        main_frame,
+        system_row_frame,
         variable=system_var,
-        values=[f"{s[1]} (ID: {s[0]})" for s in systems],
-        state="readonly",
-        width=400,
+        values=_all_sys_values_e,
+        state="normal",
+        width=380,
     )
-    system_combo.grid(row=row, column=1, pady=8, sticky="ew")
+    system_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
     # Znajdź i ustaw aktualny system
     current_system_id = session_data[2]
-    for sys_id, sys_name in systems:
+    for sys_id, sys_name in systems_ref[0]:
         if sys_id == current_system_id:
             system_combo.set(f"{sys_name} (ID: {sys_id})")
             break
+
+    def _filter_systems_edytuj(*_: Any) -> None:
+        query = system_var.get().lower()
+        if query:
+            filtered = [v for v in _all_sys_values_e if query in v.lower()]
+            system_combo.configure(values=filtered if filtered else _all_sys_values_e)
+        else:
+            system_combo.configure(values=_all_sys_values_e)
+
+    system_combo.bind("<KeyRelease>", _filter_systems_edytuj)
+
+    def _after_add_system_edytuj() -> None:
+        """Odświeża listę systemów po dodaniu nowego z poziomu dialogu edycji sesji."""
+        systems_ref[0] = list(get_all_systems())
+        new_values = [f"{s[1]} (ID: {s[0]})" for s in systems_ref[0]]
+        _all_sys_values_e.clear()
+        _all_sys_values_e.extend(new_values)
+        system_combo.configure(values=new_values)
+        try:
+            import systemy_rpg as _sysmod
+            root = dialog.winfo_toplevel()
+            sys_tab = getattr(root, 'tabs', {}).get('Systemy RPG')
+            if sys_tab:
+                _sysmod.fill_systemy_rpg_tab(sys_tab, dark_mode=getattr(root, 'dark_mode', False))
+        except Exception:
+            pass
+
+    def _open_add_system_edytuj() -> None:
+        import systemy_rpg as _sysmod
+        _sysmod.open_add_game_dialog(dialog, refresh_callback=_after_add_system_edytuj)
+
+    ctk.CTkButton(
+        system_row_frame,
+        text="➕",
+        command=_open_add_system_edytuj,
+        width=36,
+        height=28,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12)),
+    ).grid(row=0, column=1, sticky="w")
     row += 1
 
     # Liczba graczy
@@ -1389,6 +1494,9 @@ def open_edit_session_dialog(
         # Sprawdź system
         if not system_var.get():
             messagebox.showerror("Błąd", "Wybierz system RPG.", parent=dialog)
+            return False
+        if not re.search(r'ID: \d+', system_var.get()):
+            messagebox.showerror("Błąd", "Wybierz system RPG z listy (wpisz fragment nazwy, a następnie kliknij propozycję).", parent=dialog)
             return False
 
         # Sprawdź MG

@@ -21,6 +21,8 @@ active_filters_wydawcy: Dict[str, Any] = {}
 active_sort_wydawcy: Dict[str, Any] = {"column": "ID", "reverse": False}
 # Zapisane szerokości kolumn (pusta lista = użyj auto-obliczonych)
 active_col_widths_wydawcy: List[int] = []
+# Widoczność przycisku edycji ✎
+show_edit_btn_wydawcy: bool = True
 
 
 def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:
@@ -108,17 +110,14 @@ def get_all_publishers():
         return c.fetchall()
 
 
-def get_first_free_id():
+def get_first_free_id() -> int:
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute("SELECT id FROM wydawcy ORDER BY id ASC")
-        used_ids = [row[0] for row in c.fetchall()]
-    i = 1
-    while i in used_ids:
-        i += 1
-    return i
+        c.execute("SELECT MAX(id) FROM wydawcy")
+        result = c.fetchone()
+        return 1 if result[0] is None else result[0] + 1
 
 
 def add_publisher_to_db(id_wydawcy: int, nazwa: str, strona: Optional[str], kraj: Optional[str]):
@@ -398,7 +397,17 @@ def fill_wydawcy_tab(
     )
     search_entry = ttk.Entry(top_bar, textvariable=search_var, width=20)
     search_entry.pack(side=tk.LEFT, padx=4)
-    search_var.trace_add('write', lambda *_: _apply_and_draw())  # type: ignore[misc]
+    _search_after_id: List[Optional[str]] = [None]
+
+    def _on_search_changed(*_: Any) -> None:
+        if _search_after_id[0] is not None:
+            try:
+                tab.after_cancel(_search_after_id[0])
+            except Exception:
+                pass
+        _search_after_id[0] = tab.after(200, _apply_and_draw)
+
+    search_var.trace_add('write', _on_search_changed)  # type: ignore[misc]
 
     # ── Callbacki tabeli ────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
@@ -478,6 +487,7 @@ def fill_wydawcy_tab(
         right_click_callback=_on_right_click,
         show_row_numbers=True,
         resize_callback=_on_col_resize_wydawcy,
+        show_edit_button=show_edit_btn_wydawcy,
     )
     tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
     tab.rowconfigure(1, weight=1)

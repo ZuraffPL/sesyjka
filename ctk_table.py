@@ -504,6 +504,23 @@ class CTkDataTable(tk.Frame):
             return row[self._id_col]
         return None
 
+    def _fire_edit_cb(self, ri: int, rd: List[Any]) -> None:
+        """Wywołuje callback edycji tylko poza trybem gościa."""
+        try:
+            from database_manager import is_guest_mode
+            if is_guest_mode():
+                import tkinter.messagebox as _mb
+                _mb.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa edycja danych jest wyłączona.\n"
+                    "Wróć do własnych danych, aby dokonać zmian.",
+                    parent=self,
+                )
+                return
+        except Exception:
+            pass
+        self._edit_cb(ri, rd)
+
     def _build_rows(self) -> None:
         _t0 = _time.perf_counter()
         new_count = len(self._data)
@@ -685,7 +702,7 @@ class CTkDataTable(tk.Frame):
         ri_dbl, rd_dbl = i, list(row)
         rf.bind(
             "<Double-Button-1>",
-            lambda _e, ri=ri_dbl, rd=rd_dbl: self._edit_cb(ri, rd),
+            lambda _e, ri=ri_dbl, rd=rd_dbl: self._fire_edit_cb(ri, rd),
         )
 
         if self._rc_cb is not None:
@@ -716,7 +733,7 @@ class CTkDataTable(tk.Frame):
             ri_dbl2, rd_dbl2 = i, list(row)
             num_lbl.bind(
                 "<Double-Button-1>",
-                lambda _e, ri=ri_dbl2, rd=rd_dbl2: self._edit_cb(ri, rd),
+                lambda _e, ri=ri_dbl2, rd=rd_dbl2: self._fire_edit_cb(ri, rd),
             )
             rf._row_num_lbl = num_lbl  # type: ignore[attr-defined]
             rf._cached_lp = str(i + 1)  # type: ignore[attr-defined]
@@ -750,7 +767,7 @@ class CTkDataTable(tk.Frame):
                         relief="flat",
                         bd=0,
                         cursor="hand2",
-                        command=lambda ri=ri_, rd=rd_: self._edit_cb(ri, rd),
+                        command=lambda ri=ri_, rd=rd_: self._fire_edit_cb(ri, rd),
                     )
                     if icon:
                         btn._icon_ref = icon  # type: ignore
@@ -796,7 +813,7 @@ class CTkDataTable(tk.Frame):
             ri_dbl3, rd_dbl3 = i, list(row)
             lbl.bind(
                 "<Double-Button-1>",
-                lambda _e, ri=ri_dbl3, rd=rd_dbl3: self._edit_cb(ri, rd),
+                lambda _e, ri=ri_dbl3, rd=rd_dbl3: self._fire_edit_cb(ri, rd),
             )
 
             # Dodatkowy callback kliknięcia w komórkę
@@ -838,7 +855,7 @@ class CTkDataTable(tk.Frame):
                     relief="flat",
                     bd=0,
                     cursor="hand2",
-                    command=lambda ri=ri_, rd=rd_: self._edit_cb(ri, rd),
+                    command=lambda ri=ri_, rd=rd_: self._fire_edit_cb(ri, rd),
                 )
                 if icon:
                     btn._icon_ref = icon  # zapobiegaj GC  # type: ignore

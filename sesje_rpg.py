@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, Callable, Any, List, Tuple, Dict, Union
 import customtkinter as ctk  # type: ignore
 import logging
-from database_manager import get_db_path
+from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
@@ -651,6 +651,14 @@ def fill_sesje_rpg_tab(
 
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa edycja danych jest wyłączona.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=tab,
+            )
+            return
         open_edit_session_dialog(
             tab,
             row_data,
@@ -672,6 +680,13 @@ def fill_sesje_rpg_tab(
             _on_edit(_row_idx, row_data)
 
         def _del() -> None:
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa usuwanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
             sesja_id = row_data[0]
             sesja_data = row_data[1]
             if messagebox.askyesno(
@@ -696,6 +711,13 @@ def fill_sesje_rpg_tab(
 
         def _add_to_campaign() -> None:
             """Otwiera dialog dodawania sesji z danymi z wybranej kampanii."""
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa dodawanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
             sesja_id = row_data[0]
             try:
                 with sqlite3.connect(DB_FILE) as conn:

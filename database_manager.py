@@ -7,12 +7,31 @@ Zapewnia kompatybilność wsteczną przy aktualizacjach aplikacji
 import os
 import sqlite3
 import shutil
+import zipfile
+import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, List
 from datetime import datetime
 
 # Wersja schematu bazy danych
 CURRENT_DB_VERSION = 1
+
+# ── Nazwy plików baz danych ───────────────────────────────────────────────────
+_DB_FILES: List[str] = ["systemy_rpg.db", "sesje_rpg.db", "gracze.db", "wydawcy.db"]
+
+# ── Tryb gościa — globalny katalog override ───────────────────────────────────
+_guest_db_dir: Optional[Path] = None
+
+
+def set_guest_db_dir(path: Optional[Path]) -> None:
+    """Ustawia katalog baz danych gościa (None = powrót do własnych danych)."""
+    global _guest_db_dir
+    _guest_db_dir = path
+
+
+def is_guest_mode() -> bool:
+    """Zwraca True jeśli aplikacja działa na bazach gościa (tylko odczyt)."""
+    return _guest_db_dir is not None
 
 
 def get_app_data_dir() -> Path:
@@ -37,6 +56,7 @@ def get_app_data_dir() -> Path:
 def get_db_path(db_name: str) -> str:
     """
     Pobiera pełną ścieżkę do pliku bazy danych.
+    W trybie gościa zwraca ścieżkę z katalogu gościa.
 
     Args:
         db_name: Nazwa pliku bazy danych (np. 'systemy_rpg.db')
@@ -44,9 +64,25 @@ def get_db_path(db_name: str) -> str:
     Returns:
         str: Pełna ścieżka do pliku bazy danych
     """
+    if _guest_db_dir is not None:
+        return str(_guest_db_dir / db_name)
     app_dir = get_app_data_dir()
     db_path = app_dir / db_name
     return str(db_path)
+
+
+def get_own_db_path(db_name: str) -> str:
+    """
+    Zawsze zwraca ścieżkę do własnych baz danych, ignorując tryb gościa.
+    Używać przy eksporcie i tworzeniu backupów.
+
+    Args:
+        db_name: Nazwa pliku bazy danych
+
+    Returns:
+        str: Pełna ścieżka do własnej bazy danych
+    """
+    return str(get_app_data_dir() / db_name)
 
 
 def migrate_old_databases() -> None:
@@ -272,10 +308,208 @@ def ensure_app_icons() -> None:
             pass
 
 
+# ── Eksport baz danych ────────────────────────────────────────────────────────
+
+def export_databases_excel(dest: Path) -> Path:
+    """
+    Eksportuje własne bazy danych do jednego pliku Excel (.xlsx).
+
+    Każda tabela z każdej bazy danych staje się osobnym arkuszem.
+    Arkusze są nazwane wg schematu: "NazwaBazy - nazwa_tabeli".
+
+    Args:
+        dest: Ścieżka docelowa — plik .xlsx.
+
+    Returns:
+        Path: Ścieżka do zapisanego pliku.
+
+    Raises:
+        ImportError: Gdy biblioteka openpyxl nie jest zainstalowana.
+        ValueError: Gdy żadna baza danych nie istnieje.
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        raise ImportError(
+            "Eksport do Excela wymaga biblioteki openpyxl.\n"
+            "Zainstaluj ją poleceniem: pip install openpyxl"
+        )
+
+    _DB_LABELS: dict[str, str] = {
+        "systemy_rpg.db": "Systemy RPG",
+        "sesje_rpg.db": "Sesje RPG",
+        "gracze.db": "Gracze",
+        "wydawcy.db": "Wydawcy",
+    }
+
+    header_fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+    center_align = Alignment(horizontal="center")
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)  # usuń domyślny pusty arkusz
+
+    own_dir = get_app_data_dir()
+
+    for db_file in _DB_FILES:
+        src = own_dir / db_file
+        if not src.exists():
+            continue
+        label = _DB_LABELS.get(db_file, db_file.replace(".db", ""))
+
+        conn = sqlite3.connect(src)
+        conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+            tables = [row[0] for row in cursor.fetchall() if not row[0].startswith("sqlite_")]
+
+            for table in tables:
+                # Excel ogranicza nazwy arkuszy do 31 znaków
+                sheet_name = f"{label} - {table}"[:31]
+                ws = wb.create_sheet(title=sheet_name)
+
+                cursor.execute(f"SELECT * FROM [{table}] LIMIT 0")  # tylko nagłówki
+                if cursor.description is None:
+                    continue
+                headers = [desc[0] for desc in cursor.description]
+
+                # Nagłówki ze stylem
+                for col_idx, header in enumerate(headers, 1):
+                    cell = ws.cell(row=1, column=col_idx, value=header)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = center_align
+
+                # Dane
+                cursor.execute(f"SELECT * FROM [{table}]")
+                for row_idx, row in enumerate(cursor.fetchall(), 2):
+                    for col_idx, value in enumerate(row, 1):
+                        ws.cell(row=row_idx, column=col_idx, value=value)
+
+                # Auto-szerokość kolumn (maks. 50 znaków)
+                for col in ws.columns:
+                    max_len = max(
+                        (len(str(cell.value)) for cell in col if cell.value is not None),
+                        default=8,
+                    )
+                    col_letter = col[0].column_letter
+                    ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        finally:
+            conn.close()
+
+    if not wb.sheetnames:
+        raise ValueError("Brak baz danych do wyeksportowania.")
+
+    wb.save(dest)
+    return dest
+
+
+def export_databases(dest: Path, fmt: str) -> Path:
+    """
+    Eksportuje własne bazy danych do pliku ZIP lub folderu.
+
+    Args:
+        dest: Ścieżka docelowa — plik .zip (fmt='zip') lub katalog (fmt='folder').
+        fmt: 'zip' lub 'folder'.
+
+    Returns:
+        Path: Ścieżka do utworzonego pliku/folderu.
+
+    Raises:
+        ValueError: Gdy fmt jest nieznany.
+        OSError: Gdy nie można zapisać pliku.
+    """
+    own_dir = get_app_data_dir()
+    if fmt == 'zip':
+        with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for db_file in _DB_FILES:
+                src = own_dir / db_file
+                if src.exists():
+                    zf.write(src, db_file)
+        return dest
+    elif fmt == 'folder':
+        dest.mkdir(parents=True, exist_ok=True)
+        for db_file in _DB_FILES:
+            src = own_dir / db_file
+            if src.exists():
+                shutil.copy2(src, dest / db_file)
+        return dest
+    else:
+        raise ValueError(f"Nieznany format eksportu: {fmt!r}")
+
+
+def prepare_import_source(source: Path) -> Tuple[Path, List[str]]:
+    """
+    Przygotowuje źródło importu — rozpakowuje ZIP lub waliduje folder.
+
+    ZIP jest rozpakowywany do katalogu tymczasowego (%TEMP%\\sesyjka_import_*),
+    który pozostaje do końca sesji (lub do jawnego usunięcia przez exit_guest_mode).
+
+    Args:
+        source: Ścieżka do pliku .zip lub folderu z bazami.
+
+    Returns:
+        Tuple[Path, List[str]]: (katalog_z_plikami_db, lista_znalezionych_plików_db)
+
+    Raises:
+        ValueError: Gdy źródło nie zawiera żadnych baz danych Sesyjki.
+    """
+    db_set = set(_DB_FILES)
+    if source.suffix.lower() == '.zip':
+        with zipfile.ZipFile(source) as zf:
+            # Tylko pliki bezpośrednio w root ZIP (bez podkatalogów)
+            names = {n for n in zf.namelist() if '/' not in n and '\\' not in n}
+            found = sorted(names & db_set)
+            if not found:
+                raise ValueError("Plik ZIP nie zawiera żadnych baz danych Sesyjki (.db).")
+            tmp = Path(tempfile.mkdtemp(prefix="sesyjka_import_"))
+            for f in found:
+                zf.extract(f, tmp)
+        return tmp, found
+    elif source.is_dir():
+        found = sorted(f for f in _DB_FILES if (source / f).exists())
+        if not found:
+            raise ValueError("Folder nie zawiera żadnych baz danych Sesyjki (.db).")
+        return source, found
+    else:
+        raise ValueError("Nieznany format — wybierz plik .zip lub folder z bazami Sesyjki.")
+
+
+def replace_own_databases(source_dir: Path, db_files: List[str]) -> None:
+    """
+    Nadpisuje własne bazy danych plikami z source_dir.
+    Przed każdym nadpisaniem tworzy backup w %LOCALAPPDATA%\\Sesyjka\\backups\\.
+
+    Args:
+        source_dir: Katalog źródłowy z plikami .db.
+        db_files: Lista nazw plików .db do nadpisania.
+    """
+    own_dir = get_app_data_dir()
+    for db_file in db_files:
+        src = source_dir / db_file
+        if not src.exists():
+            continue
+        dst = own_dir / db_file
+        if dst.exists():
+            backup_database(str(dst))
+        shutil.copy2(src, dst)
+
+
 # Eksportuj funkcje dla kompatybilności
 __all__ = [
     'get_app_data_dir',
     'get_db_path',
+    'get_own_db_path',
+    'set_guest_db_dir',
+    'is_guest_mode',
+    'export_databases',
+    'export_databases_excel',
+    'prepare_import_source',
+    'replace_own_databases',
     'migrate_old_databases',
     'initialize_app_databases',
     'ensure_app_icons',

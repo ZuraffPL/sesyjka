@@ -1,0 +1,7 @@
+customtkinter==5.2.2
+tksheet==7.5.19
+matplotlib==3.9.4
+Pillow==11.3.0
+tkcalendar==1.6.1
+openpyxl==3.1.5
+pyinstaller==6.18.0

@@ -142,6 +142,33 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "settings.json w tym samym katalogu."),
     ("sep", ""),
 
+    ("h1", "📤 Transfer danych"),
+    ("p",  "Okno transferu danych umożliwia eksport i import wszystkich baz do/z pliku "
+           "archiwum lub arkusza kalkulacyjnego. Dostępne z przycisku w ribbonie."),
+    ("h2", "Eksport"),
+    ("li", "ZIP — pakuje wszystkie 4 pliki .db do archiwum. Przydatny do backupu i "
+           "przenoszenia całej bazy między komputerami."),
+    ("li", "Excel (.xlsx) — eksportuje wszystkie bazy do jednego pliku .xlsx. Każda tabela "
+           "SQLite to osobny arkusz (nazwa: Label — tabela). Wiersz nagłówkowy ma niebieskie tło "
+           "i białą pogrubioną czcionkę. Szerokości kolumn są automatycznie dopasowane (maks. 50 znaków). "
+           "Wymaga zainstalowanego pakietu openpyxl (dołączonego do exe)."),
+    ("h2", "Import"),
+    ("li", "Wybierz archiwum ZIP zawierające pliki .db. Aplikacja zastąpi bieżące bazy "
+           "danymi z archiwum i automatycznie przeprowadzi migrację do aktualnego schematu."),
+    ("li", "Przed importem wykonywana jest automatyczna kopia zapasowa bieżących danych."),
+    ("sep", ""),
+
+    ("h1", "👁️ Tryb gościa"),
+    ("p",  "Tryb gościa umożliwia przeglądanie danych z innego archiwum ZIP bez "
+           "nadpisywania własnej bazy. Dostępny z przycisku w ribbonie."),
+    ("li", "W trybie gościa wszystkie operacje zapisu są zablokowane: ikona ✏️, "
+           "podwójne kliknięcie, menu PPM oraz przyciski Dodaj/Usuń są nieaktywne lub "
+           "pokazują komunikat ostrzegawczy."),
+    ("li", "Ribbon wyświetla pomarańczowy pasek z informacją o aktywnym trybie gościa."),
+    ("li", "Kliknięcie „Wróć do swoich danych" przywraca własną bazę i wyłącza tryb gościa. "
+           "Statystyki odświeżają się automatycznie przy kliknięciu zakładki."),
+    ("sep", ""),
+
     ("h1", "⌨️ Skróty i wskazówki"),
     ("li", "Enter w polu wyszukiwania — odświeża widok filtrowany."),
     ("li", "Kliknięcie nagłówka kolumny — sortowanie rosnąco/malejąco (przełącza)."),
@@ -155,7 +182,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
 
     ("h1", "ℹ️ Informacje techniczne"),
     ("li", "Platforma: Windows 10+."),
-    ("li", "GUI: Python + CustomTkinter."),
+    ("li", "GUI: Python + CustomTkinter + tkinter/ttk."),
+    ("li", "Tabele: CTkDataTable (własny widget) — sortowanie, hierarchia, tooltipy, ikony."),
+    ("li", "Wykresy: matplotlib."),
+    ("li", "Eksport Excel: openpyxl."),
     ("li", "Baza danych: SQLite (lokalna, bez serwera)."),
     ("li", "Autor: Marcin \"Zuraff\" Żurawicz."),
 ]

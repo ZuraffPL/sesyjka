@@ -19,6 +19,7 @@ import database_manager
 import font_scaling
 from font_scaling import scale_font_size
 import settings as app_settings
+import db_transfer_dialog
 import logging
 
 _log = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ ctk.set_appearance_mode("light")  # Domyślnie tryb jasny
 ctk.set_default_color_theme("blue")  # Kolorystyka niebieska
 
 APP_NAME = "Sesyjka"
-APP_VERSION = "0.4.30"
+APP_VERSION = "0.4.34"
 START_WIDTH = 1800
 START_HEIGHT = 920
 
@@ -233,6 +234,7 @@ class SesyjkaApp(ctk.CTk):
         self.set_modern_theme(self.dark_mode)
 
         self.create_ribbon()
+        self._create_guest_banner()
         self.create_content_area()
 
     def report_callback_exception(self, exc: type, val: BaseException, tb: object) -> None:  # type: ignore
@@ -293,6 +295,7 @@ class SesyjkaApp(ctk.CTk):
 
         self.ribbon_groups = {}
         self.ribbon_add_buttons = {}
+        self._ribbon_write_buttons: list = []  # wszystkie przyciski CRUD — wyłączane w trybie gościa
 
         sections = [
             ("Systemy RPG", "Dodaj System RPG", lambda: systemy_rpg.dodaj_system_rpg(self, refresh_callback=lambda **kwargs: (systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode), self.refresh_statistics())), "Usuń", lambda: systemy_rpg.usun_zaznaczony_system(self.tabs["Systemy RPG"], refresh_callback=lambda **kwargs: (systemy_rpg.fill_systemy_rpg_tab(self.tabs["Systemy RPG"], dark_mode=self.dark_mode), self.refresh_statistics()))),  # type: ignore
@@ -339,6 +342,7 @@ class SesyjkaApp(ctk.CTk):
                     hover_color="#0D47A1",
                 )
                 add_sys_btn.pack(side=tk.LEFT, padx=(0, 6))
+                self._ribbon_write_buttons.append(add_sys_btn)
 
             # Przycisk Dodaj (zielony)
             add_btn = ctk.CTkButton(
@@ -352,6 +356,7 @@ class SesyjkaApp(ctk.CTk):
                 hover_color="#1B5E20",
             )
             add_btn.pack(side=tk.LEFT, padx=(0, 6))
+            self._ribbon_write_buttons.append(add_btn)
 
             # Przycisk Usuń (czerwony)
             if del_label and callable(del_func):
@@ -366,6 +371,7 @@ class SesyjkaApp(ctk.CTk):
                     hover_color="#B71C1C",
                 )
                 del_btn.pack(side=tk.LEFT)
+                self._ribbon_write_buttons.append(del_btn)
 
             self.ribbon_groups[name] = group
             self.ribbon_add_buttons[name] = add_btn
@@ -388,6 +394,19 @@ class SesyjkaApp(ctk.CTk):
             font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11)),
         )
         help_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        # Przycisk "Bazy danych"
+        db_btn = ctk.CTkButton(
+            top_row,
+            text="💾 Bazy danych",
+            command=self.show_db_transfer_dialog,
+            width=120,
+            height=28,
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11)),
+            fg_color="#37474F",
+            hover_color="#263238",
+        )
+        db_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         # Przycisk "O programie"
         about_btn = ctk.CTkButton(
@@ -585,6 +604,97 @@ class SesyjkaApp(ctk.CTk):
         finally:
             self.update_idletasks()  # wyrenderuj wszystko zanim okno wróci
             self.attributes('-alpha', 1)
+
+    # ── Banner gościa ─────────────────────────────────────────────────────────
+
+    def _create_guest_banner(self) -> None:
+        """Tworzy pasek informacyjny trybu gościa (ukryty do czasu wejścia w tryb gościa)."""
+        self._guest_banner = ctk.CTkFrame(self, fg_color="#BF360C", height=0, corner_radius=0)
+        self._guest_banner.pack(side=tk.TOP, fill=tk.X)
+        self._guest_banner.pack_propagate(False)
+
+        self._guest_banner_label = ctk.CTkLabel(
+            self._guest_banner,
+            text="",
+            fg_color="transparent",
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
+            text_color="white",
+        )
+        self._guest_banner_label.pack(side=tk.LEFT, padx=16, pady=4)
+
+        ctk.CTkButton(
+            self._guest_banner,
+            text="✕  Wróć do swoich danych",
+            command=self.exit_guest_mode,
+            fg_color="#E64A19",
+            hover_color="#BF360C",
+            width=200,
+            height=28,
+            font=ctk.CTkFont(family='Segoe UI', size=scale_font_size(11), weight='bold'),
+            text_color="white",
+        ).pack(side=tk.RIGHT, padx=16, pady=4)
+
+    # ── Tryb gościa ───────────────────────────────────────────────────────────
+
+    def enter_guest_mode(self, source_dir: "Path", label: str) -> None:
+        """
+        Przełącza aplikację na bazy danych gościa.
+
+        Blokuje wszystkie operacje zapisu (przyciski Dodaj/Usuń w ribbonie),
+        pokazuje baner z nazwą gościa i przebudowuje wszystkie zakładki.
+
+        Args:
+            source_dir: Katalog z plikami .db gościa.
+            label: Etykieta wyświetlana w banerze (nazwa pliku/folderu).
+        """
+        from pathlib import Path as _Path
+        database_manager.set_guest_db_dir(_Path(source_dir))
+
+        # Pokaż baner
+        self._guest_banner.configure(height=38)
+        self._guest_banner_label.configure(text=f"👁️  TRYB GOŚCIA: {label}  |  dane tylko do odczytu")
+
+        # Wyłącz przyciski CRUD
+        for btn in self._ribbon_write_buttons:
+            try:
+                btn.configure(state="disabled")
+            except Exception:
+                pass
+
+        # Przebuduj wszystkie zakładki z danymi gościa
+        self._dirty_tabs = set(self.tabs.keys())
+        self._rebuild_tab(self._get_active_tab_name() or "Systemy RPG")
+        self._dirty_tabs.discard(self._get_active_tab_name() or "Systemy RPG")
+
+    def exit_guest_mode(self) -> None:
+        """
+        Powraca do własnych baz danych.
+
+        Ukrywa baner, włącza przyciski CRUD i przebudowuje wszystkie zakładki.
+        """
+        database_manager.set_guest_db_dir(None)
+
+        # Ukryj baner
+        self._guest_banner.configure(height=0)
+
+        # Włącz przyciski CRUD
+        for btn in self._ribbon_write_buttons:
+            try:
+                btn.configure(state="normal")
+            except Exception:
+                pass
+
+        # Przebuduj wszystkie zakładki z własnymi danymi
+        self._dirty_tabs = set(self.tabs.keys())
+        self._rebuild_tab(self._get_active_tab_name() or "Systemy RPG")
+        self._dirty_tabs.discard(self._get_active_tab_name() or "Systemy RPG")
+
+    def show_db_transfer_dialog(self) -> None:
+        """Otwiera dialog zarządzania bazami danych (eksport/import/gość)."""
+        db_transfer_dialog.show_db_transfer_dialog(
+            self,
+            on_enter_guest=self.enter_guest_mode,
+        )
 
     def show_help(self) -> None:
         """Wyświetla okno instrukcji obsługi"""

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Optional, Callable, Sequence, Any, Dict, List, Tuple
 import customtkinter as ctk
 import logging
-from database_manager import get_db_path
+from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel, open_calendar_picker
 
@@ -769,6 +769,14 @@ def dodaj_sesje_rpg(
 
     # Funkcja zapisu
     def save_session() -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa zapis danych jest wyłączony.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=dialog,
+            )
+            return
         if not validate_form():
             return
 
@@ -1534,6 +1542,14 @@ def open_edit_session_dialog(
 
     # Funkcja zapisu
     def save_session() -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa zapis danych jest wyłączony.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=dialog,
+            )
+            return
         if not validate_form():
             return
 

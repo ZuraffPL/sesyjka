@@ -7,7 +7,7 @@ import webbrowser
 from typing import Optional, Callable, Sequence, Any, Union, List, Dict, Tuple
 import customtkinter as ctk  # type: ignore
 import logging
-from database_manager import get_db_path
+from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
@@ -599,6 +599,14 @@ def fill_gracze_tab(
 
     # ── Callbacki tabeli ─────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa edycja danych jest wyłączona.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=tab,
+            )
+            return
         # row_data: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
         # open_edit_gracz_dialog oczekuje: [id, nick, imie, plec, social, glowny_int, wazna_int]
         edit_vals: List[Any] = [
@@ -635,6 +643,13 @@ def fill_gracze_tab(
             _on_edit(_row_idx, row_data)
 
         def _del() -> None:
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa usuwanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
             if messagebox.askyesno(
                 "Usuń gracza", f"Czy na pewno chcesz usunąć gracza: {row_data[1]}?", parent=tab
             ):

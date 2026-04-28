@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.30") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.34") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -107,12 +107,14 @@ PODZIĘKOWANIA DLA TESTERÓW:
 
 TECHNOLOGIE:
 • Język: Python 3.9+
-• GUI: CustomTkinter + tkinter
-• Arkusze (systemy): tksheet
-• Tabele (gracze/wydawcy/sesje): CTkDataTable (własny widget)
-• Ikony: Pillow (PIL) — tintowanie PNG
-• Wykresy: matplotlib
-• Baza danych: SQLite
+• GUI: CustomTkinter + tkinter/ttk
+• Tabele: CTkDataTable (własny widget) — ikony, sortowanie, hierarchia, tooltipy
+• Kalendarz: tkcalendar — graficzny picker dat w dialogach sesji
+• Ikony: Pillow (PIL) — tintowanie PNG dla trybu jasnego i ciemnego
+• Wykresy: matplotlib — wykresy kołowe i słupkowe w statystykach
+• Baza danych: SQLite (4 oddzielne pliki .db)
+• Eksport Excel: openpyxl — eksport baz do .xlsx (każda tabela = osobny arkusz)
+• Budowanie EXE: PyInstaller
 
 SKALOWANIE INTERFEJSU:
 • Wykryta rozdzielczość: {_screen_w}x{_screen_h} pikseli
@@ -188,7 +190,10 @@ DODATKOWE FUNKCJE:
 • Możliwość resetowania filtrów jednym kliknięciem
 • Automatyczne odświeżanie widoków i statystyk
 • Walidacja danych wejściowych
-• Backup automatyczny baz danych przy każdej aktualizacji struktury"""
+• Backup automatyczny baz danych przy każdej aktualizacji struktury
+• Eksport danych: ZIP (wszystkie bazy) lub Excel (.xlsx, każda tabela = osobny arkusz)
+• Transfer danych (import/eksport) dla pracy na wielu komputerach
+• Tryb gościa: przeglądanie danych bez możliwości edycji"""
 
     text_widget.insert('1.0', content)
     text_widget.configure(state='disabled')

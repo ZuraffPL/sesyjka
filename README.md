@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.30-blue)
+![Version](https://img.shields.io/badge/version-0.4.34-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -74,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.29-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.34-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.29.exe`
+4. Uruchom `Sesyjka-v0.4.34.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -102,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.29.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.29.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.34.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.34.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -131,7 +131,7 @@ python -m venv .venv
 
 4. Zainstaluj wymagane pakiety:
 ```bash
-pip install customtkinter tksheet matplotlib
+pip install -r requirements.txt
 ```
 
 5. Uruchom aplikację:
@@ -144,7 +144,7 @@ python main.py
 ```
 sesyjka/
 ├── main.py                 # Punkt wejścia aplikacji
-├── database_manager.py     # Zarządzanie bazami i migracjami
+├── database_manager.py     # Zarządzanie bazami, migracjami i eksportem danych
 ├── settings.py             # Ustawienia aplikacji (rozmiar okna, motywy)
 ├── font_scaling.py         # Moduł skalowania fontów
 ├── dialog_utils.py         # Bezpieczna geometria dialogów (DPI-safe)
@@ -159,6 +159,8 @@ sesyjka/
 ├── apphistory.py           # Historia wersji
 ├── help_dialog.py          # Dialog instrukcji obsługi
 ├── splash_screen.py        # Splash screen startowy
+├── db_transfer_dialog.py   # Dialog transferu/eksportu baz (ZIP, Excel)
+├── requirements.txt        # Wymagane pakiety Pythona
 ├── pyrightconfig.json      # Konfiguracja type checkera Pyright
 ├── Icons/                  # Ikony aplikacji (edit.png, ...)
 └── .github/                # Konfiguracja GitHub
@@ -192,7 +194,28 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Liczniki aktywnych filtrów na przyciskach
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
+## � Stack technologiczny
+
+| Komponent | Biblioteka | Opis |
+|-----------|-----------|------|
+| GUI (framework) | `customtkinter` | Nowoczesny UI z zaokrąglonymi rogami, tryb jasny/ciemny |
+| GUI (baza) | `tkinter` / `ttk` | Natywny toolkit Pythona (wybrane widgety) |
+| Tabele | `CTkDataTable` (własny) | Tabele z ikonami, sortowaniem, hierarchią, tooltipami |
+| Kalendarz | `tkcalendar` | Graficzny picker dat w dialogach sesji |
+| Wykresy | `matplotlib` | Wykresy kołowe i słupkowe w module statystyk |
+| Ikony/grafika | `Pillow (PIL)` | Tintowanie PNG ikon dla trybu jasnego i ciemnego |
+| Baza danych | `sqlite3` (stdlib) | 4 bazy: systemy, sesje, gracze, wydawcy |
+| Eksport Excel | `openpyxl` | Eksport wszystkich baz do pliku `.xlsx` (każda tabela = osobny arkusz) |
+| Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
+
 ## 📝 Changelog
+
+### v0.4.34 (28.04.2026)
+- 🔒 **Tryb gościa — pełna ochrona przed zapisem**: zablokowano wszystkie ścieżki edycji w trybie gościa (ikona ✏️, podwójne kliknięcie, menu PPM) we wszystkich zakładkach (Systemy, Sesje, Gracze, Wydawcy); nowy `_fire_edit_cb()` w `CTkDataTable` jako centralna brama
+- 🔒 **Ochrona na poziomie dialogów**: `save_session()` w dialogach dodawania i edycji sesji sprawdza tryb gościa przed zapisem
+- ⚡ **Naprawa zamrożenia po kliknięciu „Wróć do swoich danych"**: `refresh_statistics()` wywoływane synchronicznie blokowało UI na kilka sekund przy dużej bazie sesji; usunięto z `enter_guest_mode()` i `exit_guest_mode()` — statystyki odświeżają się leniwie przy kliknięciu zakładki
+- 📊 **Eksport baz do Excel**: nowa opcja w oknie transferu danych — każda tabela z każdej bazy SQLite jako osobny arkusz `.xlsx`; nagłówki z niebieskim tłem, auto-szerokość kolumn
+- 📋 **`requirements.txt`**: dodano plik z zablokowanymi wersjami wszystkich zależności (`openpyxl==3.1.5` i inne)
 
 ### v0.4.30 (28.04.2026)
 - 🐛 **Naprawa zawieszania okna wyboru graczy**: usunięto rekurencyjną kaskadę `var.trace` + `v.set(False)` w `validate_players_selection`; zamieniono `trace` na `command=` w CTkCheckBox; checkboxy 87 graczy ładowane partiami po 12 przez `after(0)` zamiast synchronicznie

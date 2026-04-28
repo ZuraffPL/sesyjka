@@ -9,7 +9,7 @@ import logging
 import threading
 from typing import Optional, Callable, Sequence, Any, Dict, List, Union
 import customtkinter as ctk  # type: ignore
-from database_manager import get_db_path, get_app_data_dir
+from database_manager import get_db_path, get_app_data_dir, is_guest_mode
 from font_scaling import scale_font_size
 from ctk_table import CTkDataTable
 from dialog_utils import apply_safe_geometry, clamp_geometry, create_ctk_toplevel
@@ -1745,6 +1745,14 @@ def fill_systemy_rpg_tab(
         fill_systemy_rpg_tab(tab, dark_mode=get_dark_mode_from_tab(tab))
 
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa edycja danych jest wyłączona.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=tab,
+            )
+            return
         sid = row_data[1] if len(row_data) > 1 else ""
         typ = row_data[3] if len(row_data) > 3 else ""
         if not sid:
@@ -1861,6 +1869,13 @@ def fill_systemy_rpg_tab(
             _on_edit(row_idx, row_data)
 
         def _delete() -> None:
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa usuwanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
             if not sid:
                 return
             if stype == "System":

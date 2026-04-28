@@ -7,7 +7,7 @@ from typing import Optional, Union, List, Dict, Any
 import webbrowser
 import customtkinter as ctk  # type: ignore
 import logging
-from database_manager import get_db_path
+from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
 from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
@@ -411,6 +411,14 @@ def fill_wydawcy_tab(
 
     # ── Callbacki tabeli ────────────────────────────────────────────────────
     def _on_edit(_row_idx: int, row_data: List[Any]) -> None:
+        if is_guest_mode():
+            messagebox.showwarning(
+                "Tryb gościa",
+                "W trybie gościa edycja danych jest wyłączona.\n"
+                "Wróć do własnych danych, aby dokonać zmian.",
+                parent=tab,
+            )
+            return
         open_edit_dialog(
             tab,
             row_data,
@@ -444,6 +452,13 @@ def fill_wydawcy_tab(
             )
 
         def _del() -> None:
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa usuwanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
             if messagebox.askyesno(
                 "Usuń wydawcę", f"Czy na pewno chcesz usunąć wydawcę: {row_data[1]}?", parent=tab
             ):

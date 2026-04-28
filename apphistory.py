@@ -62,6 +62,35 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.34",
+            "date": "28.04.2026",
+            "changes": [
+                "\ud83d\udd12 TRYB GO\u015aCIA \u2014 OCHRONA PRZED ZAPISEM:\u00b0",
+                "",
+                "\u2705 PE\u0141NA BLOKADA EDYCJI W TRYBIE GO\u015aCIA:",
+                "  \u2022 ikona \u270f\ufe0f, podw\u00f3jne klikni\u0119cie i menu PPM zablokowane we wszystkich zak\u0142adkach",
+                "  \u2022 nowy _fire_edit_cb() w CTkDataTable \u2014 centralna brama blokuj\u0105ca przed wywo\u0142aniem _edit_cb",
+                "  \u2022 guard is_guest_mode() w _on_edit() i _del() we wszystkich modu\u0142ach (Systemy, Sesje, Gracze, Wydawcy)",
+                "  \u2022 guard w save_session() w dialogach dodawania i edycji sesji",
+                "",
+                "\u26a1 NAPRAWA ZAMRO\u017bENIA PO KLIKNIi\u0118CIU \u201eWR\u00d3\u0106 DO SWOICH DANYCH\u201d:",
+                "  \u2022 refresh_statistics() wywo\u0142ywane synchronicznie blokowa\u0142o w\u0105tek UI na kilka sekund",
+                "  \u2022 usuni\u0119to z enter_guest_mode() i exit_guest_mode() \u2014 statystyki odswiezaj\u0105 si\u0119 leniwie",
+                "",
+                "\ud83d\udcca EKSPORT BAZ DO EXCELA:",
+                "  \u2022 nowa opcja \u201eExcel (.xlsx)\u201d w oknie transferu danych obok eksportu ZIP",
+                "  \u2022 ka\u017cda tabela z ka\u017cdej bazy SQLite jako osobny arkusz (format: \u201eLabel \u2014 tabela\u201d)",
+                "  \u2022 wiersz nag\u0142\u00f3wkowy z niebieskim t\u0142em i bia\u0142\u0105 pogrubion\u0105 czcionk\u0105",
+                "  \u2022 auto-szeroko\u015b\u0107 kolumn (maks. 50 znak\u00f3w)",
+                "  \u2022 nowa funkcja export_databases_excel() w database_manager.py",
+                "  \u2022 wymagany pakiet: openpyxl\u22653.1.5",
+                "",
+                "\ud83d\udccb REQUIREMENTS.TXT:",
+                "  \u2022 dodano plik z zablokowanymi wersjami wszystkich zale\u017cno\u015bci",
+                "  \u2022 openpyxl==3.1.5, et_xmlfile==2.0.0 wpisane jawnie",
+            ],
+        },
+        {
             "version": "0.4.30",
             "date": "28.04.2026",
             "changes": [

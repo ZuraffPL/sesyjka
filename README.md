@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.29-blue)
+![Version](https://img.shields.io/badge/version-0.4.30-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -193,6 +193,10 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.4.30 (28.04.2026)
+- 🐛 **Naprawa zawieszania okna wyboru graczy**: usunięto rekurencyjną kaskadę `var.trace` + `v.set(False)` w `validate_players_selection`; zamieniono `trace` na `command=` w CTkCheckBox; checkboxy 87 graczy ładowane partiami po 12 przez `after(0)` zamiast synchronicznie
+- 🔍 **Naprawa dialogu filtrowania sesji**: powiększono okno do 820×580 (resizable), dodano `columnconfigure` przed budową wierszy, poprawiono mechanizm reflow — jeden zbiorczy `update_idletasks` + `_run_all_reflows` zamiast czterech rozłącznych `after(150)` z samoplanowaniem
 
 ### v0.4.29 (28.04.2026)
 - 🐛 **Naprawa okna wyboru graczy i MG**: `CTkScrollableFrame` w dialogach wyboru graczy i Mistrza Gry (dodawanie i edycja sesji) nie miał ustawionej jawnej wysokości — przy 60+ graczach okno rozciągało się na ~2000px zamiast scrollować; naprawiono przez dodanie `height=300`

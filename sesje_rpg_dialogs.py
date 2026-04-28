@@ -374,15 +374,7 @@ def dodaj_sesje_rpg(
 
         def validate_players_selection() -> None:
             max_p = int(liczba_var.get())
-            # Jeden przebieg: odznacz nadmiarowych (jeśli zaznaczono za dużo)
-            count = 0
-            for pid, v in player_vars.items():
-                if v.get():
-                    count += 1
-                    if count > max_p:
-                        v.set(False)
-                        count -= 1
-            # Jeden przebieg: włącz/wyłącz checkboxy
+            count = sum(1 for v in player_vars.values() if v.get())
             at_max = count >= max_p
             for pid, cb in player_checkboxes.items():
                 cb.configure(
@@ -407,21 +399,31 @@ def dodaj_sesje_rpg(
                 w.destroy()
             player_vars.clear()
             player_checkboxes.clear()
-            for i, (player_id, player_nick) in enumerate(players):
-                var = tk.BooleanVar(value=player_id in selected_players_list)
-                player_vars[player_id] = var
-                cb = ctk.CTkCheckBox(
-                    scroll_frame,
-                    text=f"{player_nick} (ID: {player_id})",
-                    variable=var,
-                    text_color=("gray10", "#DCE4EE"),
-                    text_color_disabled=("gray10", "#DCE4EE"),
-                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                )
-                cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                player_checkboxes[player_id] = cb
-                var.trace("w", lambda *args: validate_players_selection())
-            _apply_filter()
+            player_list = list(players)
+            _BATCH = 12
+
+            def _add_batch(start: int) -> None:
+                for i in range(start, min(start + _BATCH, len(player_list))):
+                    player_id, player_nick = player_list[i]
+                    var = tk.BooleanVar(value=player_id in selected_players_list)
+                    player_vars[player_id] = var
+                    cb = ctk.CTkCheckBox(
+                        scroll_frame,
+                        text=f"{player_nick} (ID: {player_id})",
+                        variable=var,
+                        command=validate_players_selection,
+                        text_color=("gray10", "#DCE4EE"),
+                        text_color_disabled=("gray10", "#DCE4EE"),
+                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+                    )
+                    cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
+                    player_checkboxes[player_id] = cb
+                if start + _BATCH < len(player_list):
+                    scroll_frame.after(0, lambda s=start + _BATCH: _add_batch(s))
+                else:
+                    _apply_filter()
+
+            _add_batch(0)
 
         search_var.trace("w", _apply_filter)
         _rebuild_checkboxes()
@@ -1165,21 +1167,31 @@ def open_edit_session_dialog(
                 w.destroy()
             player_vars_local.clear()
             player_checkboxes.clear()
-            for i, (player_id, player_nick) in enumerate(players):
-                var = tk.BooleanVar(value=player_id in selected_players_list)
-                player_vars_local[player_id] = var
-                cb = ctk.CTkCheckBox(
-                    scroll_frame_edit,
-                    text=f"{player_nick} (ID: {player_id})",
-                    variable=var,
-                    text_color=("gray10", "#DCE4EE"),
-                    text_color_disabled=("gray10", "#DCE4EE"),
-                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                )
-                cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                player_checkboxes[player_id] = cb
-                var.trace("w", lambda *args: update_count_and_validate())
-            _apply_filter_edit()
+            player_list = list(players)
+            _BATCH = 12
+
+            def _add_batch(start: int) -> None:
+                for i in range(start, min(start + _BATCH, len(player_list))):
+                    player_id, player_nick = player_list[i]
+                    var = tk.BooleanVar(value=player_id in selected_players_list)
+                    player_vars_local[player_id] = var
+                    cb = ctk.CTkCheckBox(
+                        scroll_frame_edit,
+                        text=f"{player_nick} (ID: {player_id})",
+                        variable=var,
+                        command=update_count_and_validate,
+                        text_color=("gray10", "#DCE4EE"),
+                        text_color_disabled=("gray10", "#DCE4EE"),
+                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+                    )
+                    cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
+                    player_checkboxes[player_id] = cb
+                if start + _BATCH < len(player_list):
+                    scroll_frame_edit.after(0, lambda s=start + _BATCH: _add_batch(s))
+                else:
+                    _apply_filter_edit()
+
+            _add_batch(0)
 
         search_var_edit.trace("w", _apply_filter_edit)
         _rebuild_checkboxes_edit()

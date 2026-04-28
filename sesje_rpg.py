@@ -823,10 +823,12 @@ def fill_sesje_rpg_tab(
         dlg = create_ctk_toplevel(tab)
         dlg.title("Filtruj sesje RPG")
         dlg.transient(tab.winfo_toplevel())
-        apply_safe_geometry(dlg, tab.winfo_toplevel(), 520, 320)
+        dlg.resizable(True, True)
+        apply_safe_geometry(dlg, tab.winfo_toplevel(), 820, 580)
 
         outer = ctk.CTkScrollableFrame(dlg)
         outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        outer.columnconfigure(1, weight=1)  # ustaw przed dodaniem wierszy
 
         cur = data_ref[0]
 
@@ -844,6 +846,7 @@ def fill_sesje_rpg_tab(
         ]
 
         selected: Dict[str, set] = {}
+        all_reflows: List[Any] = []
 
         def _get_existing(key: str) -> set:
             v = active_filters_sesje.get(key, [])
@@ -889,7 +892,6 @@ def fill_sesje_rpg_tab(
             def _reflow(event: Any = None) -> None:
                 avail = wrap.winfo_width()
                 if avail <= 1:
-                    wrap.after(50, _reflow)
                     return
                 x, y, row_h = 0, 0, 0
                 for b in btns:
@@ -905,12 +907,20 @@ def fill_sesje_rpg_tab(
                     row_h = max(row_h, h)
                 wrap.configure(height=max(y + row_h, 30))
 
+            all_reflows.append(_reflow)
             wrap.bind("<Configure>", _reflow)
-            dlg.after(150, _reflow)
 
         for ri, (label, key, vals) in enumerate(rows_cfg):
             _add_toggle_row(outer, ri, label, key, vals)
-        outer.columnconfigure(1, weight=1)
+
+        def _run_all_reflows() -> None:
+            if not dlg.winfo_exists():
+                return
+            dlg.update_idletasks()
+            for rf in all_reflows:
+                rf()
+
+        dlg.after(250, _run_all_reflows)
 
         bf = ctk.CTkFrame(dlg, fg_color="transparent")
         bf.pack(pady=(6, 10))

@@ -62,6 +62,24 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.30",
+            "date": "28.04.2026",
+            "changes": [
+                "\ud83d\udc1b NAPRAWA WYDAJNO\u015aCI I B\u0141\u0118D\u00d3W DIALOG\u00d3W:\u00b0",
+                "",
+                "\u2705 OKNO WYBORU GRACZY (DODAWANIE I EDYCJA SESJI):",
+                "  \u2022 usuni\u0119to rekurencyjn\u0105 kaskad\u0119 var.trace + v.set(False) w validate_players_selection",
+                "  \u2022 zamieniono trace(\u201ew\u201d) na command= w CTkCheckBox \u2014 callback tylko od klikni\u0119cia",
+                "  \u2022 checkboxy graczy \u0142adowane partiami po 12 przez after(0) \u2014 UI nie zamarza przy 87 graczach",
+                "",
+                "\u2705 DIALOG FILTROWANIA SESJI:",
+                "  \u2022 powi\u0119kszono okno do 820\u00d7580 z w\u0142\u0105czonym resizable=True",
+                "  \u2022 columnconfigure(1, weight=1) przeniesione przed budow\u0105 wierszy filtr\u00f3w",
+                "  \u2022 reflow scalony \u2014 jeden update_idletasks + _run_all_reflows zamiast 4 osobnych after(150)",
+                "  \u2022 brak samoplanowania after(50) \u2014 obs\u0142uga przez bind(<Configure>) przy ka\u017cdym resize",
+            ],
+        },
+        {
             "version": "0.4.29",
             "date": "28.04.2026",
             "changes": [

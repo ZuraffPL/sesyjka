@@ -165,8 +165,8 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "podwójne kliknięcie, menu PPM oraz przyciski Dodaj/Usuń są nieaktywne lub "
            "pokazują komunikat ostrzegawczy."),
     ("li", "Ribbon wyświetla pomarańczowy pasek z informacją o aktywnym trybie gościa."),
-    ("li", "Kliknięcie „Wróć do swoich danych" przywraca własną bazę i wyłącza tryb gościa. "
-           "Statystyki odświeżają się automatycznie przy kliknięciu zakładki."),
+    ("li", "Klikni\u0119cie \u201eWr\u00f3\u0107 do swoich danych\u201d przywraca w\u0142asn\u0105 baz\u0119 i wy\u0142\u0105cza tryb go\u015bcia. "
+           "Statystyki od\u015bwie\u017caj\u0105 si\u0119 automatycznie przy klikni\u0119ciu zak\u0142adki."),
     ("sep", ""),
 
     ("h1", "⌨️ Skróty i wskazówki"),

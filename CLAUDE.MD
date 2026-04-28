@@ -199,10 +199,10 @@ threading.Thread(target=_load_data_bg, daemon=True).start()
 
         przy generowaniu tekstu changeloga trzymać się istniejącego formatowania (punkty, emoji, sekcje „PROBLEM/ROZWIĄZANIE”) i nie skracać go automatycznie bez wyraźnej dyrektywy.
         **Uwaga dot. emoji i encodingu:** emoji w changelogu mogą powodować problemy z kodowaniem w `.exe` na starszych wersjach Windows (brak czcionki Segoe UI Emoji lub niepoprawne locale). Przy budowaniu EXE przez PyInstaller należy upewnić się, że plik źródłowy jest zapisany w UTF-8 i że `sys.stdout` jest odpowiednio skonfigurowany.
-        **KRYTYCZNE — polskie cudzysłowy w `apphistory.py`:**
+        **KRYTYCZNE — polskie cudzysłowy w `apphistory.py` i `help_dialog.py`:**
         Narzędzia do edycji plików (replace_string_in_file, multi_replace_string_in_file) regularnie wstawiają cudzysłów zamykający `"` (U+201D) jako ASCII `"` (0x22), co kończy stringa Pythona przedwcześnie i powoduje błędy parsowania.
 
-        **Obowiązkowa zasada:** w stringach `version_history` w `apphistory.py` NIGDY nie używać typograficznych cudzysłowów bezpośrednio (`„` i `"`). Zamiast nich zawsze używać sekwencji escape Unicode:
+        **Obowiązkowa zasada:** w stringach `version_history` w `apphistory.py` ORAZ w liście `_HELP_CONTENT` w `help_dialog.py` NIGDY nie używać typograficznych cudzysłowów bezpośrednio (`„` i `"`). Zamiast nich zawsze używać sekwencji escape Unicode:
         - otwierający: `\u201e` (zamiast `„`)
         - zamykający: `\u201d` (zamiast `"`)
 
@@ -215,7 +215,11 @@ threading.Thread(target=_load_data_bg, daemon=True).start()
         "  • pole „Przypisz do systemu" (powiązanie z katalogiem)"
         ```
 
-        Po każdej edycji `apphistory.py` przez narzędzie — zawsze weryfikować `get_errors()` przed kontynuacją.## Zasady pracy z bazą danych (SQLite + database_manager)
+        Zasada dotyczy **wszystkich plików Python**, w których stringi zawierają polskie cudzysłowy typograficzne wewnątrz literałów ograniczonych przez `"`. Dotyczy to w szczególności:
+        - `apphistory.py` — lista `version_history`
+        - `help_dialog.py` — lista `_HELP_CONTENT`
+
+        Po każdej edycji tych plików przez narzędzie — zawsze weryfikować `get_errors()` przed kontynuacją.## Zasady pracy z bazą danych (SQLite + database_manager)
 
     Wszystkie połączenia do baz:
 

@@ -62,6 +62,24 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.35",
+            "date": "28.04.2026",
+            "changes": [
+                "⚡ OPTYMALIZACJA WYDAJNOŚCI — DIALOGI SESJI:°",
+                "",
+                "✅ OKNA WYBORU GRACZY I MISTRZA GRY (DODAWANIE I EDYCJA SESJI):",
+                "  • zastąpiono CTkCheckBox/CTkRadioButton na tk.Listbox — 1 widget zamiast ~87×5=435 operacji Tk",
+                "  • eliminacja zamrażania UI przy otwieraniu dialogów wyboru (87+ graczy)",
+                "  • naprawa znikającego przycisku Dodaj gracza w CTkScrollableFrame przy dużej liczbie graczy",
+                "  • zmiana obowiązuje w obu kontekstach: dialog dodawania i edycji sesji",
+                "",
+                "✅ TABELA SESJI — _build_rows (ctk_table.py):",
+                "  • zastąpiono dopasowanie pozycyjne ramek (frame[i] vs data[i]) dopasowaniem po ID wiersza",
+                "  • przy posortowaniu malejącym i dodaniu nowej sesji: ~484×pack() zamiast ~4356 destroy+recreate",
+                "  • eliminacja wielosekundowego zamrożenia głównego okna przy filtrowaniu i sortowaniu",
+            ],
+        },
+        {
             "version": "0.4.34",
             "date": "28.04.2026",
             "changes": [

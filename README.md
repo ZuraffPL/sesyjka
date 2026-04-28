@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.34-blue)
+![Version](https://img.shields.io/badge/version-0.4.35-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -87,9 +87,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.34-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.35-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.34.exe`
+4. Uruchom `Sesyjka-v0.4.35.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -115,8 +115,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.34.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.34.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.35.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.35.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -222,6 +222,10 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.35 (28.04.2026)
+- ⚡ **Optymalizacja: dialogi wyboru graczy/MG**: zastąpiono `CTkCheckBox`/`CTkRadioButton` na `tk.Listbox` — 1 widget zamiast ~435 operacji Tk; eliminacja zamrażania UI przy 87+ graczach w oknach wyboru (dodawanie i edycja sesji)
+- ⚡ **Optymalizacja: tabela sesji (`_build_rows`)**: dopasowanie ramek po ID wiersza zamiast pozycji — eliminacja ~4356 destroy+recreate przy sortowaniu; przywrócenie płynności przy 484+ sesjach
 
 ### v0.4.34 (28.04.2026)
 - � **Eksport baz danych**: zapis 4 baz SQLite do pliku **ZIP** (jedno archiwum) lub **folderu** (osobne pliki `.db`) — przenoszenie danych między urządzeniami lub tworzenie kopii zapasowej

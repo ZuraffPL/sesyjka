@@ -60,6 +60,19 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Trójkolorowe wiersze Systemów: szary (brak pozycji), niebieski (tylko suplementy), złoty (ma PG)
 - Ręczna zmiana szerokości kolumn — zapamiętywana między uruchomieniami
 
+### 💾 Transfer danych i kopie zapasowe
+- **Eksport do ZIP** — zapis wszystkich 4 baz SQLite do jednego archiwum `.zip` (przenoszenie między urządzeniami, backup)
+- **Eksport do folderu** — zapis baz jako osobne pliki `.db`
+- **Eksport do Excel (.xlsx)** — każda tabela z każdej bazy jako osobny arkusz; nagłówki z niebieskim tłem, auto-szerokość kolumn
+- **Import z ZIP/folderu** — zastąpienie własnych baz danymi z archiwum; automatyczny backup przed nadpisaniem + walidacja zawartości
+- Automatyczna kopia zapasowa baz przy każdej aktualizacji struktury
+
+### 👁️ Tryb gościa
+- Przeglądanie baz innego użytkownika z pliku ZIP lub folderu **bez zastępowania własnych danych**
+- Ribbon sygnalizuje tryb gościa pomarańczowym paskiem informacyjnym
+- Wszystkie operacje zapisu zablokowane (ikona ✏️, dwuklik, PPM, Dodaj/Usuń) — tylko odczyt
+- Przycisk „Wróć do swoich danych" przywraca własną bazę jednym kliknięciem
+
 ### 🖥️ Wysokie DPI i skalowanie
 - Automatyczne skalowanie interfejsu do rozdzielczości ekranu
 - Bezpieczna geometria dialogów — dopasowanie do aktualnego skalowania Windows (100%-300%)

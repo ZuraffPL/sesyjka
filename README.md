@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.28-blue)
+![Version](https://img.shields.io/badge/version-0.4.29-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -74,9 +74,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.28-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.29-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.28.exe`
+4. Uruchom `Sesyjka-v0.4.29.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -102,8 +102,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.28.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.28.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.29.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.29.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -193,6 +193,9 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 - Bezpieczna geometria dialogów — dopasowanie do rozdzielczości i skalowania Windows
 
 ## 📝 Changelog
+
+### v0.4.29 (28.04.2026)
+- 🐛 **Naprawa okna wyboru graczy i MG**: `CTkScrollableFrame` w dialogach wyboru graczy i Mistrza Gry (dodawanie i edycja sesji) nie miał ustawionej jawnej wysokości — przy 60+ graczach okno rozciągało się na ~2000px zamiast scrollować; naprawiono przez dodanie `height=300`
 
 ### v0.4.28 (27.04.2026)
 - 🖱️ **Podwójne kliknięcie — edycja**: dwuklik na dowolnym wierszu tabeli otwiera dialog edycji we wszystkich zakładkach (Systemy RPG, Sesje RPG, Gracze, Wydawcy)

@@ -62,6 +62,18 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.29",
+            "date": "28.04.2026",
+            "changes": [
+                "\ud83d\udc1b NAPRAWA OKNA WYBORU GRACZY I MG:\u00b0",
+                "",
+                "\u2705 DIALOG WYBORU GRACZY \u2014 DODAWANIE I EDYCJA SESJI:",
+                "  \u2022 CTkScrollableFrame nie mia\u0142 ustawionej jawnej wysoko\u015bci (brak parametru height=)",
+                "  \u2022 przy 60+ graczach okno rozci\u0105ga\u0142o si\u0119 na ~2000px zamiast scrollowa\u0107",
+                "  \u2022 naprawiono przez dodanie height=300 w 4 miejscach (gracze + MG, dodaj + edytuj)",
+            ],
+        },
+        {
             "version": "0.4.28",
             "date": "27.04.2026",
             "changes": [

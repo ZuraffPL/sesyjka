@@ -365,7 +365,7 @@ def dodaj_sesje_rpg(
         search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         search_entry.focus()
 
-        scroll_frame = ctk.CTkScrollableFrame(players_dialog)
+        scroll_frame = ctk.CTkScrollableFrame(players_dialog, height=300)
         scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         scroll_frame.columnconfigure(0, weight=1)
 
@@ -551,7 +551,7 @@ def dodaj_sesje_rpg(
         mg_search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         mg_search_entry.focus()
 
-        mg_scroll_frame = ctk.CTkScrollableFrame(mg_dialog)
+        mg_scroll_frame = ctk.CTkScrollableFrame(mg_dialog, height=300)
         mg_scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         mg_scroll_frame.columnconfigure(0, weight=1)
 
@@ -1128,7 +1128,7 @@ def open_edit_session_dialog(
         search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         search_entry_edit.focus()
 
-        scroll_frame_edit = ctk.CTkScrollableFrame(players_dialog)
+        scroll_frame_edit = ctk.CTkScrollableFrame(players_dialog, height=300)
         scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         scroll_frame_edit.columnconfigure(0, weight=1)
 
@@ -1316,7 +1316,7 @@ def open_edit_session_dialog(
         mg_search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         mg_search_entry_edit.focus()
 
-        mg_scroll_frame_edit = ctk.CTkScrollableFrame(mg_dialog)
+        mg_scroll_frame_edit = ctk.CTkScrollableFrame(mg_dialog, height=300)
         mg_scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
         mg_scroll_frame_edit.columnconfigure(0, weight=1)
 

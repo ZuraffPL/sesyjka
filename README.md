@@ -211,10 +211,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 ## 📝 Changelog
 
 ### v0.4.34 (28.04.2026)
-- 🔒 **Tryb gościa — pełna ochrona przed zapisem**: zablokowano wszystkie ścieżki edycji w trybie gościa (ikona ✏️, podwójne kliknięcie, menu PPM) we wszystkich zakładkach (Systemy, Sesje, Gracze, Wydawcy); nowy `_fire_edit_cb()` w `CTkDataTable` jako centralna brama
-- 🔒 **Ochrona na poziomie dialogów**: `save_session()` w dialogach dodawania i edycji sesji sprawdza tryb gościa przed zapisem
-- ⚡ **Naprawa zamrożenia po kliknięciu „Wróć do swoich danych"**: `refresh_statistics()` wywoływane synchronicznie blokowało UI na kilka sekund przy dużej bazie sesji; usunięto z `enter_guest_mode()` i `exit_guest_mode()` — statystyki odświeżają się leniwie przy kliknięciu zakładki
-- 📊 **Eksport baz do Excel**: nowa opcja w oknie transferu danych — każda tabela z każdej bazy SQLite jako osobny arkusz `.xlsx`; nagłówki z niebieskim tłem, auto-szerokość kolumn
+- � **Eksport baz danych**: zapis 4 baz SQLite do pliku **ZIP** (jedno archiwum) lub **folderu** (osobne pliki `.db`) — przenoszenie danych między urządzeniami lub tworzenie kopii zapasowej
+- 📥 **Import baz danych**: wczytanie baz z pliku ZIP lub folderu z automatycznym backupem bieżących danych i walidacją zawartości przed nadpisaniem
+- 📊 **Eksport do Excel (.xlsx)**: nowa trzecia opcja eksportu — każda tabela SQLite jako osobny arkusz; nagłówki z niebieskim tłem, auto-szerokość kolumn (maks. 50 znaków); wymagany `openpyxl>=3.1.5`
+- 👁️ **Tryb gościa**: przeglądanie baz innego użytkownika z ZIP/folderu bez zastępowania własnych danych; ribbon sygnalizuje tryb pomarańczowym paskiem; przycisk „Wróć do swoich danych" przywraca własną bazę
+- 🔒 **Pełna ochrona trybu gościa przed zapisem**: zablokowano wszystkie ścieżki edycji (ikona ✏️, dwuklik, PPM, przyciski Dodaj/Usuń) we wszystkich zakładkach; nowy `_fire_edit_cb()` w `CTkDataTable` jako centralna brama; guard w `save_session()`
+- ⚡ **Naprawa zamrożenia po kliknięciu „Wróć do swoich danych"**: usunięto synchroniczne `refresh_statistics()` z `enter/exit_guest_mode()` — statystyki odświeżają się leniwie przy kliknięciu zakładki
 - 📋 **`requirements.txt`**: dodano plik z zablokowanymi wersjami wszystkich zależności (`openpyxl==3.1.5` i inne)
 
 ### v0.4.30 (28.04.2026)

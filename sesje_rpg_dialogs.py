@@ -338,7 +338,9 @@ def dodaj_sesje_rpg(
             selected_players_label.configure(text=", ".join(player_names))  # type: ignore
 
     def open_players_selection() -> None:
-        # Okno wyboru graczy
+        # Okno wyboru graczy — tk.Listbox zamiast CTkScrollableFrame+CTkCheckBox×N
+        # (CTkCheckBox tworzy ~5 wewnętrznych widgetów Tk każdy; przy 87 graczach = ~435
+        # synchronicznych operacji Tk blokujących UI. Listbox to 1 widget na całą listę.)
         players_dialog = create_ctk_toplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
@@ -349,84 +351,84 @@ def dodaj_sesje_rpg(
         players_dialog.rowconfigure(2, weight=1)
 
         max_players = int(liczba_var.get())
-        ctk.CTkLabel(
+        header_lbl = ctk.CTkLabel(
             players_dialog,
-            text=f"Wybierz dokładnie {max_players} graczy:",
+            text=f"Wybierz dok\u0142adnie {max_players} graczy: (zaznaczono: 0)",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12)),
-        ).grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
+        )
+        header_lbl.grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
 
         search_var = tk.StringVar()
         search_entry = ctk.CTkEntry(
             players_dialog,
             textvariable=search_var,
-            placeholder_text="🔍 Szukaj gracza...",
+            placeholder_text="\U0001f50d Szukaj gracza...",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         )
         search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         search_entry.focus()
 
-        scroll_frame = ctk.CTkScrollableFrame(players_dialog, height=300)
-        scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
-        scroll_frame.columnconfigure(0, weight=1)
+        # ── Listbox + Scrollbar ──────────────────────────────────────────────
+        lb_frame = tk.Frame(players_dialog)
+        lb_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        lb_frame.rowconfigure(0, weight=1)
+        lb_frame.columnconfigure(0, weight=1)
 
-        player_vars: Dict[int, tk.BooleanVar] = {}
-        player_checkboxes: Dict[int, ctk.CTkCheckBox] = {}
+        listbox = tk.Listbox(
+            lb_frame,
+            selectmode=tk.MULTIPLE,
+            activestyle="none",
+            font=("Segoe UI", scale_font_size(11)),
+            height=16,
+            exportselection=False,
+        )
+        lb_scrollbar = ttk.Scrollbar(lb_frame, orient=tk.VERTICAL, command=listbox.yview)
+        listbox.configure(yscrollcommand=lb_scrollbar.set)
+        listbox.grid(row=0, column=0, sticky="nsew")
+        lb_scrollbar.grid(row=0, column=1, sticky="ns")
 
-        def validate_players_selection() -> None:
-            max_p = int(liczba_var.get())
-            count = sum(1 for v in player_vars.values() if v.get())
-            at_max = count >= max_p
-            for pid, cb in player_checkboxes.items():
-                cb.configure(
-                    state=("disabled" if (at_max and not player_vars[pid].get()) else "normal")
-                )
+        # filtered_ids mapuje indeks listboxa → player_id (zmienia się przy filtrze)
+        filtered_ids: List[int] = []
 
-        def _apply_filter(*_args: Any) -> None:
+        def _rebuild_listbox(*_args: Any) -> None:
             query = search_var.get().lower()
-            row_idx = 0
+            # Zapamiętaj zaznaczenie przed przebudową
+            current_sel = {
+                filtered_ids[i] for i in listbox.curselection() if i < len(filtered_ids)
+            }
+            # Uzupełnij z wcześniej wybranej listy (przy pierwszym otwarciu)
+            current_sel.update(selected_players_list)
+            listbox.delete(0, tk.END)
+            filtered_ids.clear()
             for player_id, player_nick in players:
-                if player_id not in player_checkboxes:
+                if query and query not in player_nick.lower():
                     continue
-                cb = player_checkboxes[player_id]
-                if query in player_nick.lower():
-                    cb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
-                    row_idx += 1
-                else:
-                    cb.grid_remove()
+                listbox.insert(tk.END, f"{player_nick} (ID: {player_id})")
+                filtered_ids.append(player_id)
+            # Przywróć zaznaczenie
+            for idx, pid in enumerate(filtered_ids):
+                if pid in current_sel:
+                    listbox.select_set(idx)
+            _update_header()
 
-        def _rebuild_checkboxes() -> None:
-            for w in scroll_frame.winfo_children():
-                w.destroy()
-            player_vars.clear()
-            player_checkboxes.clear()
-            player_list = list(players)
-            _BATCH = 12
+        def _update_header() -> None:
+            count = len(listbox.curselection())
+            color = "#2E7D32" if count == max_players else "#C62828"
+            header_lbl.configure(
+                text=f"Wybierz dok\u0142adnie {max_players} graczy: (zaznaczono: {count})",
+                text_color=color,
+            )
 
-            def _add_batch(start: int) -> None:
-                for i in range(start, min(start + _BATCH, len(player_list))):
-                    player_id, player_nick = player_list[i]
-                    var = tk.BooleanVar(value=player_id in selected_players_list)
-                    player_vars[player_id] = var
-                    cb = ctk.CTkCheckBox(
-                        scroll_frame,
-                        text=f"{player_nick} (ID: {player_id})",
-                        variable=var,
-                        command=validate_players_selection,
-                        text_color=("gray10", "#DCE4EE"),
-                        text_color_disabled=("gray10", "#DCE4EE"),
-                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                    )
-                    cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                    player_checkboxes[player_id] = cb
-                if start + _BATCH < len(player_list):
-                    scroll_frame.after(0, lambda s=start + _BATCH: _add_batch(s))
-                else:
-                    _apply_filter()
+        def _on_listbox_select(_e: Any) -> None:
+            # Ogranicz selekcję do max_players
+            sel = list(listbox.curselection())
+            if len(sel) > max_players:
+                for idx in sel[max_players:]:
+                    listbox.select_clear(idx)
+            _update_header()
 
-            _add_batch(0)
-
-        search_var.trace("w", _apply_filter)
-        _rebuild_checkboxes()
+        listbox.bind("<<ListboxSelect>>", _on_listbox_select)
+        search_var.trace_add("write", _rebuild_listbox)  # type: ignore[misc]
 
         buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
         buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
@@ -436,7 +438,7 @@ def dodaj_sesje_rpg(
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
-            _rebuild_checkboxes()
+            _rebuild_listbox()
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
 
@@ -449,7 +451,7 @@ def dodaj_sesje_rpg(
 
         ctk.CTkButton(
             buttons_frame,
-            text="➕ Dodaj gracza",
+            text="\u2795 Dodaj gracza",
             command=_open_add_player,
             width=120,
             fg_color="#1976D2",
@@ -458,16 +460,21 @@ def dodaj_sesje_rpg(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
-            selected = [pid for pid, v in player_vars.items() if v.get()]
+            sel_indices = list(listbox.curselection())
+            selected = [filtered_ids[i] for i in sel_indices if i < len(filtered_ids)]
             expected_count = int(liczba_var.get())
             if len(selected) != expected_count:
                 messagebox.showerror(
-                    "Błąd", f"Wybierz dokładnie {expected_count} graczy.", parent=players_dialog
+                    "B\u0142\u0105d",
+                    f"Wybierz dok\u0142adnie {expected_count} graczy.",
+                    parent=players_dialog,
                 )
                 return
             if selected_mg_id in selected:
                 messagebox.showerror(
-                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=players_dialog
+                    "B\u0142\u0105d",
+                    "Mistrz Gry nie mo\u017ce by\u0107 jednocze\u015bnie graczem.",
+                    parent=players_dialog,
                 )
                 return
             selected_players_list.clear()
@@ -477,7 +484,7 @@ def dodaj_sesje_rpg(
 
         ctk.CTkButton(
             buttons_frame,
-            text="Zapisz wybór",
+            text="Zapisz wyb\u00f3r",
             command=save_players_selection,
             width=110,
             fg_color="#2E7D32",
@@ -493,6 +500,8 @@ def dodaj_sesje_rpg(
             hover_color="#555555",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         ).grid(row=0, column=3, sticky="e")
+
+        _rebuild_listbox()
 
     choose_players_btn = ctk.CTkButton(
         players_frame, text="Wybierz graczy...", command=open_players_selection, width=140
@@ -526,7 +535,7 @@ def dodaj_sesje_rpg(
                     break
 
     def open_mg_selection() -> None:
-        # Okno wyboru MG
+        # Okno wyboru MG — tk.Listbox zamiast CTkScrollableFrame+CTkRadioButton×N
         mg_dialog = create_ctk_toplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
@@ -547,53 +556,58 @@ def dodaj_sesje_rpg(
         mg_search_entry = ctk.CTkEntry(
             mg_dialog,
             textvariable=mg_search_var,
-            placeholder_text="🔍 Szukaj gracza...",
+            placeholder_text="\U0001f50d Szukaj gracza...",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         )
         mg_search_entry.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         mg_search_entry.focus()
 
-        mg_scroll_frame = ctk.CTkScrollableFrame(mg_dialog, height=300)
-        mg_scroll_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
-        mg_scroll_frame.columnconfigure(0, weight=1)
+        # ── Listbox + Scrollbar ──────────────────────────────────────────────
+        mg_lb_frame = tk.Frame(mg_dialog)
+        mg_lb_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_lb_frame.rowconfigure(0, weight=1)
+        mg_lb_frame.columnconfigure(0, weight=1)
 
-        mg_var = tk.IntVar(value=selected_mg_id)
-        mg_radiobuttons: List[ctk.CTkRadioButton] = []
-        _mg_rb_map: Dict[int, ctk.CTkRadioButton] = {}
+        mg_listbox = tk.Listbox(
+            mg_lb_frame,
+            selectmode=tk.SINGLE,
+            activestyle="none",
+            font=("Segoe UI", scale_font_size(11)),
+            height=16,
+            exportselection=False,
+        )
+        mg_scrollbar = ttk.Scrollbar(mg_lb_frame, orient=tk.VERTICAL, command=mg_listbox.yview)
+        mg_listbox.configure(yscrollcommand=mg_scrollbar.set)
+        mg_listbox.grid(row=0, column=0, sticky="nsew")
+        mg_scrollbar.grid(row=0, column=1, sticky="ns")
 
-        def _apply_mg_filter(*_args: Any) -> None:
+        mg_filtered_ids: List[int] = []
+
+        def _rebuild_mg_listbox(*_args: Any) -> None:
             query = mg_search_var.get().lower()
-            row_idx = 0
+            # Zapamiętaj bieżące zaznaczenie
+            cur_sel = mg_listbox.curselection()
+            current_mg = (
+                mg_filtered_ids[cur_sel[0]]
+                if cur_sel and cur_sel[0] < len(mg_filtered_ids)
+                else selected_mg_id
+            )
+            mg_listbox.delete(0, tk.END)
+            mg_filtered_ids.clear()
             for player_id, player_nick in players:
-                if player_id not in _mg_rb_map:
+                if query and query not in player_nick.lower():
                     continue
-                rb = _mg_rb_map[player_id]
-                if query in player_nick.lower():
-                    rb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
-                    row_idx += 1
-                else:
-                    rb.grid_remove()
+                mg_listbox.insert(tk.END, f"{player_nick} (ID: {player_id})")
+                mg_filtered_ids.append(player_id)
+            # Przywróć zaznaczenie
+            if current_mg != 0:
+                for idx, pid in enumerate(mg_filtered_ids):
+                    if pid == current_mg:
+                        mg_listbox.select_set(idx)
+                        mg_listbox.see(idx)
+                        break
 
-        def _rebuild_mg_radiobuttons() -> None:
-            for w in mg_scroll_frame.winfo_children():
-                w.destroy()
-            mg_radiobuttons.clear()
-            _mg_rb_map.clear()
-            for i, (player_id, player_nick) in enumerate(players):
-                rb = ctk.CTkRadioButton(
-                    mg_scroll_frame,
-                    text=f"{player_nick} (ID: {player_id})",
-                    variable=mg_var,
-                    value=player_id,
-                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                )
-                rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                mg_radiobuttons.append(rb)
-                _mg_rb_map[player_id] = rb
-            _apply_mg_filter()
-
-        mg_search_var.trace("w", _apply_mg_filter)
-        _rebuild_mg_radiobuttons()
+        mg_search_var.trace_add("write", _rebuild_mg_listbox)  # type: ignore[misc]
 
         buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
         buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
@@ -603,7 +617,7 @@ def dodaj_sesje_rpg(
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
-            _rebuild_mg_radiobuttons()
+            _rebuild_mg_listbox()
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
 
@@ -616,7 +630,7 @@ def dodaj_sesje_rpg(
 
         ctk.CTkButton(
             buttons_frame,
-            text="➕ Dodaj gracza",
+            text="\u2795 Dodaj gracza",
             command=_open_add_player_mg,
             width=120,
             fg_color="#1976D2",
@@ -625,13 +639,23 @@ def dodaj_sesje_rpg(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_mg_selection() -> None:
-            selected_id = mg_var.get()
+            sel_indices = mg_listbox.curselection()
+            if not sel_indices:
+                messagebox.showerror("B\u0142\u0105d", "Wybierz Mistrza Gry.", parent=mg_dialog)
+                return
+            selected_id = (
+                mg_filtered_ids[sel_indices[0]]
+                if sel_indices[0] < len(mg_filtered_ids)
+                else 0
+            )
             if selected_id == 0:
-                messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=mg_dialog)
+                messagebox.showerror("B\u0142\u0105d", "Wybierz Mistrza Gry.", parent=mg_dialog)
                 return
             if selected_id in selected_players_list:
                 messagebox.showerror(
-                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=mg_dialog
+                    "B\u0142\u0105d",
+                    "Mistrz Gry nie mo\u017ce by\u0107 jednocze\u015bnie graczem.",
+                    parent=mg_dialog,
                 )
                 return
             nonlocal selected_mg_id
@@ -641,7 +665,7 @@ def dodaj_sesje_rpg(
 
         ctk.CTkButton(
             buttons_frame,
-            text="Zapisz wybór",
+            text="Zapisz wyb\u00f3r",
             command=save_mg_selection,
             width=110,
             fg_color="#2E7D32",
@@ -657,6 +681,8 @@ def dodaj_sesje_rpg(
             hover_color="#555555",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         ).grid(row=0, column=3, sticky="e")
+
+        _rebuild_mg_listbox()
 
     choose_mg_btn = ctk.CTkButton(
         mg_frame, text="Wybierz MG...", command=open_mg_selection, width=140
@@ -1102,7 +1128,7 @@ def open_edit_session_dialog(
             )
 
     def open_players_selection() -> None:
-        # Okno wyboru graczy
+        # Okno wyboru graczy (edycja) — tk.Listbox zamiast CTkScrollableFrame+CTkCheckBox×N
         players_dialog = create_ctk_toplevel(dialog)
         players_dialog.title("Wybierz graczy")
         players_dialog.transient(dialog)
@@ -1113,96 +1139,83 @@ def open_edit_session_dialog(
         players_dialog.rowconfigure(2, weight=1)
 
         max_players = int(liczba_var.get())
-        hdr_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
-        hdr_frame.grid(row=0, column=0, pady=(12, 4), padx=14, sticky="ew")
-        hdr_frame.columnconfigure(1, weight=1)
-        ctk.CTkLabel(
-            hdr_frame,
-            text=f"Wybierz maksymalnie {max_players} graczy:",
+        header_lbl_edit = ctk.CTkLabel(
+            players_dialog,
+            text=f"Wybierz maksymalnie {max_players} graczy: (zaznaczono: 0)",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12)),
-        ).grid(row=0, column=0, sticky="w")
-        count_label_var = tk.StringVar(value="")
-        ctk.CTkLabel(
-            hdr_frame,
-            textvariable=count_label_var,
-            font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-        ).grid(row=0, column=1, padx=(12, 0), sticky="w")
+        )
+        header_lbl_edit.grid(row=0, column=0, pady=(12, 4), padx=14, sticky="w")
 
         search_var_edit = tk.StringVar()
         search_entry_edit = ctk.CTkEntry(
             players_dialog,
             textvariable=search_var_edit,
-            placeholder_text="🔍 Szukaj gracza...",
+            placeholder_text="\U0001f50d Szukaj gracza...",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         )
         search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         search_entry_edit.focus()
 
-        scroll_frame_edit = ctk.CTkScrollableFrame(players_dialog, height=300)
-        scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
-        scroll_frame_edit.columnconfigure(0, weight=1)
+        # ── Listbox + Scrollbar ──────────────────────────────────────────────
+        lb_frame_edit = tk.Frame(players_dialog)
+        lb_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        lb_frame_edit.rowconfigure(0, weight=1)
+        lb_frame_edit.columnconfigure(0, weight=1)
 
-        player_vars_local: Dict[int, tk.BooleanVar] = {}
-        player_checkboxes: Dict[int, ctk.CTkCheckBox] = {}
+        listbox_edit = tk.Listbox(
+            lb_frame_edit,
+            selectmode=tk.MULTIPLE,
+            activestyle="none",
+            font=("Segoe UI", scale_font_size(11)),
+            height=16,
+            exportselection=False,
+        )
+        lb_scrollbar_edit = ttk.Scrollbar(
+            lb_frame_edit, orient=tk.VERTICAL, command=listbox_edit.yview
+        )
+        listbox_edit.configure(yscrollcommand=lb_scrollbar_edit.set)
+        listbox_edit.grid(row=0, column=0, sticky="nsew")
+        lb_scrollbar_edit.grid(row=0, column=1, sticky="ns")
 
-        def update_count_and_validate() -> None:
-            selected_count = sum(1 for v in player_vars_local.values() if v.get())
-            count_label_var.set(f"Wybrano: {selected_count}/{max_players}")
-            for pid, cb in player_checkboxes.items():
-                cb.configure(
-                    state=(
-                        "disabled"
-                        if (not player_vars_local[pid].get() and selected_count >= max_players)
-                        else "normal"
-                    )
-                )
+        filtered_ids_edit: List[int] = []
 
-        def _apply_filter_edit(*_args: Any) -> None:
+        def _rebuild_listbox_edit(*_args: Any) -> None:
             query = search_var_edit.get().lower()
-            row_idx = 0
+            current_sel = {
+                filtered_ids_edit[i]
+                for i in listbox_edit.curselection()
+                if i < len(filtered_ids_edit)
+            }
+            current_sel.update(selected_players_list)
+            listbox_edit.delete(0, tk.END)
+            filtered_ids_edit.clear()
             for player_id, player_nick in players:
-                if player_id not in player_checkboxes:
+                if query and query not in player_nick.lower():
                     continue
-                cb = player_checkboxes[player_id]
-                if query in player_nick.lower():
-                    cb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
-                    row_idx += 1
-                else:
-                    cb.grid_remove()
+                listbox_edit.insert(tk.END, f"{player_nick} (ID: {player_id})")
+                filtered_ids_edit.append(player_id)
+            for idx, pid in enumerate(filtered_ids_edit):
+                if pid in current_sel:
+                    listbox_edit.select_set(idx)
+            _update_header_edit()
 
-        def _rebuild_checkboxes_edit() -> None:
-            for w in scroll_frame_edit.winfo_children():
-                w.destroy()
-            player_vars_local.clear()
-            player_checkboxes.clear()
-            player_list = list(players)
-            _BATCH = 12
+        def _update_header_edit() -> None:
+            count = len(listbox_edit.curselection())
+            color = "#2E7D32" if 0 < count <= max_players else "#C62828"
+            header_lbl_edit.configure(
+                text=f"Wybierz maksymalnie {max_players} graczy: (zaznaczono: {count})",
+                text_color=color,
+            )
 
-            def _add_batch(start: int) -> None:
-                for i in range(start, min(start + _BATCH, len(player_list))):
-                    player_id, player_nick = player_list[i]
-                    var = tk.BooleanVar(value=player_id in selected_players_list)
-                    player_vars_local[player_id] = var
-                    cb = ctk.CTkCheckBox(
-                        scroll_frame_edit,
-                        text=f"{player_nick} (ID: {player_id})",
-                        variable=var,
-                        command=update_count_and_validate,
-                        text_color=("gray10", "#DCE4EE"),
-                        text_color_disabled=("gray10", "#DCE4EE"),
-                        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                    )
-                    cb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                    player_checkboxes[player_id] = cb
-                if start + _BATCH < len(player_list):
-                    scroll_frame_edit.after(0, lambda s=start + _BATCH: _add_batch(s))
-                else:
-                    _apply_filter_edit()
+        def _on_listbox_select_edit(_e: Any) -> None:
+            sel = list(listbox_edit.curselection())
+            if len(sel) > max_players:
+                for idx in sel[max_players:]:
+                    listbox_edit.select_clear(idx)
+            _update_header_edit()
 
-            _add_batch(0)
-
-        search_var_edit.trace("w", _apply_filter_edit)
-        _rebuild_checkboxes_edit()
+        listbox_edit.bind("<<ListboxSelect>>", _on_listbox_select_edit)
+        search_var_edit.trace_add("write", _rebuild_listbox_edit)  # type: ignore[misc]
 
         buttons_frame = ctk.CTkFrame(players_dialog, fg_color="transparent")
         buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
@@ -1212,7 +1225,7 @@ def open_edit_session_dialog(
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
-            _rebuild_checkboxes_edit()
+            _rebuild_listbox_edit()
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
 
@@ -1225,7 +1238,7 @@ def open_edit_session_dialog(
 
         ctk.CTkButton(
             buttons_frame,
-            text="➕ Dodaj gracza",
+            text="\u2795 Dodaj gracza",
             command=_open_add_player_edit,
             width=120,
             fg_color="#1976D2",
@@ -1234,20 +1247,29 @@ def open_edit_session_dialog(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
-            selected_ids = [pid for pid, v in player_vars_local.items() if v.get()]
+            sel_indices = list(listbox_edit.curselection())
+            selected_ids = [
+                filtered_ids_edit[i] for i in sel_indices if i < len(filtered_ids_edit)
+            ]
             if len(selected_ids) > max_players:
                 messagebox.showerror(
-                    "Błąd", f"Wybierz maksymalnie {max_players} graczy.", parent=players_dialog
+                    "B\u0142\u0105d",
+                    f"Wybierz maksymalnie {max_players} graczy.",
+                    parent=players_dialog,
                 )
                 return
             if len(selected_ids) == 0:
                 messagebox.showerror(
-                    "Błąd", "Wybierz co najmniej jednego gracza.", parent=players_dialog
+                    "B\u0142\u0105d",
+                    "Wybierz co najmniej jednego gracza.",
+                    parent=players_dialog,
                 )
                 return
             if selected_mg_id in selected_ids:
                 messagebox.showerror(
-                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=players_dialog
+                    "B\u0142\u0105d",
+                    "Mistrz Gry nie mo\u017ce by\u0107 jednocze\u015bnie graczem.",
+                    parent=players_dialog,
                 )
                 return
             selected_players_list.clear()
@@ -1257,7 +1279,7 @@ def open_edit_session_dialog(
 
         ctk.CTkButton(
             buttons_frame,
-            text="Zapisz wybór",
+            text="Zapisz wyb\u00f3r",
             command=save_players_selection,
             width=110,
             fg_color="#2E7D32",
@@ -1273,6 +1295,8 @@ def open_edit_session_dialog(
             hover_color="#555555",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         ).grid(row=0, column=3, sticky="e")
+
+        _rebuild_listbox_edit()
 
     choose_players_btn = ctk.CTkButton(
         players_frame, text="Wybierz graczy...", command=open_players_selection, width=140
@@ -1309,7 +1333,7 @@ def open_edit_session_dialog(
                     break
 
     def open_mg_selection() -> None:
-        # Okno wyboru MG
+        # Okno wyboru MG (edycja) — tk.Listbox zamiast CTkScrollableFrame+CTkRadioButton×N
         mg_dialog = create_ctk_toplevel(dialog)
         mg_dialog.title("Wybierz Mistrza Gry")
         mg_dialog.transient(dialog)
@@ -1330,53 +1354,58 @@ def open_edit_session_dialog(
         mg_search_entry_edit = ctk.CTkEntry(
             mg_dialog,
             textvariable=mg_search_var_edit,
-            placeholder_text="🔍 Szukaj gracza...",
+            placeholder_text="\U0001f50d Szukaj gracza...",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         )
         mg_search_entry_edit.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="ew")
         mg_search_entry_edit.focus()
 
-        mg_scroll_frame_edit = ctk.CTkScrollableFrame(mg_dialog, height=300)
-        mg_scroll_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
-        mg_scroll_frame_edit.columnconfigure(0, weight=1)
+        # ── Listbox + Scrollbar ──────────────────────────────────────────────
+        mg_lb_frame_edit = tk.Frame(mg_dialog)
+        mg_lb_frame_edit.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 8))
+        mg_lb_frame_edit.rowconfigure(0, weight=1)
+        mg_lb_frame_edit.columnconfigure(0, weight=1)
 
-        mg_var = tk.IntVar(value=selected_mg_id)
-        mg_radiobuttons_edit: List[ctk.CTkRadioButton] = []
-        _mg_rb_map_edit: Dict[int, ctk.CTkRadioButton] = {}
+        mg_listbox_edit = tk.Listbox(
+            mg_lb_frame_edit,
+            selectmode=tk.SINGLE,
+            activestyle="none",
+            font=("Segoe UI", scale_font_size(11)),
+            height=16,
+            exportselection=False,
+        )
+        mg_scrollbar_edit = ttk.Scrollbar(
+            mg_lb_frame_edit, orient=tk.VERTICAL, command=mg_listbox_edit.yview
+        )
+        mg_listbox_edit.configure(yscrollcommand=mg_scrollbar_edit.set)
+        mg_listbox_edit.grid(row=0, column=0, sticky="nsew")
+        mg_scrollbar_edit.grid(row=0, column=1, sticky="ns")
 
-        def _apply_mg_filter_edit(*_args: Any) -> None:
+        mg_filtered_ids_edit: List[int] = []
+
+        def _rebuild_mg_listbox_edit(*_args: Any) -> None:
             query = mg_search_var_edit.get().lower()
-            row_idx = 0
+            cur_sel = mg_listbox_edit.curselection()
+            current_mg = (
+                mg_filtered_ids_edit[cur_sel[0]]
+                if cur_sel and cur_sel[0] < len(mg_filtered_ids_edit)
+                else selected_mg_id
+            )
+            mg_listbox_edit.delete(0, tk.END)
+            mg_filtered_ids_edit.clear()
             for player_id, player_nick in players:
-                if player_id not in _mg_rb_map_edit:
+                if query and query not in player_nick.lower():
                     continue
-                rb = _mg_rb_map_edit[player_id]
-                if query in player_nick.lower():
-                    rb.grid(row=row_idx, column=0, sticky="w", padx=6, pady=2)
-                    row_idx += 1
-                else:
-                    rb.grid_remove()
+                mg_listbox_edit.insert(tk.END, f"{player_nick} (ID: {player_id})")
+                mg_filtered_ids_edit.append(player_id)
+            if current_mg != 0:
+                for idx, pid in enumerate(mg_filtered_ids_edit):
+                    if pid == current_mg:
+                        mg_listbox_edit.select_set(idx)
+                        mg_listbox_edit.see(idx)
+                        break
 
-        def _rebuild_mg_radiobuttons_edit() -> None:
-            for w in mg_scroll_frame_edit.winfo_children():
-                w.destroy()
-            mg_radiobuttons_edit.clear()
-            _mg_rb_map_edit.clear()
-            for i, (player_id, player_nick) in enumerate(players):
-                rb = ctk.CTkRadioButton(
-                    mg_scroll_frame_edit,
-                    text=f"{player_nick} (ID: {player_id})",
-                    variable=mg_var,
-                    value=player_id,
-                    font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
-                )
-                rb.grid(row=i, column=0, sticky="w", padx=6, pady=2)
-                mg_radiobuttons_edit.append(rb)
-                _mg_rb_map_edit[player_id] = rb
-            _apply_mg_filter_edit()
-
-        mg_search_var_edit.trace("w", _apply_mg_filter_edit)
-        _rebuild_mg_radiobuttons_edit()
+        mg_search_var_edit.trace_add("write", _rebuild_mg_listbox_edit)  # type: ignore[misc]
 
         buttons_frame = ctk.CTkFrame(mg_dialog, fg_color="transparent")
         buttons_frame.grid(row=3, column=0, pady=(4, 12), padx=12, sticky="ew")
@@ -1386,7 +1415,7 @@ def open_edit_session_dialog(
             new_players = get_all_players()
             players.clear()
             players.extend(new_players)
-            _rebuild_mg_radiobuttons_edit()
+            _rebuild_mg_listbox_edit()
             if hasattr(parent, 'tabs') and hasattr(parent, 'dark_mode'):
                 import gracze as _gracze_mod
 
@@ -1399,7 +1428,7 @@ def open_edit_session_dialog(
 
         ctk.CTkButton(
             buttons_frame,
-            text="➕ Dodaj gracza",
+            text="\u2795 Dodaj gracza",
             command=_open_add_player_mg_edit,
             width=120,
             fg_color="#1976D2",
@@ -1408,13 +1437,23 @@ def open_edit_session_dialog(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_mg_selection() -> None:
-            selected_id = mg_var.get()
+            sel_indices = mg_listbox_edit.curselection()
+            if not sel_indices:
+                messagebox.showerror("B\u0142\u0105d", "Wybierz Mistrza Gry.", parent=mg_dialog)
+                return
+            selected_id = (
+                mg_filtered_ids_edit[sel_indices[0]]
+                if sel_indices[0] < len(mg_filtered_ids_edit)
+                else 0
+            )
             if selected_id == 0:
-                messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=mg_dialog)
+                messagebox.showerror("B\u0142\u0105d", "Wybierz Mistrza Gry.", parent=mg_dialog)
                 return
             if selected_id in selected_players_list:
                 messagebox.showerror(
-                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=mg_dialog
+                    "B\u0142\u0105d",
+                    "Mistrz Gry nie mo\u017ce by\u0107 jednocze\u015bnie graczem.",
+                    parent=mg_dialog,
                 )
                 return
             nonlocal selected_mg_id
@@ -1424,7 +1463,7 @@ def open_edit_session_dialog(
 
         ctk.CTkButton(
             buttons_frame,
-            text="Zapisz wybór",
+            text="Zapisz wyb\u00f3r",
             command=save_mg_selection,
             width=110,
             fg_color="#2E7D32",
@@ -1440,6 +1479,8 @@ def open_edit_session_dialog(
             hover_color="#555555",
             font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
         ).grid(row=0, column=3, sticky="e")
+
+        _rebuild_mg_listbox_edit()
 
     choose_mg_btn = ctk.CTkButton(
         mg_frame, text="Wybierz MG...", command=open_mg_selection, width=140

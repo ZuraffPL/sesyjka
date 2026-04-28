@@ -524,40 +524,87 @@ class CTkDataTable(tk.Frame):
     def _build_rows(self) -> None:
         _t0 = _time.perf_counter()
         new_count = len(self._data)
-        old_count = len(self._row_frames)
 
-        # Schowaj nadmiarowe ramki do puli zamiast niszczyć – dzięki temu
-        # ponowny expand tego samego systemu to samo pack() bez tworzenia widgetów.
-        pooled = destroyed = 0
-        for f in self._row_frames[new_count:]:
+        # ── Krok 1: Przenieś WSZYSTKIE istniejące ramki (_row_frames + _row_pool) ──
+        # do tymczasowej mapy ID→ramka. Dopasowanie oparte na ID wiersza (nie pozycji)
+        # eliminuje O(n) cache-miss przy wstawieniu rekordu na początku posortowanej
+        # listy (np. sort malejący po ID). Przy dodaniu 1 sesji do 484-elementowej
+        # listy: 484×pack() + Label.configure(Lp) zamiast 484×(destroy+recreate widgetów).
+        available: Dict[Any, tk.Frame] = {}
+        unkeyed: List[tk.Frame] = []
+
+        for f in self._row_frames:
             f.pack_forget()
             cached_r: Optional[List[Any]] = getattr(f, '_cached_row', None)
             key = self._pool_key(cached_r)
             if key is not None:
-                self._row_pool[key] = f
-                pooled += 1
+                available[key] = f
             else:
-                f.destroy()
-                destroyed += 1
-        del self._row_frames[new_count:]
+                unkeyed.append(f)
 
-        # Zaktualizuj istniejące ramki (cache bez winfo_children())
-        refreshed = skipped = 0
-        for i in range(min(new_count, old_count)):
-            prev = getattr(self._row_frames[i], '_cached_row', None)
-            self._refresh_row(i, self._data[i])
-            if prev == self._data[i]:
-                skipped += 1
+        # Scal z istniejącą pulą (pool może mieć ramki z expand/collapse)
+        for k, f in self._row_pool.items():
+            if k not in available:
+                available[k] = f
+
+        self._row_frames = []
+        self._row_pool = {}
+
+        # ── Krok 2: Zbuduj wiersze w nowej kolejności ──────────────────────────
+        pooled = destroyed = refreshed = skipped = added = 0
+
+        for i, row in enumerate(self._data):
+            key = self._pool_key(row)
+            rf: Optional[tk.Frame] = None
+
+            if key is not None:
+                rf = available.pop(key, None)
+            if rf is None and unkeyed:
+                rf = unkeyed.pop(0)
+
+            if rf is not None:
+                cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
+                if cached is not None and cached == row:
+                    # Idealne trafienie: dane bez zmian – tylko pack() + ewentualnie Lp.
+                    rf.pack(fill=tk.X)
+                    self._row_frames.append(rf)
+                    if self._show_row_num:
+                        new_lp = str(i + 1)
+                        if getattr(rf, '_cached_lp', None) != new_lp:
+                            lbl: Optional[tk.Label] = getattr(rf, '_row_num_lbl', None)
+                            if lbl is not None:
+                                lbl.configure(text=new_lp)
+                            rf._cached_lp = new_lp  # type: ignore[attr-defined]
+                    skipped += 1
+                else:
+                    # Reuse ramki, ale odśwież zawartość (zniszcz stare dzieci)
+                    for ch in rf.winfo_children():
+                        ch.destroy()
+                    def_bg, _ = self._resolve_colors(i, row)
+                    rf.configure(bg=def_bg)
+                    rf.pack(fill=tk.X)
+                    self._row_frames.append(rf)
+                    self._populate_row(rf, i, row)
+                    rf._cached_row = list(row)  # type: ignore[attr-defined]
+                    refreshed += 1
             else:
-                refreshed += 1
+                # Brak istniejącej ramki – utwórz nową
+                def_bg, _ = self._resolve_colors(i, row)
+                rf = tk.Frame(self._scroll, bg=def_bg, height=_ROW_H)
+                rf.pack(fill=tk.X)
+                rf.pack_propagate(False)
+                self._row_frames.append(rf)
+                self._populate_row(rf, i, row)
+                rf._cached_row = list(row)  # type: ignore[attr-defined]
+                added += 1
 
-        # Dodaj brakujące ramki (reuse z puli jeśli możliwy)
-        pool_before = len(self._row_pool)
-        added = 0
-        for i in range(old_count, new_count):
-            self._add_row(i, self._data[i])
-            added += 1
-        pool_hits = pool_before - len(self._row_pool)
+        # ── Krok 3: Nieużyte ramki → pula lub zniszcz ──────────────────────────
+        for k, f in available.items():
+            self._row_pool[k] = f
+            pooled += 1
+        for f in unkeyed:
+            f.destroy()
+            destroyed += 1
 
         # Resetuj selekcję jeśli wypadła poza zakres
         if self._selected_idx is not None and self._selected_idx >= new_count:
@@ -567,14 +614,13 @@ class CTkDataTable(tk.Frame):
         _t1 = _time.perf_counter()
         _log.debug(
             "CTkDataTable._build_rows: rows=%d  pooled=%d  destroyed=%d  "
-            "refreshed=%d  skipped=%d  added=%d(pool_hits=%d)  elapsed=%.1f ms",
+            "refreshed=%d  skipped=%d  added=%d  elapsed=%.1f ms",
             new_count,
             pooled,
             destroyed,
             refreshed,
             skipped,
             added,
-            pool_hits,
             (_t1 - _t0) * 1000,
         )
 

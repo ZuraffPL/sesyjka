@@ -83,7 +83,9 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "Przycisk ➕ obok pola otwiera formularz dodawania nowego systemu RPG "
            "bez zamykania formularza sesji — lista systemów odświeża się automatycznie."),
     ("li", "Typ sesji — np. Kampania, One-shot, Konwentowa."),
-    ("li", "Mistrz Gry — wybór gracza pełniącego funkcję MG."),
+    ("li", "Mistrz Gry — wybór gracza pełniącego funkcję MG. "
+           "Checkbox \u201eGra GM-less\u201d (obok przycisku wybóru) pozwala oznaczyć sesję bez Mistrza Gry — "
+           "w tabeli sesji wyświetlane jako N/A."),
     ("li", "Gracze — lista graczy uczestniczących w sesji (wielokrotny wybór). "
            "Można dodać nowego gracza bezpośrednio z formularza sesji."),
     ("li", "Notatki — opis sesji, podsumowanie fabuły itp."),

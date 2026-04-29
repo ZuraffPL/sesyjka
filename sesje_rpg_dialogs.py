@@ -389,15 +389,14 @@ def dodaj_sesje_rpg(
 
         # filtered_ids mapuje indeks listboxa → player_id (zmienia się przy filtrze)
         filtered_ids: List[int] = []
+        # Trwały zbiór zaznaczonych ID — niezależny od aktualnego filtra wyszukiwania
+        _persistent_sel: set[int] = set(selected_players_list)
+        # Flaga blokująca handler podczas programatycznego przebudowania listy
+        _rebuilding: list[bool] = [False]
 
         def _rebuild_listbox(*_args: Any) -> None:
+            _rebuilding[0] = True
             query = search_var.get().lower()
-            # Zapamiętaj zaznaczenie przed przebudową
-            current_sel = {
-                filtered_ids[i] for i in listbox.curselection() if i < len(filtered_ids)
-            }
-            # Uzupełnij z wcześniej wybranej listy (przy pierwszym otwarciu)
-            current_sel.update(selected_players_list)
             listbox.delete(0, tk.END)
             filtered_ids.clear()
             for player_id, player_nick in players:
@@ -405,14 +404,15 @@ def dodaj_sesje_rpg(
                     continue
                 listbox.insert(tk.END, f"{player_nick} (ID: {player_id})")
                 filtered_ids.append(player_id)
-            # Przywróć zaznaczenie
+            # Przywróć zaznaczenie na podstawie trwałego zbioru
             for idx, pid in enumerate(filtered_ids):
-                if pid in current_sel:
+                if pid in _persistent_sel:
                     listbox.select_set(idx)
+            _rebuilding[0] = False
             _update_header()
 
         def _update_header() -> None:
-            count = len(listbox.curselection())
+            count = len(_persistent_sel)
             color = "#2E7D32" if count == max_players else "#C62828"
             header_lbl.configure(
                 text=f"Wybierz dok\u0142adnie {max_players} graczy: (zaznaczono: {count})",
@@ -420,11 +420,27 @@ def dodaj_sesje_rpg(
             )
 
         def _on_listbox_select(_e: Any) -> None:
-            # Ogranicz selekcję do max_players
+            # Pomiń zdarzenia wywoływane programatycznie podczas przebudowy listy
+            if _rebuilding[0]:
+                return
+            # Synchronizuj _persistent_sel z aktualnym widocznym stanem listboxa
+            visible_set = set(filtered_ids)
+            _persistent_sel.difference_update(visible_set)
             sel = list(listbox.curselection())
-            if len(sel) > max_players:
-                for idx in sel[max_players:]:
-                    listbox.select_clear(idx)
+            for i in sel:
+                if i < len(filtered_ids):
+                    _persistent_sel.add(filtered_ids[i])
+            # Ogranicz łączną liczbę zaznaczonych do max_players
+            if len(_persistent_sel) > max_players:
+                excess = len(_persistent_sel) - max_players
+                visible_sel_ids = [filtered_ids[i] for i in sel if i < len(filtered_ids)]
+                to_remove = visible_sel_ids[-excess:]
+                for pid in to_remove:
+                    _persistent_sel.discard(pid)
+                    for i, fid in enumerate(filtered_ids):
+                        if fid == pid:
+                            listbox.select_clear(i)
+                            break
             _update_header()
 
         listbox.bind("<<ListboxSelect>>", _on_listbox_select)
@@ -460,8 +476,7 @@ def dodaj_sesje_rpg(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
-            sel_indices = list(listbox.curselection())
-            selected = [filtered_ids[i] for i in sel_indices if i < len(filtered_ids)]
+            selected = list(_persistent_sel)
             expected_count = int(liczba_var.get())
             if len(selected) != expected_count:
                 messagebox.showerror(
@@ -470,7 +485,7 @@ def dodaj_sesje_rpg(
                     parent=players_dialog,
                 )
                 return
-            if selected_mg_id in selected:
+            if selected_mg_id in selected and not gmless_var.get():
                 messagebox.showerror(
                     "B\u0142\u0105d",
                     "Mistrz Gry nie mo\u017ce by\u0107 jednocze\u015bnie graczem.",
@@ -520,12 +535,16 @@ def dodaj_sesje_rpg(
 
     # Wybór MG i przycisk
     selected_mg_id: int = 0
+    gmless_var = tk.BooleanVar(value=False)
     selected_mg_label = ctk.CTkLabel(
         mg_frame, text="Brak wybranego MG", anchor="w", fg_color=("gray85", "gray25")
     )
     selected_mg_label.grid(row=0, column=0, sticky="ew", padx=(0, 10))
 
     def update_selected_mg_display() -> None:
+        if gmless_var.get():
+            selected_mg_label.configure(text="N/A")
+            return
         if selected_mg_id == 0:
             selected_mg_label.configure(text="Brak wybranego MG")
         else:
@@ -684,10 +703,27 @@ def dodaj_sesje_rpg(
 
         _rebuild_mg_listbox()
 
+    def on_gmless_change() -> None:
+        if gmless_var.get():
+            selected_mg_label.configure(text="N/A")
+            choose_mg_btn.configure(state="disabled")
+        else:
+            choose_mg_btn.configure(state="normal")
+            update_selected_mg_display()
+
+    gmless_cb = ctk.CTkCheckBox(
+        mg_frame,
+        text="Gra GM-less",
+        variable=gmless_var,
+        command=on_gmless_change,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    gmless_cb.grid(row=0, column=1, padx=(0, 10))
+
     choose_mg_btn = ctk.CTkButton(
         mg_frame, text="Wybierz MG...", command=open_mg_selection, width=140
     )
-    choose_mg_btn.grid(row=0, column=1)
+    choose_mg_btn.grid(row=0, column=2)
     row += 1
 
     # Typ sesji
@@ -773,16 +809,15 @@ def dodaj_sesje_rpg(
             return False
 
         # Sprawdź MG
-        if selected_mg_id == 0:
-            messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=dialog)
-            return False
-
-        # Sprawdź czy MG nie jest w graczach
-        if selected_mg_id in selected_players_list:
-            messagebox.showerror(
-                "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=dialog
-            )
-            return False
+        if not gmless_var.get():
+            if selected_mg_id == 0:
+                messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=dialog)
+                return False
+            if selected_mg_id in selected_players_list:
+                messagebox.showerror(
+                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=dialog
+                )
+                return False
 
         # Sprawdź typ sesji
         if not kampania_var.get() and not jednostrzal_var.get():
@@ -833,7 +868,7 @@ def dodaj_sesje_rpg(
                         date_entry.get(),
                         system_id,
                         int(liczba_var.get()),
-                        selected_mg_id,
+                        None if gmless_var.get() else selected_mg_id,
                         int(kampania_var.get()),
                         int(jednostrzal_var.get()),
                         tytul_kampanii_entry.get().strip() or None,
@@ -1178,15 +1213,14 @@ def open_edit_session_dialog(
         lb_scrollbar_edit.grid(row=0, column=1, sticky="ns")
 
         filtered_ids_edit: List[int] = []
+        # Trwały zbiór zaznaczonych ID — niezależny od aktualnego filtra wyszukiwania
+        _persistent_sel_edit: set[int] = set(selected_players_list)
+        # Flaga blokująca handler podczas programatycznego przebudowania listy
+        _rebuilding_edit: list[bool] = [False]
 
         def _rebuild_listbox_edit(*_args: Any) -> None:
+            _rebuilding_edit[0] = True
             query = search_var_edit.get().lower()
-            current_sel = {
-                filtered_ids_edit[i]
-                for i in listbox_edit.curselection()
-                if i < len(filtered_ids_edit)
-            }
-            current_sel.update(selected_players_list)
             listbox_edit.delete(0, tk.END)
             filtered_ids_edit.clear()
             for player_id, player_nick in players:
@@ -1194,13 +1228,15 @@ def open_edit_session_dialog(
                     continue
                 listbox_edit.insert(tk.END, f"{player_nick} (ID: {player_id})")
                 filtered_ids_edit.append(player_id)
+            # Przywróć zaznaczenie na podstawie trwałego zbioru
             for idx, pid in enumerate(filtered_ids_edit):
-                if pid in current_sel:
+                if pid in _persistent_sel_edit:
                     listbox_edit.select_set(idx)
+            _rebuilding_edit[0] = False
             _update_header_edit()
 
         def _update_header_edit() -> None:
-            count = len(listbox_edit.curselection())
+            count = len(_persistent_sel_edit)
             color = "#2E7D32" if 0 < count <= max_players else "#C62828"
             header_lbl_edit.configure(
                 text=f"Wybierz maksymalnie {max_players} graczy: (zaznaczono: {count})",
@@ -1208,10 +1244,27 @@ def open_edit_session_dialog(
             )
 
         def _on_listbox_select_edit(_e: Any) -> None:
+            # Pomiń zdarzenia wywoływane programatycznie podczas przebudowy listy
+            if _rebuilding_edit[0]:
+                return
+            # Synchronizuj _persistent_sel_edit z aktualnym widocznym stanem listboxa
+            visible_set = set(filtered_ids_edit)
+            _persistent_sel_edit.difference_update(visible_set)
             sel = list(listbox_edit.curselection())
-            if len(sel) > max_players:
-                for idx in sel[max_players:]:
-                    listbox_edit.select_clear(idx)
+            for i in sel:
+                if i < len(filtered_ids_edit):
+                    _persistent_sel_edit.add(filtered_ids_edit[i])
+            # Ogranicz łączną liczbę zaznaczonych do max_players
+            if len(_persistent_sel_edit) > max_players:
+                excess = len(_persistent_sel_edit) - max_players
+                visible_sel_ids = [filtered_ids_edit[i] for i in sel if i < len(filtered_ids_edit)]
+                to_remove = visible_sel_ids[-excess:]
+                for pid in to_remove:
+                    _persistent_sel_edit.discard(pid)
+                    for i, fid in enumerate(filtered_ids_edit):
+                        if fid == pid:
+                            listbox_edit.select_clear(i)
+                            break
             _update_header_edit()
 
         listbox_edit.bind("<<ListboxSelect>>", _on_listbox_select_edit)
@@ -1247,10 +1300,7 @@ def open_edit_session_dialog(
         ).grid(row=0, column=0, padx=(0, 8), sticky="w")
 
         def save_players_selection() -> None:
-            sel_indices = list(listbox_edit.curselection())
-            selected_ids = [
-                filtered_ids_edit[i] for i in sel_indices if i < len(filtered_ids_edit)
-            ]
+            selected_ids = list(_persistent_sel_edit)
             if len(selected_ids) > max_players:
                 messagebox.showerror(
                     "B\u0142\u0105d",
@@ -1317,13 +1367,18 @@ def open_edit_session_dialog(
     mg_frame.columnconfigure(0, weight=1)
 
     # Lista wybranego MG i przycisk
-    selected_mg_id: int = session_data[4]  # Ustaw aktualnego MG
+    _raw_mg_id = session_data[4]
+    selected_mg_id: int = 0 if _raw_mg_id is None else _raw_mg_id
+    gmless_var = tk.BooleanVar(value=(_raw_mg_id is None))
     selected_mg_label = ctk.CTkLabel(
         mg_frame, text="Brak wybranego MG", anchor="w", fg_color=("gray85", "gray25")
     )
     selected_mg_label.grid(row=0, column=0, sticky="ew", padx=(0, 10))
 
     def update_selected_mg_display() -> None:
+        if gmless_var.get():
+            selected_mg_label.configure(text="N/A")
+            return
         if selected_mg_id == 0:
             selected_mg_label.configure(text="Brak wybranego MG")
         else:
@@ -1482,10 +1537,29 @@ def open_edit_session_dialog(
 
         _rebuild_mg_listbox_edit()
 
+    def on_gmless_change() -> None:
+        if gmless_var.get():
+            selected_mg_label.configure(text="N/A")
+            choose_mg_btn.configure(state="disabled")
+        else:
+            choose_mg_btn.configure(state="normal")
+            update_selected_mg_display()
+
+    gmless_cb = ctk.CTkCheckBox(
+        mg_frame,
+        text="Gra GM-less",
+        variable=gmless_var,
+        command=on_gmless_change,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    gmless_cb.grid(row=0, column=1, padx=(0, 10))
+
     choose_mg_btn = ctk.CTkButton(
         mg_frame, text="Wybierz MG...", command=open_mg_selection, width=140
     )
-    choose_mg_btn.grid(row=0, column=1)
+    choose_mg_btn.grid(row=0, column=2)
+    if gmless_var.get():
+        choose_mg_btn.configure(state="disabled")
 
     # Ustaw początkowy wyświetlacz MG
     update_selected_mg_display()
@@ -1561,16 +1635,15 @@ def open_edit_session_dialog(
             return False
 
         # Sprawdź MG
-        if selected_mg_id == 0:
-            messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=dialog)
-            return False
-
-        # Sprawdź czy MG nie jest w graczach
-        if selected_mg_id in selected_players_list:
-            messagebox.showerror(
-                "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=dialog
-            )
-            return False
+        if not gmless_var.get():
+            if selected_mg_id == 0:
+                messagebox.showerror("Błąd", "Wybierz Mistrza Gry.", parent=dialog)
+                return False
+            if selected_mg_id in selected_players_list:
+                messagebox.showerror(
+                    "Błąd", "Mistrz Gry nie może być jednocześnie graczem.", parent=dialog
+                )
+                return False
 
         # Sprawdź typ sesji
         if not kampania_var.get() and not jednostrzal_var.get():
@@ -1621,7 +1694,7 @@ def open_edit_session_dialog(
                         date_entry.get(),
                         system_id,
                         len(selected_players_list),
-                        selected_mg_id,
+                        None if gmless_var.get() else selected_mg_id,
                         int(kampania_var.get()),
                         int(jednostrzal_var.get()),
                         tytul_kampanii_entry.get().strip() or None,

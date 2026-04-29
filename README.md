@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.35-blue)
+![Version](https://img.shields.io/badge/version-0.4.37-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -87,9 +87,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.35-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.37-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.35.exe`
+4. Uruchom `Sesyjka-v0.4.37.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -115,8 +115,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.35.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.35.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.37.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.37.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -222,6 +222,10 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.37 (29.04.2026)
+- 🔧 **Naprawa selekcji graczy w dialogach wyboru**: trwały zbiór `_persistent_sel` zapewnia zachowanie zaznaczenia graczy podczas filtrowania po nazwie — wątek `_rebuilding` blokuje nadpisanie przez programatyczne `select_set`; działa zarówno dla kliknięć myszką, jak i wpisywania tekstu
+- ✨ **Sesje GM-less**: nowy checkbox „Gra GM-less” w sekcji Mistrza Gry — ukrywa przycisk wyboru MG, wstawia `NULL` w bazie i wyświetla `N/A` w tabeli; automatyczna migracja istniejących baz (`mg_id INTEGER NOT NULL` → `INTEGER`)
 
 ### v0.4.35 (28.04.2026)
 - ⚡ **Optymalizacja: dialogi wyboru graczy/MG**: zastąpiono `CTkCheckBox`/`CTkRadioButton` na `tk.Listbox` — 1 widget zamiast ~435 operacji Tk; eliminacja zamrażania UI przy 87+ graczach w oknach wyboru (dodawanie i edycja sesji)

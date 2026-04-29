@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.35") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.37") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 

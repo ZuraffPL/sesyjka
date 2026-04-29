@@ -62,6 +62,31 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.37",
+            "date": "29.04.2026",
+            "changes": [
+                "🔧 NAPRAWA SELEKCJI GRACZY W DIALOGACH WYBORU:°",
+                "",
+                "✅ TRWAŁY ZBIÓR ZAZNACZONYCH GRACZY (_persistent_sel):",
+                "  • zaznaczenie graczy zachowywane podczas wpisywania tekstu w polu wyszukiwania",
+                "  • flaga _rebuilding blokuje handler <<ListboxSelect>> podczas programatycznego select_set",
+                "  • naprawa błędu UnboundLocalError (‘-=’ w domknięciu) przez zastąpienie na .difference_update()",
+                "  • działa dla obu dialogów: dodawanie i edycja sesji",
+                "",
+                "✨ SESJE GM-LESS:°",
+                "",
+                "✅ NOWY CHECKBOX \u201eGRA GM-LESS\u201d W SEKCJI MISTRZA GRY:",
+                "  • zaznaczenie disabluje przycisk \u201eWybierz MG...\” i wyświetla N/A w polu MG",
+                "  • sesja zapisywana z mg_id = NULL w bazie danych",
+                "  • kolumna Mistrz Gry w tabeli sesji wyświetla N/A dla sesji GM-less",
+                "  • dialog edycji: automatyczne ustawienie checkboxa gdy mg_id IS NULL",
+                "",
+                "🔧 MIGRACJA BAZY DANYCH:",
+                "  • _migrate_mg_id_nullable() zmienia mg_id INTEGER NOT NULL \u2192 INTEGER (jednorazowo przy starcie)",
+                "  • nowe bazy tworzone od razu z nullable mg_id",
+            ],
+        },
+        {
             "version": "0.4.35",
             "date": "28.04.2026",
             "changes": [

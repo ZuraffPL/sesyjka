@@ -20,6 +20,69 @@ _log = logging.getLogger(__name__)
 DB_FILE = get_db_path("sesje_rpg.db")
 
 
+def _migrate_mg_id_nullable() -> None:
+    """Migracja: zmienia mg_id INTEGER NOT NULL → INTEGER (nullable) dla obsługi sesji GM-less."""
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return
+
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    conn.isolation_level = None
+    try:
+        c = conn.cursor()
+        c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='sesje_rpg'")
+        row = c.fetchone()
+        if row is None:
+            return  # Tabela jeszcze nie istnieje
+        # Migracja potrzebna tylko gdy mg_id jest NOT NULL
+        if "mg_id INTEGER NOT NULL" not in row["sql"]:
+            return
+
+        _log.info("Migracja: zmiana mg_id na nullable (obsługa sesji GM-less)…")
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN")
+        conn.execute(
+            """
+            CREATE TABLE sesje_rpg_mg_nullable (
+                id INTEGER PRIMARY KEY,
+                data_sesji TEXT NOT NULL,
+                system_id INTEGER NOT NULL,
+                liczba_graczy INTEGER NOT NULL,
+                mg_id INTEGER,
+                kampania INTEGER DEFAULT 0,
+                jednostrzal INTEGER DEFAULT 0,
+                tytul_kampanii TEXT,
+                tytul_przygody TEXT
+            )
+        """
+        )
+        conn.execute(
+            """
+            INSERT INTO sesje_rpg_mg_nullable
+            SELECT id, data_sesji, system_id, liczba_graczy,
+                   CASE WHEN mg_id = 0 THEN NULL ELSE mg_id END,
+                   kampania, jednostrzal, tytul_kampanii, tytul_przygody
+            FROM sesje_rpg
+        """
+        )
+        conn.execute("DROP TABLE sesje_rpg")
+        conn.execute("ALTER TABLE sesje_rpg_mg_nullable RENAME TO sesje_rpg")
+        conn.execute("COMMIT")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _log.info("Migracja mg_id nullable zakończona pomyślnie.")
+    except Exception as exc:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        _log.error("Błąd podczas migracji mg_id nullable: %s", exc)
+        raise
+    finally:
+        conn.close()
+
+
 def _migrate_remove_cross_db_fks() -> None:
     """Jednorazowa migracja: usuwa cross-bazowe FK z tabel sesje_rpg i sesje_gracze.
 
@@ -65,7 +128,7 @@ def _migrate_remove_cross_db_fks() -> None:
                     data_sesji TEXT NOT NULL,
                     system_id INTEGER NOT NULL,
                     liczba_graczy INTEGER NOT NULL,
-                    mg_id INTEGER NOT NULL,
+                    mg_id INTEGER,
                     kampania INTEGER DEFAULT 0,
                     jednostrzal INTEGER DEFAULT 0,
                     tytul_kampanii TEXT,
@@ -146,6 +209,7 @@ show_edit_btn_sesje: bool = True
 def init_db() -> None:
     """Inicjalizuje bazę danych sesji RPG"""
     # Jednorazowa migracja usuwająca cross-bazowe FK sprzed poprawki
+    _migrate_mg_id_nullable()
     _migrate_remove_cross_db_fks()
 
     with sqlite3.connect(DB_FILE) as conn:
@@ -160,7 +224,7 @@ def init_db() -> None:
                 data_sesji TEXT NOT NULL,
                 system_id INTEGER NOT NULL,
                 liczba_graczy INTEGER NOT NULL,
-                mg_id INTEGER NOT NULL,
+                mg_id INTEGER,
                 kampania INTEGER DEFAULT 0,
                 jednostrzal INTEGER DEFAULT 0,
                 tytul_kampanii TEXT,
@@ -352,7 +416,7 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
         ) = session
 
         system_nazwa = systems_map.get(system_id, f"System ID {system_id}")
-        mg_nick = players_map.get(mg_id, f"Gracz ID {mg_id}")
+        mg_nick = "N/A" if mg_id is None else players_map.get(mg_id, f"Gracz ID {mg_id}")
 
         gracz_ids = sesja_gracze_map.get(sid, [])
         gracze_str = ", ".join(players_map.get(gid, f"Gracz ID {gid}") for gid in gracz_ids)

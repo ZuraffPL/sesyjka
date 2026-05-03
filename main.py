@@ -781,7 +781,15 @@ if __name__ == "__main__":
     _splash.show()
     _splash.set_status("Inicjalizacja interfejsu...")
     _splash.update()
-    app.after(2000, _splash.close)
+    def _on_splash_close() -> None:
+        _splash.close()
+        # Widgety CTk zbudowane podczas withdraw() mogą nie wyrenderować się po deiconify().
+        # Wymuszamy rebuild aktywnej zakładki po odsłonięciu okna.
+        if hasattr(app, '_dirty_tabs') and hasattr(app, 'tabs'):
+            app._dirty_tabs = set(app.tabs.keys())
+            app.after(100, app._refresh_active_tab)
+
+    app.after(2000, _on_splash_close)
 
     # Kreator migracji — uruchom po pełnym zainicjowaniu okna
     def _run_migration_wizard() -> None:

@@ -81,8 +81,9 @@ def show_db_transfer_dialog(
     def _do_export() -> None:
         fmt = exp_fmt_var.get()
         if fmt == "excel":
+            dlg.update()  # upewnij się, że CTkToplevel jest wyrenderowany przed natywnym dialogiem
             dest_str = filedialog.asksaveasfilename(
-                parent=dlg,
+                parent=parent,
                 title="Zapisz eksport jako arkusz Excel...",
                 defaultextension=".xlsx",
                 filetypes=[("Excel", "*.xlsx"), ("Wszystkie pliki", "*.*")],
@@ -105,8 +106,9 @@ def show_db_transfer_dialog(
                 messagebox.showerror("Błąd eksportu", str(exc), parent=dlg)
             return
         if fmt == "zip":
+            dlg.update()  # upewnij się, że CTkToplevel jest wyrenderowany przed natywnym dialogiem
             dest_str = filedialog.asksaveasfilename(
-                parent=dlg,
+                parent=parent,
                 title="Zapisz eksport jako...",
                 defaultextension=".zip",
                 filetypes=[("ZIP", "*.zip"), ("Wszystkie pliki", "*.*")],
@@ -116,7 +118,8 @@ def show_db_transfer_dialog(
                 return
             dest = Path(dest_str)
         else:
-            dest_str = filedialog.askdirectory(parent=dlg, title="Wybierz folder docelowy")
+            dlg.update()  # upewnij się, że CTkToplevel jest wyrenderowany przed natywnym dialogiem
+            dest_str = filedialog.askdirectory(parent=parent, title="Wybierz folder docelowy")
             if not dest_str:
                 return
             dest = Path(dest_str)
@@ -167,6 +170,7 @@ def show_db_transfer_dialog(
 
     def _pick_source(parent_dlg: Any) -> Optional[Path]:
         """Pokazuje dialog wyboru pliku ZIP lub folderu."""
+        dlg.update()  # upewnij się, że CTkToplevel jest wyrenderowany przed natywnym dialogiem
         source_str = filedialog.askopenfilename(
             parent=parent_dlg,
             title="Wybierz plik ZIP z bazami danych",
@@ -175,13 +179,14 @@ def show_db_transfer_dialog(
         if source_str:
             return Path(source_str)
         # Fallback — wybór folderu
+        dlg.update()
         source_str = filedialog.askdirectory(
             parent=parent_dlg, title="...lub wybierz folder z plikami .db"
         )
         return Path(source_str) if source_str else None
 
     def _do_import_own() -> None:
-        source = _pick_source(dlg)
+        source = _pick_source(parent)
         if source is None:
             return
 
@@ -250,7 +255,7 @@ def show_db_transfer_dialog(
     ).pack(anchor="w", padx=12, pady=(0, 8))
 
     def _do_open_guest() -> None:
-        source = _pick_source(dlg)
+        source = _pick_source(parent)
         if source is None:
             return
 

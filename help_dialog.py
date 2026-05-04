@@ -98,13 +98,17 @@ _HELP_CONTENT: list[tuple[str, str]] = [
 
     ("h1", "👥 Zakładka: Gracze"),
     ("p",  "Baza danych graczy uczestniczących w sesjach."),
-    ("li", "✚ Dodaj Gracza — formularz z imieniem, pseudonimem i notatkami."),
+    ("li", "✚ Dodaj Gracza — formularz z pseudonimem, imieniem, płcią, social media "
+           "oraz polem \u201eGrupa\u201d. Pole Grupa przyjmuje tagi rozdzielone przecinkami "
+           "(np. \u201eDrużyna A, Kampania 2\u201d) — gracz może należeć do wielu grup jednocześnie."),
     ("li", "🗑 Usuń — usuwa gracza (uwaga: usunięcie gracza będącego MG sesji wymaga "
            "ręcznej korekty sesji)."),
     ("li", "Edycja — kliknij ikonę ✏️ lub dwukliknij wiersz."),
     ("li", "Kolumny — przycisk w górnym pasku zakładki Gracze; otwiera dialog z "
            "checkboxami widoczności kolumn i przyciskami \u2191/\u2193 do zmiany kolejności. "
            "W sekcji Opcje tabeli: checkbox \u201ePokaż przycisk edycji\u201d. Ustawienia zapisywane w settings.json."),
+    ("li", "Szybkie zaznaczanie grupy w sesjach — przy dodawaniu i edycji sesji panel "
+           "\u201eZaznacz grupę\u201d pozwala jednym kliknięciem zaznaczyć wszystkich graczy z wybranego tagu."),
     ("sep", ""),
 
     ("h1", "🏢 Zakładka: Wydawcy"),

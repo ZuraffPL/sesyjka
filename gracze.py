@@ -53,6 +53,10 @@ def _ensure_gracze_db() -> None:
             c.execute("ALTER TABLE gracze ADD COLUMN wazna INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             pass  # Kolumna już istnieje
+        try:
+            c.execute("ALTER TABLE gracze ADD COLUMN grupa TEXT")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
         conn.commit()
 
 # Przechowuj aktywne filtry na poziomie modułu
@@ -70,9 +74,10 @@ active_visible_cols_gracze: Dict[str, bool] = {
     "Płeć": True,
     "Social media": True,
     "Status": True,
+    "Grupa": True,
 }
 # Kolejność kolumn w tabeli graczy (bez "ID" który zawsze jest pierwszy)
-active_col_order_gracze: List[str] = ["Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
+active_col_order_gracze: List[str] = ["Nick", "Imię i nazwisko", "Płeć", "Social media", "Status", "Grupa"]
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_GRACZE = {"ID"}
 
@@ -151,7 +156,7 @@ def dodaj_gracza(
     dialog.resizable(True, True)
 
     if parent is not None:
-        apply_safe_geometry(dialog, parent, 420, 380)
+        apply_safe_geometry(dialog, parent, 420, 430)
 
     # Główny frame
     main_frame = ctk.CTkFrame(dialog, fg_color="transparent")  # type: ignore
@@ -187,6 +192,11 @@ def dodaj_gracza(
     social_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Link lub @nick...")  # type: ignore
     social_entry.grid(row=4, column=1, pady=8, sticky="ew")
 
+    # Grupa
+    ctk.CTkLabel(main_frame, text="Grupa", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=5, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    grupa_entry = ctk.CTkEntry(main_frame, width=250, placeholder_text="Tagi po przecinku, np.: Drużyna A, Kampania 2")  # type: ignore
+    grupa_entry.grid(row=5, column=1, pady=8, sticky="ew")
+
     # Checkbox główny użytkownik
     glowny_var = tk.BooleanVar(value=False)
     wazna_var = tk.BooleanVar(value=False)
@@ -202,17 +212,18 @@ def dodaj_gracza(
             glowny_check.deselect()  # type: ignore
 
     glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
-    glowny_check.grid(row=5, column=0, columnspan=2, pady=8, sticky="w")
+    glowny_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
 
     # Checkbox ważna osoba
     wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
-    wazna_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
+    wazna_check.grid(row=7, column=0, columnspan=2, pady=8, sticky="w")
 
     def on_ok() -> None:
         nick: str = nick_entry.get().strip()
         name: str = name_entry.get().strip()
         gender: str = gender_var.get()
         social: str = social_entry.get().strip()
+        grupa: str = grupa_entry.get().strip()
         glowny: int = 1 if glowny_var.get() else 0
         wazna: int = 1 if wazna_var.get() else 0
 
@@ -232,8 +243,9 @@ def dodaj_gracza(
 
             c.execute(
                 "INSERT INTO gracze (nick, imie_nazwisko, plec, social,"
-                " glowny_uzytkownik, wazna) VALUES (?, ?, ?, ?, ?, ?)",
-                (nick, name if name else None, gender, social if social else None, glowny, wazna),
+                " glowny_uzytkownik, wazna, grupa) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (nick, name if name else None, gender, social if social else None, glowny, wazna,
+                 grupa if grupa else None),
             )
             conn.commit()
         if refresh_callback:
@@ -245,7 +257,7 @@ def dodaj_gracza(
 
     # Przyciski
     btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")  # type: ignore
-    btn_frame.grid(row=7, column=0, columnspan=2, pady=(15, 0))
+    btn_frame.grid(row=8, column=0, columnspan=2, pady=(15, 0))
 
     btn_ok = ctk.CTkButton(btn_frame, text="✚ Dodaj", command=on_ok, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=scale_font_size(12), weight="bold"))  # type: ignore
     btn_ok.pack(side=tk.LEFT, padx=(0, 10))
@@ -273,7 +285,7 @@ def get_all_players() -> list[tuple[Any, ...]]:
         c = conn.cursor()
         c.execute(
             "SELECT id, nick, imie_nazwisko, plec, social,"
-            " glowny_uzytkownik, wazna FROM gracze ORDER BY id ASC"
+            " glowny_uzytkownik, wazna, grupa FROM gracze ORDER BY id ASC"
         )
         return c.fetchall()
 
@@ -309,6 +321,7 @@ def fill_gracze_tab(
                                     rec[3] if rec[3] else "",
                                     rec[4] if rec[4] else "",
                                     status,
+                                    rec[7] if rec[7] else "",  # Grupa
                                     rec[5],
                                     rec[6],
                                 ]
@@ -344,6 +357,7 @@ def fill_gracze_tab(
                         rec[3] if rec[3] else "",
                         rec[4] if rec[4] else "",
                         status,
+                        rec[7] if rec[7] else "",  # Grupa
                         rec[5],  # glowny_uzytkownik int (ukryty)
                         rec[6],  # wazna int (ukryty)
                     ]
@@ -359,10 +373,10 @@ def fill_gracze_tab(
     for widget in tab.winfo_children():
         widget.destroy()
 
-    # Buduj 8-polowe wiersze: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
+    # Buduj 9-polowe wiersze: [id, nick, imie, plec, social, emoji, grupa, glowny_int, wazna_int]
     data_ref: List[List[List[Any]]] = [_preloaded_data]
 
-    _HEADERS = ["ID", "Nick", "Imię i nazwisko", "Płeć", "Social media", "Status"]
+    _HEADERS = ["ID", "Nick", "Imię i nazwisko", "Płeć", "Social media", "Status", "Grupa"]
     _SORTABLE = {
         "ID": 0,
         "Nick": 1,
@@ -370,6 +384,7 @@ def fill_gracze_tab(
         "Płeć": 3,
         "Social media": 4,
         "Status": 5,
+        "Grupa": 6,
     }
 
     # ── Obliczanie szerokości kolumn ─────────────────────────────────────────
@@ -406,6 +421,13 @@ def fill_gracze_tab(
             )
             + pad
         )
+        w_grupa = (
+            max(
+                [_mf_bold.measure("Grupa")]
+                + ([_mf.measure(str(r[6])) for r in rows if r[6]] or [0])
+            )
+            + pad
+        )
         return [
             44,
             min(max(w_nick, 80), 200),
@@ -413,6 +435,7 @@ def fill_gracze_tab(
             min(max(w_plec, 70), 110),
             min(max(w_social, 100), 380),
             56,
+            min(max(w_grupa, 60), 320),
         ]
 
     # ── Kolorowanie wierszy (płeć + status, status ma priorytet) ─────────────
@@ -462,7 +485,9 @@ def fill_gracze_tab(
             filtered = [
                 r
                 for r in filtered
-                if phrase in (str(r[1]) or '').lower() or phrase in (str(r[2]) or '').lower()
+                if phrase in (str(r[1]) or '').lower()
+                or phrase in (str(r[2]) or '').lower()
+                or phrase in (str(r[6]) or '').lower()  # Grupa
             ]
 
         def _fl(d: Dict[str, Any], key: str) -> List[str]:
@@ -607,16 +632,17 @@ def fill_gracze_tab(
                 parent=tab,
             )
             return
-        # row_data: [id, nick, imie, plec, social, emoji, glowny_int, wazna_int]
-        # open_edit_gracz_dialog oczekuje: [id, nick, imie, plec, social, glowny_int, wazna_int]
+        # row_data: [id, nick, imie, plec, social, emoji, grupa, glowny_int, wazna_int]
+        # open_edit_gracz_dialog oczekuje: [id, nick, imie, plec, social, glowny_int, wazna_int, grupa]
         edit_vals: List[Any] = [
             row_data[0],
             row_data[1],
             row_data[2],
             row_data[3],
             row_data[4],
-            row_data[6] if len(row_data) > 6 else 0,
-            row_data[7] if len(row_data) > 7 else 0,
+            row_data[7] if len(row_data) > 7 else 0,  # glowny_uzytkownik
+            row_data[8] if len(row_data) > 8 else 0,  # wazna
+            row_data[6] if len(row_data) > 6 else "",  # grupa
         ]
         open_edit_gracz_dialog(
             tab,
@@ -670,7 +696,7 @@ def fill_gracze_tab(
     _col_w = (
         list(active_col_widths_gracze)
         if len(active_col_widths_gracze) == len(_HEADERS)
-        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 120, 160, 90, 200, 56])
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 120, 160, 90, 200, 56, 80])
     )
 
     def _on_col_resize_gracze(widths: List[int]) -> None:
@@ -979,7 +1005,7 @@ def open_edit_gracz_dialog(
     dialog.transient(parent)  # type: ignore
     dialog.resizable(True, True)
 
-    apply_safe_geometry(dialog, parent, 420, 380)
+    apply_safe_geometry(dialog, parent, 420, 430)
 
     # Główny frame
     main_frame = ctk.CTkFrame(dialog, fg_color="transparent")  # type: ignore
@@ -1012,6 +1038,12 @@ def open_edit_gracz_dialog(
     social_entry.grid(row=4, column=1, pady=8, sticky="ew")
     social_entry.insert(0, values[4] if values[4] is not None else "")
 
+    # Grupa
+    ctk.CTkLabel(main_frame, text="Grupa", font=ctk.CTkFont(size=scale_font_size(12))).grid(row=5, column=0, pady=8, padx=(0, 10), sticky="w")  # type: ignore
+    grupa_entry_edit = ctk.CTkEntry(main_frame, width=250, placeholder_text="Tagi po przecinku, np.: Drużyna A, Kampania 2")  # type: ignore
+    grupa_entry_edit.grid(row=5, column=1, pady=8, sticky="ew")
+    grupa_entry_edit.insert(0, values[7] if len(values) > 7 and values[7] is not None else "")
+
     # Checkbox główny użytkownik
     glowny_var = tk.BooleanVar(value=bool(values[5]) if len(values) > 5 else False)
     wazna_var = tk.BooleanVar(value=bool(values[6]) if len(values) > 6 else False)
@@ -1027,13 +1059,13 @@ def open_edit_gracz_dialog(
             glowny_check.deselect()  # type: ignore
 
     glowny_check = ctk.CTkCheckBox(main_frame, text="⭐ Główny użytkownik (tylko jedna osoba)", variable=glowny_var, command=on_glowny_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
-    glowny_check.grid(row=5, column=0, columnspan=2, pady=8, sticky="w")
+    glowny_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
     if glowny_var.get():
         glowny_check.select()  # type: ignore
 
     # Checkbox ważna osoba
     wazna_check = ctk.CTkCheckBox(main_frame, text="👑 Ważna osoba", variable=wazna_var, command=on_wazna_toggle, font=ctk.CTkFont(size=scale_font_size(11)))  # type: ignore
-    wazna_check.grid(row=6, column=0, columnspan=2, pady=8, sticky="w")
+    wazna_check.grid(row=7, column=0, columnspan=2, pady=8, sticky="w")
     if wazna_var.get():
         wazna_check.select()  # type: ignore
 
@@ -1042,6 +1074,7 @@ def open_edit_gracz_dialog(
         name: str = name_entry.get().strip()
         gender: str = gender_var.get()
         social: str = social_entry.get().strip()
+        grupa: str = grupa_entry_edit.get().strip()
         glowny: int = 1 if glowny_var.get() else 0
         wazna: int = 1 if wazna_var.get() else 0
 
@@ -1059,7 +1092,7 @@ def open_edit_gracz_dialog(
 
             c.execute(
                 "UPDATE gracze SET nick=?, imie_nazwisko=?, plec=?, social=?,"
-                " glowny_uzytkownik=?, wazna=? WHERE id=?",
+                " glowny_uzytkownik=?, wazna=?, grupa=? WHERE id=?",
                 (
                     nick,
                     name if name else None,
@@ -1067,6 +1100,7 @@ def open_edit_gracz_dialog(
                     social if social else None,
                     glowny,
                     wazna,
+                    grupa if grupa else None,
                     values[0],
                 ),
             )
@@ -1080,7 +1114,7 @@ def open_edit_gracz_dialog(
 
     # Przyciski
     btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")  # type: ignore
-    btn_frame.grid(row=7, column=0, columnspan=2, pady=(15, 0))
+    btn_frame.grid(row=8, column=0, columnspan=2, pady=(15, 0))
 
     btn_save = ctk.CTkButton(btn_frame, text="💾 Zapisz", command=on_save, width=100, fg_color="#2E7D32", hover_color="#1B5E20", font=ctk.CTkFont(size=scale_font_size(12), weight="bold"))  # type: ignore
     btn_save.pack(side=tk.LEFT, padx=(0, 10))

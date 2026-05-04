@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.37-blue)
+![Version](https://img.shields.io/badge/version-0.4.39-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -87,9 +87,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.37-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.39-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.37.exe`
+4. Uruchom `Sesyjka-v0.4.39.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -115,8 +115,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.37.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.37.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.39.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.39.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -222,6 +222,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.39 (04.05.2026)
+- ✨ **Grupy graczy (tagi)**: nowe pole `Grupa` w katalogu graczy — gracz może należeć do wielu grup/kampanii wpisanych po przecinku (np. `Drużyna A, Kampania 2`); kolumna `Grupa` widoczna w tabeli z sortowaniem i wyszukiwaniem
+- ✨ **Szybkie zaznaczanie grupy w sesjach**: przy dodawaniu i edycji sesji — panel `Zaznacz grupę` z listą rozwijalną tagów i przyciskiem `Zaznacz` błyskawicznie zaznacza wszystkich graczy z wybranego tagu (z zachowaniem limitu graczy w sesji)
+- 🐛 **Naprawa pustych tabel po starcie**: widgety CTk budowane przy `withdraw()` nie renderowały się po `deiconify()`; po zamknięciu splash screenu wszystkie zakładki są teraz oznaczane jako `_dirty` i odświeżane po 100 ms
+- 🐛 **Naprawa dialogu zapisu Excel**: `filedialog.asksaveasfilename(parent=CTkToplevel)` powodował błąd DPI ukrywający przycisk Zapisz; fix: `parent=main_window` + `dlg.update()` przed wywołaniem
 
 ### v0.4.37 (29.04.2026)
 - 🔧 **Naprawa selekcji graczy w dialogach wyboru**: trwały zbiór `_persistent_sel` zapewnia zachowanie zaznaczenia graczy podczas filtrowania po nazwie — wątek `_rebuilding` blokuje nadpisanie przez programatyczne `select_set`; działa zarówno dla kliknięć myszką, jak i wpisywania tekstu

@@ -62,6 +62,38 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.39",
+            "date": "04.05.2026",
+            "changes": [
+                "\u2728 GRUPY GRACZY (TAGI):\u00b0",
+                "",
+                "\u2705 NOWA KOLUMNA GRUPA W KATALOGU GRACZY:",
+                "  \u2022 pole \u201eGrupa\u201d w formularzach dodawania i edycji gracza",
+                "  \u2022 wiele grup/kampanii po przecinku, np.: Dru\u017cyna A, Kampania 2",
+                "  \u2022 kolumna \u201eGrupa\u201d w tabeli graczy z sortowaniem i wyszukiwaniem",
+                "  \u2022 automatyczna migracja bazy danych (ALTER TABLE gracze ADD COLUMN grupa TEXT)",
+                "",
+                "\u2705 SZYBKIE ZAZNACZANIE GRUPY W SESJACH:",
+                "  \u2022 panel \u201eZaznacz grup\u0119\u201d w dialogu wyboru graczy przy dodawaniu sesji",
+                "  \u2022 panel \u201eZaznacz grup\u0119\u201d w dialogu wyboru graczy przy edycji sesji",
+                "  \u2022 lista rozwijana z wszystkimi unikalnymi tagami graczy",
+                "  \u2022 przycisk \u201eZaznacz\u201d b\u0142yskawicznie zaznacza wszystkich graczy z wybranego tagu",
+                "  \u2022 zachowany limit maksymalnej liczby graczy w sesji",
+                "",
+                "\ud83d\udc1b NAPRAWA B\u0141\u0118D\u00d3W:\u00b0",
+                "",
+                "\u2705 PUSTE TABELE PO STARCIE APLIKACJI:",
+                "  \u2022 widgety CTk budowane przy withdraw() nie renderowa\u0142y si\u0119 po deiconify()",
+                "  \u2022 po zamkni\u0119ciu splash screenu wszystkie zak\u0142adki oznaczane jako _dirty",
+                "  \u2022 aktywna zak\u0142adka od\u015bwie\u017cana po 100 ms od zamkni\u0119cia splash screenu",
+                "",
+                "\u2705 DIALOG ZAPISU EXCEL (FILEDIALOG):",
+                "  \u2022 filedialog.asksaveasfilename(parent=CTkToplevel) powodowa\u0142 b\u0142\u0105d DPI",
+                "  \u2022 fix: parent=main_window + dlg.update() przed wywo\u0142aniem filedialog",
+                "  \u2022 przycisk Zapisz ponownie widoczny na ekranach wysokiego DPI",
+            ],
+        },
+        {
             "version": "0.4.37",
             "date": "29.04.2026",
             "changes": [

@@ -846,6 +846,23 @@ def dodaj_system_rpg(
     if all_games_list:
         game_values = [f"{g[0]} - {g[1]}" for g in all_games_list]
         przypisz_combo.configure(values=game_values)
+    def _on_przypisz_scroll(event: Any) -> None:
+        vals = przypisz_combo.cget("values")
+        if not vals:
+            return
+        current = przypisz_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        przypisz_combo.set(vals[idx])
+
+    przypisz_combo.bind("<MouseWheel>", _on_przypisz_scroll)
+    przypisz_combo._entry.bind("<MouseWheel>", _on_przypisz_scroll)
     przypisz_combo.grid(row=3, column=1, pady=8, sticky="w")
     if preset_game_id is not None:
         przypisz_label.grid_remove()
@@ -927,8 +944,24 @@ def dodaj_system_rpg(
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
 
+    def _on_wydawca_scroll_dodaj(event: Any) -> None:
+        vals = wydawca_combo.cget("values")
+        if not vals:
+            return
+        current = wydawca_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        wydawca_combo.set(vals[idx])
+
     # Odśwież listę wydawców przy każdym kliknięciu w combobox
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
+    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_dodaj)
     wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
 
     # Przycisk dodania nowego wydawcy inline
@@ -2531,9 +2564,9 @@ def open_edit_system_dialog(
 
     # Ustaw geometrię na podstawie tego czy VTT jest zaznaczone i czy to suplement
     if has_vtt and is_suplement:
-        width, height = 1100, 850
+        width, height = 900, 900
     elif has_vtt:
-        width, height = 1100, 680
+        width, height = 900, 760
     elif is_suplement:
         width, height = 950, 720
     else:
@@ -2586,6 +2619,24 @@ def open_edit_system_dialog(
                     przypisz_edit_var.set(f"{g[0]} - {g[1]}")
                     break
     przypisz_edit_combo.grid(row=3, column=1, pady=8, sticky="w")
+
+    def _on_przypisz_edit_scroll(event: Any) -> None:
+        vals = przypisz_edit_combo.cget("values")
+        if not vals:
+            return
+        current = przypisz_edit_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        przypisz_edit_combo.set(vals[idx])
+
+    przypisz_edit_combo.bind("<MouseWheel>", _on_przypisz_edit_scroll)
+    przypisz_edit_combo._entry.bind("<MouseWheel>", _on_przypisz_edit_scroll)
 
     def _after_add_game_edit(**_kw: Any) -> None:
         """Odświeża listę systemów gry po dodaniu nowego."""
@@ -2703,8 +2754,24 @@ def open_edit_system_dialog(
                     wydawca_var.set(f"{pub[0]} - {pub[1]}")
                     break
 
+    def _on_wydawca_scroll_edytuj(event: Any) -> None:
+        vals = wydawca_combo.cget("values")
+        if not vals:
+            return
+        current = wydawca_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        wydawca_combo.set(vals[idx])
+
     # Odśwież listę wydawców przy każdym kliknięciu w combobox
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
+    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_edytuj)
     wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
 
     # Przycisk dodania nowego wydawcy inline
@@ -2798,9 +2865,9 @@ def open_edit_system_dialog(
         is_suplement = typ_var.get() == "Suplement"
 
         if is_vtt and is_suplement:
-            width, height = 1100, 880
+            width, height = 900, 900
         elif is_vtt:
-            width, height = 1100, 680
+            width, height = 900, 760
         elif is_suplement:
             width, height = 950, 750
         else:
@@ -3704,8 +3771,24 @@ def dodaj_suplement_do_systemu(
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
 
+    def _on_wydawca_scroll_3(event: Any) -> None:
+        vals = wydawca_combo.cget("values")
+        if not vals:
+            return
+        current = wydawca_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        wydawca_combo.set(vals[idx])
+
     # Odśwież listę wydawców przy każdym kliknięciu w combobox
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
+    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_3)
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie

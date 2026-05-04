@@ -9,7 +9,7 @@ import customtkinter as ctk
 import logging
 from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry, create_ctk_toplevel, open_calendar_picker
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, open_calendar_picker, make_scrollable_dialog_frame
 
 _log = logging.getLogger(__name__)
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
@@ -181,11 +181,10 @@ def dodaj_sesje_rpg(
     dialog.resizable(True, True)
 
     if parent is not None:
-        apply_safe_geometry(dialog, parent, 640, 560)
+        apply_safe_geometry(dialog, parent, 640, 680)
 
-    # Główna ramka z padding
-    main_frame = ctk.CTkFrame(dialog)
-    main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    # Główna ramka z padding (scrollowalna — formularz ma wiele pól)
+    main_frame = make_scrollable_dialog_frame(dialog)
     main_frame.columnconfigure(1, weight=1)
 
     # Inicjalizuj bazę danych
@@ -266,7 +265,23 @@ def dodaj_sesje_rpg(
         else:
             system_combo.configure(values=_all_sys_values)
 
+    def _on_combo_scroll_dodaj(event: Any) -> None:
+        vals = system_combo.cget("values")
+        if not vals:
+            return
+        current = system_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        system_combo.set(vals[idx])
+
     system_combo.bind("<KeyRelease>", _filter_systems_dodaj)
+    system_combo.bind("<MouseWheel>", _on_combo_scroll_dodaj)
 
     def _after_add_system_dodaj() -> None:
         """Odświeża listę systemów po dodaniu nowego z poziomu dialogu sesji."""
@@ -1021,11 +1036,10 @@ def open_edit_session_dialog(
     dialog.transient(parent)
     dialog.resizable(True, True)
 
-    apply_safe_geometry(dialog, parent, 640, 560)
+    apply_safe_geometry(dialog, parent, 640, 680)
 
-    # Główna ramka z padding
-    main_frame = ctk.CTkFrame(dialog)
-    main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    # Główna ramka z padding (scrollowalna — formularz ma wiele pól)
+    main_frame = make_scrollable_dialog_frame(dialog)
     main_frame.columnconfigure(1, weight=1)
 
     # Pobierz pełne dane sesji z bazy
@@ -1141,7 +1155,23 @@ def open_edit_session_dialog(
         else:
             system_combo.configure(values=_all_sys_values_e)
 
+    def _on_combo_scroll_edytuj(event: Any) -> None:
+        vals = system_combo.cget("values")
+        if not vals:
+            return
+        current = system_var.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        system_combo.set(vals[idx])
+
     system_combo.bind("<KeyRelease>", _filter_systems_edytuj)
+    system_combo.bind("<MouseWheel>", _on_combo_scroll_edytuj)
 
     def _after_add_system_edytuj() -> None:
         """Odświeża listę systemów po dodaniu nowego z poziomu dialogu edycji sesji."""
@@ -1207,9 +1237,9 @@ def open_edit_session_dialog(
         else:
             player_names = []
             for pid in selected_players_list:
-                for p_id, p_nick in players:
-                    if p_id == pid:
-                        player_names.append(p_nick)
+                for p in players:
+                    if p[0] == pid:
+                        player_names.append(p[1])
                         break
             selected_players_label.configure(
                 text=f"Wybrani gracze ({len(selected_players_list)}): {', '.join(player_names)}"

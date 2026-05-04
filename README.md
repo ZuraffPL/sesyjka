@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.39-blue)
+![Version](https://img.shields.io/badge/version-0.4.41-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -87,9 +87,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.39-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.41-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.39.exe`
+4. Uruchom `Sesyjka-v0.4.41.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -115,8 +115,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.39.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.39.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.41.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.41.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -222,6 +222,12 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.41 (04.05.2026)
+- 🐛 **Naprawa dialogu edycji sesji**: pola Mistrz Gry, Typ sesji, Tytuł kampanii/przygody i przyciski Zapisz/Anuluj były niewidoczne — błąd unpacking krotki `(id, nick, grupa)` do 2 zmiennych przerywał budowę formularza; naprawiono oraz zamieniono `CTkFrame` na `CTkScrollableFrame`
+- 🖥️ **Przewijanie kółkiem myszy w comboboxach sesji**: pole „System RPG” w dialogach dodawania i edycji sesji obsługuje kółko myszy do nawigacji po liście systemów
+- 🖥️ **Przewijanie kółkiem myszy w comboboxach systemów**: pola „Przypisz do systemu” i „Wydawca” w dialogach dodawania i edycji systemu RPG obsługują kółko myszy (binding na frame i wewnętrzny `_entry`)
+- 🐛 **Naprawa szerokości okna edycji systemu RPG z VTT**: przy zaznaczonym VTT okno niepotrzebnie rozszerzało się do 1100px; zmniejszono do 900px
 
 ### v0.4.39 (04.05.2026)
 - ✨ **Grupy graczy (tagi)**: nowe pole `Grupa` w katalogu graczy — gracz może należeć do wielu grup/kampanii wpisanych po przecinku (np. `Drużyna A, Kampania 2`); kolumna `Grupa` widoczna w tabeli z sortowaniem i wyszukiwaniem

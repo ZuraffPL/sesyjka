@@ -62,6 +62,33 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.41",
+            "date": "04.05.2026",
+            "changes": [
+                "\ud83d\udc1b NAPRAWA B\u0141\u0118D\u00d3W:\u00b0",
+                "",
+                "\u2705 DIALOG EDYCJI SESJI \u2014 BRAKUJ\u0104CE POLA:",
+                "  \u2022 pola Mistrz Gry, Typ sesji, Tytu\u0142 kampanii/przygody oraz przyciski by\u0142y niewidoczne",
+                "  \u2022 przyczyna: b\u0142\u0105d unpacking krotki (id, nick, grupa) do 2 zmiennych",
+                "  \u2022 naprawa: u\u017cycie indeks\u00f3w p[0], p[1] zamiast for p_id, p_nick in players",
+                "  \u2022 dialog zamieniony na CTkScrollableFrame (jak dialog dodawania)",
+                "",
+                "\u2705 NIEPRAWID\u0141OWA SZEROKO\u015a\u0106 OKNA EDYCJI SYSTEMU RPG:",
+                "  \u2022 przy zaznaczonym VTT okno rozszerza\u0142o si\u0119 do 1100px zamiast ~900px",
+                "  \u2022 naprawiono dla obu przypadk\u00f3w: inicjalnego i po prze\u0142\u0105czeniu checkboxa VTT",
+                "",
+                "\ud83d\udda5\ufe0f PRZEWIJANIE K\u00d3\u0141KIEM MYSZY W COMBOBOXACH:\u00b0",
+                "",
+                "\u2705 POLE SYSTEM RPG W SESJACH:",
+                "  \u2022 k\u00f3\u0142ko myszy przewija list\u0119 system\u00f3w w dialogach dodawania i edycji sesji",
+                "  \u2022 dzia\u0142a r\u00f3wnie\u017c po wpisaniu frazy filtruj\u0105cej \u2014 przewija tylko przefiltrowane pozycje",
+                "",
+                "\u2705 POLA PRZYPISZ DO SYSTEMU I WYDAWCA:",
+                "  \u2022 k\u00f3\u0142ko myszy w comboboxach w dialogach dodawania i edycji systemu RPG",
+                "  \u2022 binding na frame CTkComboBox oraz wewn\u0119trzny _entry (zdarzenia trafiaj\u0105 do _entry)",
+            ],
+        },
+        {
             "version": "0.4.39",
             "date": "04.05.2026",
             "changes": [

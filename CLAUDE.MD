@@ -3,13 +3,15 @@
 ## Kontekst projektu
 
 Sesyjka to desktopowa aplikacja na Windows do zarządzania danymi związanymi z grami RPG (TTRPG): systemami, suplementami, sesjami, graczami, wydawcami oraz statystykami rozgrywek.  
-Projekt jest rozwijany iteracyjnie (wersja 0.3.30) z dużym naciskiem na ergonomię UI (CustomTkinter), wysokie DPI, skalowanie fontów, wydajność tabel (CTkDataTable) i bezpieczne zarządzanie bazami SQLite (database_manager, migracje, backupy).
+Projekt jest rozwijany iteracyjnie (wersja 0.4.41) z dużym naciskiem na ergonomię UI (CustomTkinter), wysokie DPI, skalowanie fontów, wydajność tabel (CTkDataTable) i bezpieczne zarządzanie bazami SQLite (database_manager, migracje, backupy).
 
 ---
 
 ## Stack technologiczny
 
-- **Język:** Python 3.9–3.12 (Python 3.13+ może powodować problemy z PyInstallerem — nie używać do budowania EXE bez wcześniejszego sprawdzenia kompatybilności).
+- **Język:** Python 3.14.4 (wersja produkcyjna i deweloperska od maja 2026). Starsze wersje 3.9–3.12 nie są już aktywnie wspierane w tym projekcie.
+  - **PyInstaller 6.18.0** z `pyinstaller-hooks-contrib 2026.5` — zweryfikowany jako kompatybilny z Python 3.14.4 na Windows 10+.
+  - Python 3.14 wprowadza t-stringi (`t""`), `copy.replace()`, `annotationlib` oraz opcjonalny free-threading (domyślnie wyłączony, nie używać w projekcie — Tk nie jest thread-safe).
 - **Platforma docelowa:** Windows 10+ (wersja EXE budowana PyInstallerem).
 - **GUI:**  
   - `tkinter` — baza,  
@@ -21,8 +23,10 @@ Projekt jest rozwijany iteracyjnie (wersja 0.3.30) z dużym naciskiem na ergonom
 - **Inne komponenty UI:**  
   - `CTkScrollableFrame` — scrollowane formularze i dialogi (wysokie DPI),  
   - własne dialogi (`about_dialog.py`, `apphistory.py`, `sesje_rpg_dialogs.py`, dialogi systemów/filtrów).
-- **Grafika:** `Pillow (PIL)` — ładowanie i tintowanie ikon PNG (np. ikona edycji w tabelach).
-- **Wykresy:** `matplotlib` — generowanie wykresów i statystyk w `statystyki.py` (skaluje się razem z fontami).
+- **Grafika:** `Pillow 12.2.0` — ładowanie i tintowanie ikon PNG (np. ikona edycji w tabelach).
+- **Wykresy:** `matplotlib 3.10.9` — generowanie wykresów i statystyk w `statystyki.py` (skaluje się razem z fontami).
+- **Kalendarz dat:** `tkcalendar 1.6.1` — graficzny picker dat w dialogach sesji.
+- **Eksport danych:** `openpyxl 3.1.5` — eksport baz do pliku `.xlsx` (każda tabela = osobny arkusz).
 - **Baza danych:**  
   - SQLite: 4 bazy (`systemy_rpg.db`, `sesje_rpg.db`, `gracze.db`, `wydawcy.db`) zarządzane przez `database_manager.py`,  
   - automatyczna migracja, wersjonowanie schematu, backupy, przeniesienie do `%LOCALAPPDATA%\Sesyjka\` / `~/.sesyjka/`.
@@ -53,8 +57,12 @@ sesyjka/
 ├── wydawcy.py              # Moduł wydawców
 ├── statystyki.py           # Moduł statystyk
 ├── about_dialog.py         # Dialog "O programie"
-├── apphistory.py           # Historia wersji
+├── apphistory.py           # Historia wersji (dialog z changelogiem)
+├── help_dialog.py          # Dialog pomocy (instrukcja użytkownika)
+├── splash_screen.py        # Ekran powitalny przy starcie aplikacji
+├── db_transfer_dialog.py   # Dialog importu/eksportu baz danych (transfer między komputerami)
 ├── pyrightconfig.json      # Konfiguracja type checkera Pyright
+├── version_info.txt        # Metadane wersji dla PyInstaller (Windows EXE)
 ├── Icons/                  # Ikony aplikacji (edit.png, ...)
 └── .github/                # Konfiguracja GitHub
 ```
@@ -133,6 +141,8 @@ Wytyczne w tym pliku powinny nie zmieniać tej struktury bez wyraźnego poleceni
 
     **Type hints (PEP 484) są wymagane** we wszystkich nowych funkcjach i metodach. Wyjątek: callbacki Tkinter przyjmujące `*args` (np. `command=`, `bind()`), gdzie pominięcie adnotacji jest dopuszczalne z komentarzem `# Tk callback`.
 
+    **Python 3.14 i adnotacje (PEP 649):** W Python 3.14 ewaluacja adnotacji jest leniwa domyślnie (przez `annotationlib`), co zastępuje potrzebę `from __future__ import annotations`. Nowy kod nie powinien dodawać tej dyrektywy; istniejące użycia są nieszkodliwe, ale zbędne.
+
 ### Komentarze i tekst w UI
 
     Język: polski (zgodnie z istniejącymi napisami), ale dopuszczalne angielskie komentarze techniczne — ważne, by w jednym pliku nie mieszać ich nadmiernie.
@@ -193,7 +203,7 @@ threading.Thread(target=_load_data_bg, daemon=True).start()
 
         dla długich formularzy używają CTkScrollableFrame z dialog_utils.make_scrollable_dialog_frame() lub analogicznego wzorca.
 
-    apphistory.py / apphistory-2.py:
+    apphistory.py:
 
         dialog historii wersji to wzorzec dla czytelnego, scrollowalnego okna długiego tekstu (heading, separator, scrollable frame, labelki z pogrubieniem wersji i daty, monospaced / normalny font).
 
@@ -443,10 +453,10 @@ Referencyjnie (README):
 git clone https://github.com/ZuraffPL/sesyjka.git
 cd sesyjka
 
-python -m venv .venv
+py -3.14 -m venv .venv
 .venv\Scripts\activate
 
-pip install customtkinter tksheet matplotlib Pillow
+pip install -r requirements.txt
 
 python main.py
 ```
@@ -455,7 +465,10 @@ Wszelkie dodatkowe zależności (np. nowe pakiety zewnętrzne) należy dopisać 
 
 ```
 customtkinter==5.2.2
-tksheet==7.x.x
-matplotlib==3.x.x
-Pillow==10.x.x
+tksheet==7.5.19
+matplotlib==3.10.9
+Pillow==12.2.0
+tkcalendar==1.6.1
+openpyxl==3.1.5
+pyinstaller==6.18.0
 ```

@@ -1,7 +1,7 @@
 # Sesyjka - TTRPG Base Manager
 
 ![Version](https://img.shields.io/badge/version-0.4.41-blue)
-![Python](https://img.shields.io/badge/python-3.9%2B-green)
+![Python](https://img.shields.io/badge/python-3.14.4-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
 Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Role-Playing Games).
@@ -122,7 +122,7 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 
 ### Wymagania
 - Windows 10 lub nowszy
-- Python 3.9 lub nowszy
+- Python 3.14.4 lub nowszy
 
 ### Kroki instalacji
 
@@ -134,7 +134,7 @@ cd sesyjka
 
 2. Utwórz środowisko wirtualne:
 ```bash
-python -m venv .venv
+py -3.14 -m venv .venv
 ```
 
 3. Aktywuj środowisko wirtualne:
@@ -438,7 +438,7 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 
 ## 🛠️ Technologie
 
-- **Python 3.9+** - Język programowania
+- **Python 3.14.4** - Język programowania
 - **CustomTkinter** - Nowoczesny framework GUI
 - **tkinter** - Podstawowy framework GUI
 - **tksheet** - Widok tabelaryczny (Systemy RPG)

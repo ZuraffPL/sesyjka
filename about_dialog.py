@@ -106,7 +106,7 @@ PODZIĘKOWANIA DLA TESTERÓW:
 • Tsar
 
 TECHNOLOGIE:
-• Język: Python 3.9+
+• Język: Python 3.14.4
 • GUI: CustomTkinter + tkinter/ttk
 • Tabele: CTkDataTable (własny widget) — ikony, sortowanie, hierarchia, tooltipy
 • Kalendarz: tkcalendar — graficzny picker dat w dialogach sesji

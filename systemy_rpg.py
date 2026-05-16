@@ -883,6 +883,7 @@ def dodaj_system_rpg(
         "Moduł",
         "Lorebook/Sourcebook",
         "Bestiariusz",
+        "Starter/Zestaw Startowy",
     ]
 
     for i, typ in enumerate(typy_suplementow):

@@ -16,6 +16,7 @@ Wspiera:
 from __future__ import annotations
 
 import tkinter as tk
+import tkinter.ttk as _ttk
 import customtkinter as ctk  # type: ignore
 import logging as _logging
 import time as _time
@@ -309,16 +310,25 @@ class CTkDataTable(tk.Frame):
         self._header_lp_label: Optional[tk.Label] = None
         self._header_filler: Optional[tk.Label] = None
 
+        # Canvas-based scroll (poziomy + pionowy)
+        self._hdr_canvas: Optional[tk.Canvas] = None
+        self._data_canvas: Optional[tk.Canvas] = None
+        self._inner: Optional[tk.Frame] = None
+        self._inner_win: int = 0
+
         self._build_header()
-        self._scroll = ctk.CTkScrollableFrame(self, fg_color=t["bg"])
-        self._scroll.pack(fill=tk.BOTH, expand=True)  # type: ignore[misc]
+        self._build_data_area()
+        self._scroll = self._inner  # type: ignore[assignment]  # backward compat
         self._build_rows()
 
     # ── nagłówek ───────────────────────────────────────────────────────────
     def _build_header(self) -> None:
         t = self._theme
-        hf = tk.Frame(self, bg=t["hdr_bg"], height=_HDR_H)
-        hf.pack(fill=tk.X, side=tk.TOP)
+        hdr_canvas = tk.Canvas(self, bg=t["hdr_bg"], height=_HDR_H, highlightthickness=0)
+        hdr_canvas.pack(fill=tk.X, side=tk.TOP)
+        self._hdr_canvas = hdr_canvas
+        hf = tk.Frame(hdr_canvas, bg=t["hdr_bg"])
+        hdr_canvas.create_window((0, 0), window=hf, anchor="nw", height=_HDR_H, tags="hdr_win")
         hf.pack_propagate(False)
         self._header_frame = hf
         self._col_hdr_labels = {}
@@ -424,6 +434,91 @@ class CTkDataTable(tk.Frame):
                 x += _EDIT_W
         if self._header_filler is not None:
             self._header_filler.place_configure(x=x, width=-x)
+        # Sync header canvas scrollregion with content width
+        if self._hdr_canvas is not None:
+            total_w = self._get_content_width()
+            cw = self._hdr_canvas.winfo_width() or 1
+            self._hdr_canvas.configure(scrollregion=(0, 0, max(total_w, cw), _HDR_H))
+            self._hdr_canvas.itemconfigure("hdr_win", width=max(total_w, cw))
+
+    # ── canvas z poziomym i pionowym scrollem ─────────────────────────────
+    def _build_data_area(self) -> None:
+        """Tworzy canvas danych z poziomym i pionowym scrollbarem (ttk)."""
+        t = self._theme
+        container = tk.Frame(self, bg=t["bg"])
+        container.pack(fill=tk.BOTH, expand=True)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+
+        self._data_canvas = tk.Canvas(container, bg=t["bg"], highlightthickness=0)
+        self._data_canvas.grid(row=0, column=0, sticky="nsew")
+
+        yscroll = _ttk.Scrollbar(container, orient="vertical", command=self._data_canvas.yview)
+        yscroll.grid(row=0, column=1, sticky="ns")
+
+        xscroll = _ttk.Scrollbar(container, orient="horizontal", command=self._xview_both)
+        xscroll.grid(row=1, column=0, sticky="ew")
+
+        self._data_canvas.configure(
+            yscrollcommand=yscroll.set,
+            xscrollcommand=xscroll.set,
+        )
+
+        self._inner = tk.Frame(self._data_canvas, bg=t["bg"])
+        self._inner_win = self._data_canvas.create_window((0, 0), window=self._inner, anchor="nw")
+
+        self._inner.bind("<Configure>", self._on_inner_configure)
+        self._data_canvas.bind("<Configure>", self._on_canvas_configure)
+
+        # Kółko myszy: bind_all aktywny gdy mysz w obszarze danych
+        self.bind("<Enter>", lambda _e: self._data_canvas.bind_all(  # type: ignore[union-attr]
+            "<MouseWheel>", self._on_mousewheel
+        ))
+        self.bind("<Leave>", lambda _e: self._data_canvas.unbind_all(  # type: ignore[union-attr]
+            "<MouseWheel>"
+        ))
+
+    def _xview_both(self, *args: Any) -> None:
+        """Przewija oba kanwasy (nagłówek i dane) synchronicznie w poziomie."""
+        if self._data_canvas is not None:
+            self._data_canvas.xview(*args)
+        if self._hdr_canvas is not None:
+            self._hdr_canvas.xview(*args)
+
+    def _on_inner_configure(self, event: Any) -> None:
+        """Aktualizuje scrollregion i szerokość inner frame po zmianie zawartości."""
+        if self._data_canvas is None:
+            return
+        self._data_canvas.configure(scrollregion=self._data_canvas.bbox("all"))
+        total_w = self._get_content_width()
+        cw = self._data_canvas.winfo_width() or 1
+        if self._inner_win:
+            self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, cw))
+
+    def _on_canvas_configure(self, event: Any) -> None:
+        """Dostosowuje szerokość ramki wewnętrznej do zawartości lub kanwasu."""
+        if self._data_canvas is None or not self._inner_win:
+            return
+        total_w = self._get_content_width()
+        self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, event.width))
+
+    def _get_content_width(self) -> int:
+        """Zwraca sumę szerokości wszystkich widocznych kolumn (px)."""
+        x = _ROW_NUM_W if self._show_row_num else 0
+        for i in self._col_order:
+            if i in self._hidden_cols:
+                if i == self._id_col and self._show_edit_btn:
+                    x += _EDIT_W
+                continue
+            x += self.col_widths[i]
+            if i == self._id_col and self._show_edit_btn:
+                x += _EDIT_W
+        return x
+
+    def _on_mousewheel(self, event: Any) -> None:
+        """Przewija kanwas danych kółkiem myszy (Windows: event.delta)."""
+        if self._data_canvas is not None:
+            self._data_canvas.yview_scroll(-int(event.delta / 120), "units")
 
     # ── zmiana szerokości kolumn (przeciąganie) ────────────────────────────
     def _on_resize_press(self, event: Any, col_idx: int) -> None:
@@ -448,6 +543,12 @@ class CTkDataTable(tk.Frame):
             return
         self._drag_col = None
         self._force_rebuild_rows()
+        # Aktualizuj scrollregion po zmianie szerokości kolumny
+        if self._data_canvas is not None:
+            total_w = self._get_content_width()
+            cw = self._data_canvas.winfo_width() or 1
+            self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, cw))
+            self._data_canvas.configure(scrollregion=self._data_canvas.bbox("all"))
         if self._resize_cb is not None:
             self._resize_cb(list(self.col_widths))
 

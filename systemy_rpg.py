@@ -427,20 +427,18 @@ def get_all_systems() -> list[tuple[Any, ...]]:
         waluta = system[13] if system[13] else "PLN"  # wspólna waluta z waluta_zakupu
 
         cena_parts: List[str] = []
-        if status_kolekcja == "Sprzedane":
-            if system[14]:  # cena_sprzedazy
-                w_sp = system[15] if system[15] else "PLN"
-                cena_parts.append(f"sprzedaż: {system[14]:.2f} {w_sp}")
-        else:
-            if cena_fiz_val:
-                cena_parts.append(f"fiz: {cena_fiz_val:.2f} {waluta}")
-            if cena_pdf_val:
-                cena_parts.append(f"pdf: {cena_pdf_val:.2f} {waluta}")
-            if cena_vtt_val:
-                cena_parts.append(f"vtt: {cena_vtt_val:.2f} {waluta}")
-            # Fallback na starą kolumnę gdy brak nowych (stara baza bez migracji)
-            if not cena_parts and system[12] and status_kolekcja in ("W kolekcji", "Na sprzedaż"):
-                cena_parts.append(f"{system[12]:.2f} {waluta}")
+        if cena_fiz_val:
+            cena_parts.append(f"fiz: {cena_fiz_val:.2f} {waluta}")
+        if cena_pdf_val:
+            cena_parts.append(f"pdf: {cena_pdf_val:.2f} {waluta}")
+        if cena_vtt_val:
+            cena_parts.append(f"vtt: {cena_vtt_val:.2f} {waluta}")
+        # Fallback na starą kolumnę gdy brak nowych (stara baza bez migracji)
+        if not cena_parts and system[12]:
+            cena_parts.append(f"{system[12]:.2f} {waluta}")
+        if system[14]:  # cena_sprzedazy — zawsze pokazuj jeśli istnieje
+            w_sp = system[15] if system[15] else "PLN"
+            cena_parts.append(f"sprzedaż: {system[14]:.2f} {w_sp}")
         cena_str = " / ".join(cena_parts)
 
         # Formatuj VTT - nazwy VTT oddzielone przecinkami
@@ -2857,13 +2855,14 @@ def open_edit_system_dialog(
         vtt_selection_frame.grid_remove()
 
     def update_dialog_size() -> None:
-        """Aktualizuje rozmiar okna na podstawie stanu VTT i typu"""
+        """Aktualizuje rozmiar okna na podstawie stanu VTT, typu i statusu kolekcji"""
         if not dialog.winfo_exists():
             return
         parent.update_idletasks()
 
         is_vtt = vtt_var.get()
         is_suplement = typ_var.get() == "Suplement"
+        is_sprzedane = status_kolekcja_var.get() == "Sprzedane"
 
         if is_vtt and is_suplement:
             width, height = 900, 900
@@ -2873,6 +2872,10 @@ def open_edit_system_dialog(
             width, height = 950, 750
         else:
             width, height = 950, 590
+
+        # Dodatkowa wysokość gdy Sprzedane — widoczne obie sekcje cen jednocześnie
+        if is_sprzedane and (fizyczny_var.get() or pdf_var.get() or vtt_var.get()):
+            height += 65
 
         geo = clamp_geometry(dialog, parent, width, height)
         dialog.geometry(geo)
@@ -2969,12 +2972,12 @@ def open_edit_system_dialog(
     if _cv:
         cena_vtt_e_entry.insert(0, f"{_cv:.2f}")
 
-    # Cena sprzedaży (dla statusu "Sprzedane")
+    # Cena sprzedaży (dla statusu "Sprzedane") — row=11, żeby nie nakładała się na cenę zakupu
     cena_sprzedazy_label = ctk.CTkLabel(main_frame, text="Cena sprzedaży")
-    cena_sprzedazy_label.grid(row=10, column=2, pady=8, padx=(20, 5), sticky="w")
+    cena_sprzedazy_label.grid(row=11, column=2, pady=8, padx=(20, 5), sticky="w")
 
     cena_sprzedazy_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    cena_sprzedazy_frame.grid(row=10, column=3, pady=8, padx=10, sticky="w")
+    cena_sprzedazy_frame.grid(row=11, column=3, pady=8, padx=10, sticky="w")
 
     cena_sprzedazy_entry = ctk.CTkEntry(cena_sprzedazy_frame, width=100)
     cena_sprzedazy_entry.pack(side=tk.LEFT, padx=(0, 5))
@@ -2998,23 +3001,22 @@ def open_edit_system_dialog(
     cena_sprzedazy_frame.grid_remove()
 
     def _update_cena_fields_e(*_args: Any) -> None:
-        """Pokazuje/ukrywa wiersze cen zakupu zależnie od posiadania i statusu (edycja)."""
+        """Pokazuje/ukrywa wiersze cen zakupu i sprzedaży zależnie od posiadania i statusu."""
         status = status_kolekcja_var.get()
         has_fiz = fizyczny_var.get()
         has_pdf = pdf_var.get()
         has_vtt = vtt_var.get()
 
+        # Cena sprzedaży: pokazuj tylko gdy "Sprzedane"
         if status == "Sprzedane":
-            cena_row_label_e.grid_remove()
-            cena_fields_frame_e.grid_remove()
             cena_sprzedazy_label.grid()
             cena_sprzedazy_frame.grid()
-            return
+        else:
+            cena_sprzedazy_label.grid_remove()
+            cena_sprzedazy_frame.grid_remove()
 
-        cena_sprzedazy_label.grid_remove()
-        cena_sprzedazy_frame.grid_remove()
-
-        if status in ("W kolekcji", "Na sprzedaż") and (has_fiz or has_pdf or has_vtt):
+        # Cena zakupu: pokazuj gdy W kolekcji, Na sprzedaż LUB Sprzedane (i cokolwiek posiadane)
+        if status in ("W kolekcji", "Na sprzedaż", "Sprzedane") and (has_fiz or has_pdf or has_vtt):
             cena_row_label_e.grid()
             cena_fields_frame_e.grid()
             if has_fiz:
@@ -3038,6 +3040,9 @@ def open_edit_system_dialog(
         else:
             cena_row_label_e.grid_remove()
             cena_fields_frame_e.grid_remove()
+
+        # Dostosuj rozmiar okna do widocznych sekcji cen
+        update_dialog_size()
 
     status_kolekcja_var.trace_add('write', _update_cena_fields_e)
     fizyczny_var.trace_add('write', _update_cena_fields_e)
@@ -3139,7 +3144,7 @@ def open_edit_system_dialog(
                 messagebox.showerror("Błąd", f"Cena {label} musi być liczbą.", parent=dialog)
                 raise
 
-        if status_kolekcja_var.get() in ["W kolekcji", "Na sprzedaż"]:
+        if status_kolekcja_var.get() in ["W kolekcji", "Na sprzedaż", "Sprzedane"]:
             waluta_cena_save = waluta_cena_e_var.get()
             try:
                 if fizyczny_var.get():
@@ -3150,7 +3155,7 @@ def open_edit_system_dialog(
                     cena_vtt_save = _parse_cena_edit(cena_vtt_e_entry, "VTT")
             except ValueError:
                 return
-        elif status_kolekcja_var.get() == "Sprzedane":
+        if status_kolekcja_var.get() == "Sprzedane":
             cena_str_sp = cena_sprzedazy_entry.get().strip().replace(',', '.')
             if cena_str_sp:
                 try:
@@ -3217,7 +3222,7 @@ def open_edit_system_dialog(
 
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=11, column=0, columnspan=4, pady=15, sticky="ew")
+    button_frame.grid(row=12, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
 

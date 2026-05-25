@@ -66,12 +66,13 @@ active_visible_cols_systemy: Dict[str, bool] = {
     "Język": True,
     "Status": True,
     "Cena": True,
+    "Rok wydania": True,
 }
 
 # Kolejność kolumn w tabeli systemów (tylko przestawiane, bez zawsze-widocznych ""/ID)
 active_col_order_systemy: List[str] = [
     "Nazwa systemu", "Typ", "System główny", "Typ suplementu",
-    "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena",
+    "Wydawca", "Fizyczny", "PDF", "VTT", "Język", "Status", "Cena", "Rok wydania",
 ]
 
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
@@ -115,7 +116,7 @@ def _migrate_remove_cross_db_fks() -> None:
             "id", "nazwa", "typ", "system_glowny_id", "typ_suplementu", "wydawca_id",
             "fizyczny", "pdf", "jezyk", "status_gra", "status_kolekcja",
             "cena_zakupu", "waluta_zakupu", "cena_sprzedazy", "waluta_sprzedazy",
-            "vtt", "system_glowny_nazwa_custom",
+            "vtt", "system_glowny_nazwa_custom", "rok_wydania", "isbn",
         ]
         copy_cols = [col for col in target_cols if col in existing_cols]
         cols_str = ", ".join(copy_cols)
@@ -289,6 +290,16 @@ def init_db() -> None:
             "WHERE cena_fiz IS NULL AND cena_zakupu IS NOT NULL"
         )
 
+        # Migracja: rok wydania i numer ISBN (v0.4.42+)
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN rok_wydania INTEGER")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
+        try:
+            c.execute("ALTER TABLE systemy_rpg ADD COLUMN isbn TEXT")
+        except sqlite3.OperationalError:
+            pass  # Kolumna już istnieje
+
         conn.commit()
 
 
@@ -387,7 +398,8 @@ def get_all_systems() -> list[tuple[Any, ...]]:
                    s.cena_zakupu, s.waluta_zakupu, s.cena_sprzedazy, s.waluta_sprzedazy,
                    s.system_glowny_nazwa_custom,
                    s.system_gry_id,
-                   s.cena_fiz, s.cena_pdf, s.cena_vtt
+                   s.cena_fiz, s.cena_pdf, s.cena_vtt,
+                   s.rok_wydania
             FROM systemy_rpg s
             ORDER BY s.id ASC
         """
@@ -463,6 +475,7 @@ def get_all_systems() -> list[tuple[Any, ...]]:
                 cena_str,  # cena (zakupu lub sprzedaży w zależności od statusu)
                 system[16] if len(system) > 16 else None,  # system_glowny_nazwa_custom
                 system[17] if len(system) > 17 else None,  # system_gry_id
+                system[21] if len(system) > 21 else None,  # rok_wydania
             )
         )  # type: ignore
 
@@ -806,7 +819,7 @@ def dodaj_system_rpg(
     dialog.transient(parent)
     dialog.resizable(True, True)
 
-    apply_safe_geometry(dialog, parent, 950, 550)
+    apply_safe_geometry(dialog, parent, 950, 640)
 
     # Główna ramka z padding (scrollowalna dla małych ekranów / wysokiego DPI)
     main_frame = ctk.CTkScrollableFrame(dialog)
@@ -1041,13 +1054,13 @@ def dodaj_system_rpg(
         is_suplement = typ_var.get() == "Suplement"
 
         if is_vtt and is_suplement:
-            width, height = 1100, 850
+            width, height = 1100, 930
         elif is_vtt:
-            width, height = 1100, 680
+            width, height = 1100, 760
         elif is_suplement:
-            width, height = 950, 720
+            width, height = 950, 800
         else:
-            width, height = 950, 560
+            width, height = 950, 640
 
         geo = clamp_geometry(dialog, parent, width, height)
         dialog.geometry(geo)
@@ -1330,8 +1343,9 @@ def dodaj_system_rpg(
                                        waluta_sprzedazy,
                                        system_glowny_nazwa_custom,
                                        system_gry_id,
-                                       cena_fiz, cena_pdf, cena_vtt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       cena_fiz, cena_pdf, cena_vtt,
+                                       rok_wydania, isbn)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     reserved_id,
@@ -1355,6 +1369,8 @@ def dodaj_system_rpg(
                     cena_fiz_new,
                     cena_pdf_new,
                     cena_vtt_new,
+                    int(rok_wydania_var.get()) if rok_wydania_var.get().strip().isdigit() else None,
+                    isbn_entry.get().strip() or None,
                 ),
             )
             conn.commit()
@@ -1367,9 +1383,24 @@ def dodaj_system_rpg(
         """Anuluje dodawanie"""
         dialog.destroy()
 
+    # Rok wydania i ISBN
+    ctk.CTkLabel(main_frame, text="Rok wydania").grid(
+        row=11, column=0, pady=8, padx=(0, 10), sticky="w"
+    )
+    rok_wydania_var = tk.StringVar()
+    rok_wydania_entry = ctk.CTkEntry(main_frame, textvariable=rok_wydania_var, width=80,
+                                     placeholder_text="np. 2021")
+    rok_wydania_entry.grid(row=11, column=1, pady=8, sticky="w")
+
+    ctk.CTkLabel(main_frame, text="Numer ISBN").grid(
+        row=11, column=2, pady=8, padx=(20, 10), sticky="w"
+    )
+    isbn_entry = ctk.CTkEntry(main_frame, width=180, placeholder_text="np. 978-83-...")
+    isbn_entry.grid(row=11, column=3, pady=8, sticky="w")
+
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=11, column=0, columnspan=4, pady=15, sticky="ew")
+    button_frame.grid(row=12, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
 
@@ -1463,9 +1494,10 @@ def fill_systemy_rpg_tab(
         "Język",
         "Status",
         "Cena",
+        "Rok wydania",
     ]
     # col: 0=sym, 1=ID, 2=nazwa, 3=typ, 4=sys_gl, 5=typ_supl,
-    #      6=wydawca, 7=fiz, 8=pdf, 9=vtt, 10=jezyk, 11=status, 12=cena
+    #      6=wydawca, 7=fiz, 8=pdf, 9=vtt, 10=jezyk, 11=status, 12=cena, 13=rok_wydania
 
     bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
     fg_top = "#e0e0e0" if dark_mode else "#212121"
@@ -1624,6 +1656,7 @@ def fill_systemy_rpg_tab(
                 agg_jezyk,
                 "",
                 "",
+                "",
             ]
             if not hide_systems_systemy:
                 data_h.append(game_row)
@@ -1644,6 +1677,7 @@ def fill_systemy_rpg_tab(
                         rec[9] or "",
                         rec[10] or "",
                         rec[11] or "",
+                        str(rec[14]) if len(rec) > 14 and rec[14] else "",
                     ])
 
         # Pozycje bez przypisanego systemu gry
@@ -1663,6 +1697,7 @@ def fill_systemy_rpg_tab(
                 rec[9] or "",
                 rec[10] or "",
                 rec[11] or "",
+                str(rec[14]) if len(rec) > 14 and rec[14] else "",
             ])
         return data_h
 
@@ -1843,6 +1878,7 @@ def fill_systemy_rpg_tab(
                             "Tak" if rec[6] else "Nie",
                             "Tak" if rec[7] else "Nie",
                             rec[8] or "", rec[9] or "", rec[10] or "", rec[11] or "",
+                            str(rec[14]) if len(rec) > 14 and rec[14] else "",
                         ])
                     _table[0].toggle_expand(
                         parent_id=f"G{gid}",
@@ -2012,7 +2048,7 @@ def fill_systemy_rpg_tab(
     # ── Obliczanie szerokości kolumn ──────────────────────────────────────
     def _compute_widths(rows: List[List[Any]]) -> List[int]:
         if not rows:
-            return [34, 44, 200, 130, 160, 160, 160, 60, 52, 100, 58, 200, 100]
+            return [34, 44, 200, 130, 160, 160, 160, 60, 52, 100, 58, 200, 100, 80]
         pad = 20
 
         def _w(ci: int, hdr: str, max_w: int, min_w: int = 60) -> int:
@@ -2033,6 +2069,7 @@ def fill_systemy_rpg_tab(
             _w(10, "Język", 60, 50),
             _w(11, "Status", 200, 90),
             _w(12, "Cena", 130, 60),
+            _w(13, "Rok wydania", 90, 70),
         ]
 
     # ── Górny pasek ──────────────────────────────────────────────────────
@@ -2186,6 +2223,48 @@ def fill_systemy_rpg_tab(
         active_col_widths_systemy.clear()
         active_col_widths_systemy.extend(widths)
 
+    # ── Pasek nazw kolumn — canvas scrollowany razem z tabelą ────────────
+    _BAR_ROW_NUM_W = 36   # musi zgadzać się z _ROW_NUM_W w ctk_table.py
+    _BAR_EDIT_W = 36      # musi zgadzać się z _EDIT_W w ctk_table.py
+    _BAR_H = 22
+    _hidden_set = set(_compute_hidden_cols())
+    _col_order_list = _compute_col_order()
+    _id_col_idx = 1       # id_col=1 przekazywane do CTkDataTable
+    _bar_font = ("Segoe UI", scale_font_size(9), "bold")
+
+    col_names_bar = tk.Canvas(tab, bg=bg_top, height=_BAR_H, highlightthickness=0)
+    col_names_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 0))
+
+    _bx = 0
+    col_names_bar.create_text(
+        _bx + _BAR_ROW_NUM_W // 2, _BAR_H // 2,
+        text="Lp.", anchor="center", font=_bar_font, fill=fg_top,
+    )
+    _bx += _BAR_ROW_NUM_W
+
+    for _ci in _col_order_list:
+        _cw = _col_w[_ci]
+        _ch = _HEADERS[_ci]
+        if _ci in _hidden_set:
+            if _ci == _id_col_idx:
+                _bx += _BAR_EDIT_W
+            continue
+        _txt = "▸" if _ch == "" else _ch
+        col_names_bar.create_text(
+            _bx + 4, _BAR_H // 2,
+            text=_txt, anchor="w", font=_bar_font, fill=fg_top,
+        )
+        _bx += _cw
+        if _ci == _id_col_idx:
+            col_names_bar.create_text(
+                _bx + _BAR_EDIT_W // 2, _BAR_H // 2,
+                text="✎", anchor="center",
+                font=("Segoe UI", scale_font_size(9)), fill=fg_top,
+            )
+            _bx += _BAR_EDIT_W
+
+    col_names_bar.configure(scrollregion=(0, 0, _bx, _BAR_H))
+
     tbl = CTkDataTable(
         tab,
         headers=_HEADERS,
@@ -2205,10 +2284,11 @@ def fill_systemy_rpg_tab(
         col_order=_compute_col_order(),
         show_edit_button=show_edit_btn_systemy,
     )
-    tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-    tab.rowconfigure(1, weight=1)
+    tbl.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+    tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
+    tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
     tab._systemy_tab_cache = {  # type: ignore[attr-defined]
         'records_ref': records_ref,
@@ -2514,7 +2594,8 @@ def open_edit_system_dialog(
                        wydawca_id, fizyczny, pdf, vtt, jezyk, status_gra, status_kolekcja,
                        cena_zakupu, waluta_zakupu, cena_sprzedazy, waluta_sprzedazy,
                        system_glowny_nazwa_custom, system_gry_id,
-                       cena_fiz, cena_pdf, cena_vtt
+                       cena_fiz, cena_pdf, cena_vtt,
+                       rok_wydania, isbn
                 FROM systemy_rpg WHERE id = ?
             """,
                 (system_id,),
@@ -2563,13 +2644,13 @@ def open_edit_system_dialog(
 
     # Ustaw geometrię na podstawie tego czy VTT jest zaznaczone i czy to suplement
     if has_vtt and is_suplement:
-        width, height = 900, 900
+        width, height = 900, 980
     elif has_vtt:
-        width, height = 900, 760
+        width, height = 900, 840
     elif is_suplement:
-        width, height = 950, 720
+        width, height = 950, 800
     else:
-        width, height = 950, 560
+        width, height = 950, 640
 
     apply_safe_geometry(dialog, parent, width, height)
 
@@ -2865,13 +2946,13 @@ def open_edit_system_dialog(
         is_sprzedane = status_kolekcja_var.get() == "Sprzedane"
 
         if is_vtt and is_suplement:
-            width, height = 900, 900
+            width, height = 900, 980
         elif is_vtt:
-            width, height = 900, 760
+            width, height = 900, 840
         elif is_suplement:
-            width, height = 950, 750
+            width, height = 950, 830
         else:
-            width, height = 950, 590
+            width, height = 950, 670
 
         # Dodatkowa wysokość gdy Sprzedane — widoczne obie sekcje cen jednocześnie
         if is_sprzedane and (fizyczny_var.get() or pdf_var.get() or vtt_var.get()):
@@ -3184,7 +3265,8 @@ def open_edit_system_dialog(
                     status_gra=?, status_kolekcja=?,
                     cena_zakupu=?, waluta_zakupu=?, cena_sprzedazy=?,
                     waluta_sprzedazy=?, system_gry_id=?,
-                    cena_fiz=?, cena_pdf=?, cena_vtt=?
+                    cena_fiz=?, cena_pdf=?, cena_vtt=?,
+                    rok_wydania=?, isbn=?
                 WHERE id=?
             """,
                 (
@@ -3207,6 +3289,8 @@ def open_edit_system_dialog(
                     cena_fiz_save,
                     cena_pdf_save,
                     cena_vtt_save,
+                    int(rok_wydania_e_var.get()) if rok_wydania_e_var.get().strip().isdigit() else None,
+                    isbn_e_entry.get().strip() or None,
                     system_data[0],
                 ),
             )
@@ -3220,9 +3304,28 @@ def open_edit_system_dialog(
         """Anuluje edycję"""
         dialog.destroy()
 
+    # Rok wydania i ISBN
+    ctk.CTkLabel(main_frame, text="Rok wydania").grid(
+        row=12, column=0, pady=8, padx=(0, 10), sticky="w"
+    )
+    rok_wydania_e_var = tk.StringVar(
+        value=str(system_data[21]) if len(system_data) > 21 and system_data[21] else ""
+    )
+    rok_wydania_e_entry = ctk.CTkEntry(main_frame, textvariable=rok_wydania_e_var, width=80,
+                                       placeholder_text="np. 2021")
+    rok_wydania_e_entry.grid(row=12, column=1, pady=8, sticky="w")
+
+    ctk.CTkLabel(main_frame, text="Numer ISBN").grid(
+        row=12, column=2, pady=8, padx=(20, 10), sticky="w"
+    )
+    isbn_e_entry = ctk.CTkEntry(main_frame, width=180, placeholder_text="np. 978-83-...")
+    isbn_e_entry.grid(row=12, column=3, pady=8, sticky="w")
+    if len(system_data) > 22 and system_data[22]:
+        isbn_e_entry.insert(0, system_data[22])
+
     # Przyciski
     button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-    button_frame.grid(row=12, column=0, columnspan=4, pady=15, sticky="ew")
+    button_frame.grid(row=13, column=0, columnspan=4, pady=15, sticky="ew")
     button_frame.grid_columnconfigure(0, weight=1)
     button_frame.grid_columnconfigure(1, weight=1)
 

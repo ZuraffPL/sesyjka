@@ -315,6 +315,7 @@ class CTkDataTable(tk.Frame):
         self._data_canvas: Optional[tk.Canvas] = None
         self._inner: Optional[tk.Frame] = None
         self._inner_win: int = 0
+        self._scroll_companions: List[tk.Canvas] = []  # canvasy scrollowane razem z tabelą
 
         self._build_header()
         self._build_data_area()
@@ -484,6 +485,11 @@ class CTkDataTable(tk.Frame):
             self._data_canvas.xview(*args)
         if self._hdr_canvas is not None:
             self._hdr_canvas.xview(*args)
+        for companion in self._scroll_companions:
+            try:
+                companion.xview(*args)
+            except Exception:
+                pass
 
     def _on_inner_configure(self, event: Any) -> None:
         """Aktualizuje scrollregion i szerokość inner frame po zmianie zawartości."""

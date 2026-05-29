@@ -138,19 +138,25 @@ SYSTEMY RPG:
 • Kolorowe wyróżnienia typów publikacji
 • Menu kontekstowe z opcjami edycji
 • Automatyczne dopasowanie szerokości okien
+• Rok wydania i ISBN — pola widoczne i sortowalne w tabeli
+• Typ Starter / Zestaw Startowy w katalogu suplementów
 
 SESJE RPG:
 • Zarządzanie sesjami z datami i uczestnikami
+• Tryb gry: Online, Offline lub Na wydarzeniu — widoczny jako kolumna w tabeli
+• Sesje GM-less — sesja bez Mistrza Gry (checkbox Gra GM-less, N/A w tabeli)
 • Wybór graczy i Mistrza Gry przez dedykowane okna
+• Panel Zaznacz grupę w dialogach wyboru graczy — szybki wielokrotny wybór po tagu
 • Kolorowanie wierszy według miesięcy
-• Kompleksowe filtrowanie: Rok, System, Typ sesji, Mistrz Gry
+• Kompleksowe filtrowanie: Rok, System, Typ sesji, Tryb gry, Mistrz Gry
 • Sortowanie i filtrowanie danych
 • Walidacja konfliktów (gracz nie może być jednocześnie MG)
 
 GRACZE:
 • Baza danych graczy z informacjami osobowymi
+• Pole Grupa — tagi graczy (wiele kampanii po przecinku, np. Drużyna A, Kampania 2)
 • Kolorowanie wierszy według płci
-• Filtrowanie po: Płeć, Imię i nazwisko, Social media
+• Filtrowanie po: Płeć, Imię i nazwisko, Social media, Grupa
 • Zarządzanie danymi kontaktowymi
 
 WYDAWCY:
@@ -171,6 +177,7 @@ INTERFEJS UŻYTKOWNIKA:
 • Responsywny design dostosowujący się do zawartości
 • Bezpieczna geometria dialogów - dopasowanie do rozdzielczości i skalowania DPI
 • Globalne skalowanie fontów (80%-120%) - suwak w ribbonie
+• Uchwyty resize kolumn — przeciąganie granicy między nagłówkami kolumn
 
 STATYSTYKI:
 • Układ 3-kolumnowy zoptymalizowany dla ekranów 1080p

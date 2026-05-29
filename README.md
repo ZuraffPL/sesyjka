@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.41-blue)
+![Version](https://img.shields.io/badge/version-0.4.48-blue)
 ![Python](https://img.shields.io/badge/python-3.14.4-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -87,9 +87,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.41-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.48-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.41.exe`
+4. Uruchom `Sesyjka-v0.4.48.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -115,8 +115,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.41.exe` dostępny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.41.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.48.exe` dostępny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.48.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -222,6 +222,14 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.48 (29.05.2026)
+- 🖱️ **Uchwyty resize kolumn w paskach nagłówków**: we wszystkich zakładkach (Systemy, Sesje, Gracze, Wydawcy) — kursor `↔` na krawędziach kolumn; wewnętrzny nagłówek tabeli ukryty, jeden spójny pasek nagłówków
+- ✨ **Rok wydania i ISBN w systemach RPG**: nowe pola w dialogach dodawania i edycji; kolumny widoczne i sortowalne w tabeli
+- ⚡ **Poziomy scrollbar w tabelach**: zsynchronizowany scrollbar poziomy we wszystkich zakładkach; zapamiętywanie cen przy zmianie statusu na Sprzedane
+- 🐛 **Opcja Starter / Zestaw Startowy**: nowy typ suplementu w dialogu dodawania
+- 🐛 **Naprawa ikony edycji w pasku nagłówków**: ikona ✎ niepoprawnie wyświetlała się gdy „Pokaż przycisk edycji” było wyłączone
+- 🔧 **Python 3.14.4**: aktualizacja stosu technologicznego
 
 ### v0.4.41 (04.05.2026)
 - 🐛 **Naprawa dialogu edycji sesji**: pola Mistrz Gry, Typ sesji, Tytuł kampanii/przygody i przyciski Zapisz/Anuluj były niewidoczne — błąd unpacking krotki `(id, nick, grupa)` do 2 zmiennych przerywał budowę formularza; naprawiono oraz zamieniono `CTkFrame` na `CTkScrollableFrame`

@@ -2222,6 +2222,7 @@ def fill_systemy_rpg_tab(
     def _on_col_resize_systemy(widths: List[int]) -> None:
         active_col_widths_systemy.clear()
         active_col_widths_systemy.extend(widths)
+        _draw_bar_systemy(widths)
 
     # ── Pasek nazw kolumn — canvas scrollowany razem z tabelą ────────────
     _BAR_ROW_NUM_W = 36   # musi zgadzać się z _ROW_NUM_W w ctk_table.py
@@ -2234,36 +2235,50 @@ def fill_systemy_rpg_tab(
 
     col_names_bar = tk.Canvas(tab, bg=bg_top, height=_BAR_H, highlightthickness=0)
     col_names_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 0))
+    tab.rowconfigure(1, weight=0)  # blokuje rozciąganie paska — uchwyty resize muszą być dostępne
 
-    _bx = 0
-    col_names_bar.create_text(
-        _bx + _BAR_ROW_NUM_W // 2, _BAR_H // 2,
-        text="Lp.", anchor="center", font=_bar_font, fill=fg_top,
-    )
-    _bx += _BAR_ROW_NUM_W
+    _bar_handles: List[tk.Label] = []
 
-    for _ci in _col_order_list:
-        _cw = _col_w[_ci]
-        _ch = _HEADERS[_ci]
-        if _ci in _hidden_set:
-            if _ci == _id_col_idx:
-                _bx += _BAR_EDIT_W
-            continue
-        _txt = "▸" if _ch == "" else _ch
+    def _draw_bar_systemy(widths: List[int]) -> None:
+        """Rysuje/odświeża etykiety i uchwyty resize paska nazw kolumn (systemy)."""
+        col_names_bar.delete("all")
+        for _h in _bar_handles:
+            _h.destroy()
+        _bar_handles.clear()
+        _rx = 0
         col_names_bar.create_text(
-            _bx + 4, _BAR_H // 2,
-            text=_txt, anchor="w", font=_bar_font, fill=fg_top,
+            _rx + _BAR_ROW_NUM_W // 2, _BAR_H // 2,
+            text="Lp.", anchor="center", font=_bar_font, fill=fg_top,
         )
-        _bx += _cw
-        if _ci == _id_col_idx:
+        _rx += _BAR_ROW_NUM_W
+        for _ri in _col_order_list:
+            _rw = widths[_ri]
+            _rh = _HEADERS[_ri]
+            if _ri in _hidden_set:
+                if _ri == _id_col_idx and show_edit_btn_systemy:
+                    _rx += _BAR_EDIT_W
+                continue
+            _txt = "▸" if _rh == "" else _rh
             col_names_bar.create_text(
-                _bx + _BAR_EDIT_W // 2, _BAR_H // 2,
-                text="✎", anchor="center",
-                font=("Segoe UI", scale_font_size(9)), fill=fg_top,
+                _rx + _rw // 2, _BAR_H // 2,
+                text=_txt, anchor="center", font=_bar_font, fill=fg_top,
             )
-            _bx += _BAR_EDIT_W
-
-    col_names_bar.configure(scrollregion=(0, 0, _bx, _BAR_H))
+            _rx += _rw
+            _ci_h = _ri
+            _hdl = tk.Label(col_names_bar, text="", cursor="sb_h_double_arrow", bg=bg_top)
+            col_names_bar.create_window(_rx - 3, 0, window=_hdl, anchor="nw", width=6, height=_BAR_H)
+            _hdl.bind("<ButtonPress-1>", lambda _e, c=_ci_h: tbl._on_resize_press(_e, c))
+            _hdl.bind("<B1-Motion>", lambda _e: tbl._on_resize_motion(_e))
+            _hdl.bind("<ButtonRelease-1>", lambda _e: tbl._on_resize_release(_e))
+            _bar_handles.append(_hdl)
+            if _ri == _id_col_idx and show_edit_btn_systemy:
+                col_names_bar.create_text(
+                    _rx + _BAR_EDIT_W // 2, _BAR_H // 2,
+                    text="\u270e", anchor="center",
+                    font=("Segoe UI", scale_font_size(9)), fill=fg_top,
+                )
+                _rx += _BAR_EDIT_W
+        col_names_bar.configure(scrollregion=(0, 0, _rx, _BAR_H))
 
     tbl = CTkDataTable(
         tab,
@@ -2288,6 +2303,8 @@ def fill_systemy_rpg_tab(
     tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
+    tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
+    _draw_bar_systemy(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
     tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
     tab._systemy_tab_cache = {  # type: ignore[attr-defined]

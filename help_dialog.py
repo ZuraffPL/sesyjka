@@ -60,7 +60,7 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Kliknij nagłówek kolumny, aby posortować po danej kolumnie (przełącza rosnąco/malejąco)."),
     ("li", "Prawym przyciskiem myszy (PPM) na wierszu otwiera menu kontekstowe z opcjami edycji i usunięcia."),
     ("h2", "Pola rekordu PG / Suplementu"),    ("li", "Nazwa/Tytuł * — wymagana nazwa podręcznika lub suplementu."),
-    ("li", "Typ — Podręcznik Główny lub Suplement."),
+    ("li", "Typ — Podręcznik Główny lub Suplement (w tym Starter / Zestaw Startowy)."),
     ("li", "System główny — dla suplementów: opcjonalny wybór systemu-rodzica z kolekcji."),
     ("li", "Wydawca — wybór z listy wydawców (można dodać nowego przyciskiem ➕ Dodaj wydawcę)."),
     ("li", "Fizyczny / PDF / VTT — zaznaczenie formy posiadania."),
@@ -69,9 +69,9 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Język — PL, ENG, DE, FR, ES, IT."),
     ("li", "Status — Posiadam, Chcę kupić, Przeczytane itp."),
     ("li", "Notatki — dowolny tekst."),
+    ("li", "Rok wydania — opcjonalny rok pierwszego wydania podręcznika."),
+    ("li", "ISBN — opcjonalny międzynarodowy numer książki."),
     ("sep", ""),
-
-    ("h1", "🎲 Zakładka: Sesje RPG"),
     ("p",  "Dziennik rozegranych sesji. Umożliwia rejestrację każdej sesji z pełnymi metadanymi."),
     ("h2", "Przyciski ribbonu"),
     ("li", "✚ Dodaj Sesję RPG — otwiera formularz nowej sesji."),
@@ -179,7 +179,9 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Enter w polu wyszukiwania — odświeża widok filtrowany."),
     ("li", "Kliknięcie nagłówka kolumny — sortowanie rosnąco/malejąco (przełącza)."),
     ("li", "Przeciągnięcie krawędzi nagłówka kolumny — ręczna zmiana szerokości; ustawienie jest "
-           "zapamiętywane między uruchomieniami (settings.json)."),
+           "zapamiętywane między uruchomieniami (settings.json). Uchwyty resize (kursor ↔) "
+           "są widoczne w pasku nazw kolumn tuż pod ribboną. Przeciągnij krawędź kolumny w tym "
+           "pasku, aby zmienić szerokość."),
     ("li", "PPM na wierszu tabeli — menu kontekstowe (edycja, usuń)."),
     ("li", "Podwójne kliknięcie wiersza — szybka edycja rekordu."),
     ("li", "Przycisk ➕ Dodaj wydawcę w formularzu PG — dodaje wydawcę bez zamykania "

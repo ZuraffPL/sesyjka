@@ -47,7 +47,8 @@ def init_db() -> None:
                 kampania INTEGER DEFAULT 0,
                 jednostrzal INTEGER DEFAULT 0,
                 tytul_kampanii TEXT,
-                tytul_przygody TEXT
+                tytul_przygody TEXT,
+                tryb_gry TEXT
             )
         """
         )
@@ -181,7 +182,7 @@ def dodaj_sesje_rpg(
     dialog.resizable(True, True)
 
     if parent is not None:
-        apply_safe_geometry(dialog, parent, 640, 680)
+        apply_safe_geometry(dialog, parent, 640, 730)
 
     # Główna ramka z padding (scrollowalna — formularz ma wiele pól)
     main_frame = make_scrollable_dialog_frame(dialog)
@@ -828,6 +829,20 @@ def dodaj_sesje_rpg(
     jednostrzal_cb.configure(command=on_jednostrzal_change)
     row += 1
 
+    # Tryb gry
+    ctk.CTkLabel(main_frame, text="Tryb gry:").grid(
+        row=row, column=0, pady=8, padx=(0, 10), sticky="w"
+    )
+    tryb_gry_var = tk.StringVar(value="Offline")
+    tryb_gry_segmented = ctk.CTkSegmentedButton(
+        main_frame,
+        values=["Online", "Offline", "Na wydarzeniu"],
+        variable=tryb_gry_var,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    tryb_gry_segmented.grid(row=row, column=1, pady=8, sticky="w")
+    row += 1
+
     # Tytuł kampanii
     ctk.CTkLabel(main_frame, text="Tytuł kampanii:").grid(
         row=row, column=0, pady=8, padx=(0, 10), sticky="w"
@@ -929,8 +944,8 @@ def dodaj_sesje_rpg(
                     """
                     INSERT INTO sesje_rpg (
                         data_sesji, system_id, liczba_graczy, mg_id, 
-                        kampania, jednostrzal, tytul_kampanii, tytul_przygody
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        kampania, jednostrzal, tytul_kampanii, tytul_przygody, tryb_gry
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                     (
                         date_entry.get(),
@@ -941,6 +956,7 @@ def dodaj_sesje_rpg(
                         int(jednostrzal_var.get()),
                         tytul_kampanii_entry.get().strip() or None,
                         tytul_przygody_entry.get().strip() or None,
+                        tryb_gry_var.get() or None,
                     ),
                 )
 
@@ -1036,7 +1052,7 @@ def open_edit_session_dialog(
     dialog.transient(parent)
     dialog.resizable(True, True)
 
-    apply_safe_geometry(dialog, parent, 640, 680)
+    apply_safe_geometry(dialog, parent, 640, 730)
 
     # Główna ramka z padding (scrollowalna — formularz ma wiele pól)
     main_frame = make_scrollable_dialog_frame(dialog)
@@ -1053,7 +1069,7 @@ def open_edit_session_dialog(
             c.execute(
                 """
                 SELECT id, data_sesji, system_id, liczba_graczy, mg_id,
-                       kampania, jednostrzal, tytul_kampanii, tytul_przygody
+                       kampania, jednostrzal, tytul_kampanii, tytul_przygody, tryb_gry
                 FROM sesje_rpg WHERE id = ?
             """,
                 (session_id,),
@@ -1729,6 +1745,20 @@ def open_edit_session_dialog(
     jednostrzal_cb.configure(command=on_jednostrzal_change)
     row += 1
 
+    # Tryb gry
+    ctk.CTkLabel(main_frame, text="Tryb gry:").grid(
+        row=row, column=0, pady=8, padx=(0, 10), sticky="w"
+    )
+    tryb_gry_var = tk.StringVar(value=session_data[9] or "Offline")
+    tryb_gry_segmented = ctk.CTkSegmentedButton(
+        main_frame,
+        values=["Online", "Offline", "Na wydarzeniu"],
+        variable=tryb_gry_var,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    tryb_gry_segmented.grid(row=row, column=1, pady=8, sticky="w")
+    row += 1
+
     # Tytuł kampanii
     ctk.CTkLabel(main_frame, text="Tytuł kampanii:").grid(
         row=row, column=0, pady=8, padx=(0, 10), sticky="w"
@@ -1823,7 +1853,8 @@ def open_edit_session_dialog(
                     """
                     UPDATE sesje_rpg SET
                         data_sesji = ?, system_id = ?, liczba_graczy = ?, mg_id = ?,
-                        kampania = ?, jednostrzal = ?, tytul_kampanii = ?, tytul_przygody = ?
+                        kampania = ?, jednostrzal = ?, tytul_kampanii = ?, tytul_przygody = ?,
+                        tryb_gry = ?
                     WHERE id = ?
                 """,
                     (
@@ -1835,6 +1866,7 @@ def open_edit_session_dialog(
                         int(jednostrzal_var.get()),
                         tytul_kampanii_entry.get().strip() or None,
                         tytul_przygody_entry.get().strip() or None,
+                        tryb_gry_var.get() or None,
                         session_id,
                     ),
                 )

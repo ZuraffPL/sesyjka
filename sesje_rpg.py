@@ -181,6 +181,26 @@ def _migrate_remove_cross_db_fks() -> None:
         conn.close()
 
 
+def _migrate_add_tryb_gry() -> None:
+    """Migracja: dodaje kolumnę tryb_gry (TEXT) do tabeli sesje_rpg."""
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return
+
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        c = conn.cursor()
+        c.execute("PRAGMA table_info(sesje_rpg)")
+        cols = [row["name"] for row in c.fetchall()]
+        if "tryb_gry" in cols:
+            return
+        _log.info("Migracja: dodawanie kolumny tryb_gry do sesje_rpg…")
+        conn.execute("ALTER TABLE sesje_rpg ADD COLUMN tryb_gry TEXT")
+        _log.info("Migracja tryb_gry zakończona pomyślnie.")
+
+
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_sesje: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
@@ -189,15 +209,16 @@ active_sort_sesje: Dict[str, Any] = {"column": "ID", "reverse": False}
 active_col_widths_sesje: List[int] = []
 # Widoczność kolumn w tabeli sesji (klucz = nazwa kolumny, wartość = czy widoczna)
 active_visible_cols_sesje: Dict[str, bool] = {
-    "Data": True,
-    "System": True,
+    "Data sesji": True,
+    "System RPG": True,
     "Typ sesji": True,
+    "Tryb gry": True,
     "Mistrz Gry": True,
     "Gracze": True,
 }
 
 # Kolejność kolumn w tabeli sesji (bez "ID" który zawsze jest pierwszy)
-active_col_order_sesje: List[str] = ["Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
+active_col_order_sesje: List[str] = ["Data sesji", "System RPG", "Typ sesji", "Tryb gry", "Mistrz Gry", "Gracze"]
 
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SESJE = {"ID"}
@@ -211,6 +232,8 @@ def init_db() -> None:
     # Jednorazowa migracja usuwająca cross-bazowe FK sprzed poprawki
     _migrate_mg_id_nullable()
     _migrate_remove_cross_db_fks()
+    # Migracja dodająca kolumnę tryb_gry (dla istniejących baz bez tej kolumny)
+    _migrate_add_tryb_gry()
 
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
@@ -228,7 +251,8 @@ def init_db() -> None:
                 kampania INTEGER DEFAULT 0,
                 jednostrzal INTEGER DEFAULT 0,
                 tytul_kampanii TEXT,
-                tytul_przygody TEXT
+                tytul_przygody TEXT,
+                tryb_gry TEXT
             )
         """
         )
@@ -361,7 +385,7 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
         c.execute(
             """
             SELECT s.id, s.data_sesji, s.system_id, s.liczba_graczy, s.mg_id,
-                   s.kampania, s.jednostrzal, s.tytul_kampanii, s.tytul_przygody
+                   s.kampania, s.jednostrzal, s.tytul_kampanii, s.tytul_przygody, s.tryb_gry
             FROM sesje_rpg s
             ORDER BY s.data_sesji ASC, s.id ASC
         """
@@ -413,6 +437,7 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
             jednostrzal,
             tytul_kampanii,
             tytul_przygody,
+            tryb_gry,
         ) = session
 
         system_nazwa = systems_map.get(system_id, f"System ID {system_id}")
@@ -433,7 +458,7 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
             if tytul_przygody:
                 typ_sesji += f": {tytul_przygody}"
 
-        result.append((sid, data_sesji, system_nazwa, typ_sesji, mg_nick, gracze_str))  # type: ignore
+        result.append((sid, data_sesji, system_nazwa, typ_sesji, mg_nick, gracze_str, tryb_gry or ""))  # type: ignore
 
     return result  # type: ignore
 
@@ -500,8 +525,8 @@ def fill_sesje_rpg_tab(
     # Mutable holder – closure'y zawsze widzą aktualne dane przez data_ref[0]
     data_ref: List[List[List[Any]]] = [_preloaded_data]
 
-    _HEADERS = ["ID", "Data", "System", "Typ sesji", "Mistrz Gry", "Gracze"]
-    _SORTABLE = {"ID": 0, "Data": 1, "System": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5}
+    _HEADERS = ["ID", "Data sesji", "System RPG", "Typ sesji", "Mistrz Gry", "Gracze", "Tryb gry"]
+    _SORTABLE = {"ID": 0, "Data sesji": 1, "System RPG": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5, "Tryb gry": 6}
 
     # ── Kolory górnego paska ─────────────────────────────────────────────────
     bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
@@ -516,14 +541,14 @@ def fill_sesje_rpg_tab(
         pad = 24
         w_data = (
             max(
-                [_mf_bold.measure("Data")]
+                [_mf_bold.measure("Data sesji")]
                 + ([_mf.measure(str(r[1])) for r in rows if r[1]] or [0])
             )
             + pad
         )
         w_system = (
             max(
-                [_mf_bold.measure("System")]
+                [_mf_bold.measure("System RPG")]
                 + ([_mf.measure(str(r[2])) for r in rows if r[2]] or [0])
             )
             + pad
@@ -549,6 +574,13 @@ def fill_sesje_rpg_tab(
             )
             + pad
         )
+        w_tryb_gry = (
+            max(
+                [_mf_bold.measure("Tryb gry")]
+                + ([_mf.measure(str(r[6])) for r in rows if r[6]] or [0])
+            )
+            + pad
+        )
         return [
             44,
             min(max(w_data, 90), 120),
@@ -556,6 +588,7 @@ def fill_sesje_rpg_tab(
             min(max(w_typ, 100), 360),
             min(max(w_mg, 80), 160),
             min(max(w_gracze, 100), 480),
+            min(max(w_tryb_gry, 70), 120),
         ]
 
     # ── Kolorowanie wierszy według miesiąca daty sesji ───────────────────────
@@ -619,6 +652,7 @@ def fill_sesje_rpg_tab(
                 or phrase in (str(r[3]) or '').lower()
                 or phrase in (str(r[4]) or '').lower()
                 or phrase in (str(r[5]) or '').lower()
+                or phrase in (str(r[6]) or '').lower()
             ]
 
         def _fl(d: Dict[str, Any], key: str) -> List[str]:
@@ -642,6 +676,10 @@ def fill_sesje_rpg_tab(
         mg_list = _fl(active_filters_sesje, 'mg')
         if mg_list:
             filtered = [r for r in filtered if r[4] in mg_list]
+
+        tryb_gry_list = _fl(active_filters_sesje, 'tryb_gry')
+        if tryb_gry_list:
+            filtered = [r for r in filtered if r[6] in tryb_gry_list]
 
         col_i = _SORTABLE.get(active_sort_sesje.get("column", "ID"), 0)
         rev = active_sort_sesje.get("reverse", False)
@@ -856,7 +894,7 @@ def fill_sesje_rpg_tab(
     _col_w = (
         list(active_col_widths_sesje)
         if len(active_col_widths_sesje) == len(_HEADERS)
-        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260])
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260, 90])
     )
 
     def _compute_col_order_sesje() -> List[int]:
@@ -869,9 +907,65 @@ def fill_sesje_rpg_tab(
         hdr_idx = {h: i for i, h in enumerate(_HEADERS)}
         return [hdr_idx[h] for h in display_order if h in hdr_idx]
 
+    # ── Pasek nazw kolumn — canvas scrollowany razem z tabelą ────────────
+    _BAR_ROW_NUM_W = 36   # musi zgadzać się z _ROW_NUM_W w ctk_table.py
+    _BAR_EDIT_W = 36      # musi zgadzać się z _EDIT_W w ctk_table.py
+    _BAR_H = 22
+    _hidden_set_bar = set(_compute_hidden_cols_sesje())
+    _col_order_list_bar = _compute_col_order_sesje()
+    _id_col_idx = 0       # id_col=0 przekazywane do CTkDataTable
+    _bar_font = ("Segoe UI", scale_font_size(9), "bold")
+
+    col_names_bar = tk.Canvas(tab, bg=bg_top, height=_BAR_H, highlightthickness=0)
+    col_names_bar.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 0))
+    tab.rowconfigure(1, weight=0)
+
+    _bar_handles: List[tk.Label] = []
+
+    def _draw_bar_sesje(widths: List[int]) -> None:
+        """Rysuje/odświeża etykiety i uchwyty resize paska nazw kolumn (sesje)."""
+        col_names_bar.delete("all")
+        for _h in _bar_handles:
+            _h.destroy()
+        _bar_handles.clear()
+        _rx = 0
+        col_names_bar.create_text(
+            _rx + _BAR_ROW_NUM_W // 2, _BAR_H // 2,
+            text="Lp.", anchor="center", font=_bar_font, fill=fg_top,
+        )
+        _rx += _BAR_ROW_NUM_W
+        for _ri in _col_order_list_bar:
+            _rw = widths[_ri]
+            _rh = _HEADERS[_ri]
+            if _ri in _hidden_set_bar:
+                if _ri == _id_col_idx and show_edit_btn_sesje:
+                    _rx += _BAR_EDIT_W
+                continue
+            col_names_bar.create_text(
+                _rx + _rw // 2, _BAR_H // 2,
+                text=_rh, anchor="center", font=_bar_font, fill=fg_top,
+            )
+            _rx += _rw
+            _ci_h = _ri
+            _hdl = tk.Label(col_names_bar, text="", cursor="sb_h_double_arrow", bg=bg_top)
+            col_names_bar.create_window(_rx - 3, 0, window=_hdl, anchor="nw", width=6, height=_BAR_H)
+            _hdl.bind("<ButtonPress-1>", lambda _e, c=_ci_h: tbl._on_resize_press(_e, c))
+            _hdl.bind("<B1-Motion>", lambda _e: tbl._on_resize_motion(_e))
+            _hdl.bind("<ButtonRelease-1>", lambda _e: tbl._on_resize_release(_e))
+            _bar_handles.append(_hdl)
+            if _ri == _id_col_idx and show_edit_btn_sesje:
+                col_names_bar.create_text(
+                    _rx + _BAR_EDIT_W // 2, _BAR_H // 2,
+                    text="\u270e", anchor="center",
+                    font=("Segoe UI", scale_font_size(9)), fill=fg_top,
+                )
+                _rx += _BAR_EDIT_W
+        col_names_bar.configure(scrollregion=(0, 0, _rx, _BAR_H))
+
     def _on_col_resize_sesje(widths: List[int]) -> None:
         active_col_widths_sesje.clear()
         active_col_widths_sesje.extend(widths)
+        _draw_bar_sesje(widths)
 
     tbl = CTkDataTable(
         tab,
@@ -891,10 +985,13 @@ def fill_sesje_rpg_tab(
         col_order=_compute_col_order_sesje(),
         show_edit_button=show_edit_btn_sesje,
     )
-    tbl.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-    tab.rowconfigure(1, weight=1)
+    tbl.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+    tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
+    tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
+    _draw_bar_sesje(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
+    tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
     # ── Zapisz cache na widgecie ───────────────────────────────────────────
     tab._sesje_tab_cache = {  # type: ignore[attr-defined]
@@ -929,6 +1026,7 @@ def fill_sesje_rpg_tab(
             ("System:", 'system', systems_vals),
             ("Typ sesji:", 'typ', ['Kampania', 'Jednostrzał']),
             ("Mistrz Gry:", 'mg', mgs_vals),
+            ("Tryb gry:", 'tryb_gry', ['Online', 'Offline', 'Na wydarzeniu']),
         ]
 
         selected: Dict[str, set] = {}

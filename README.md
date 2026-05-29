@@ -24,6 +24,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 - Rejestracja przeprowadzonych sesji
 - Powiązanie z systemami RPG
 - Obsługa graczy i mistrza gry
+- **Tryb gry**: Online, Offline lub Na wydarzeniu — widoczny w tabeli jako kolumna, filtrowalny
+- Obsługa sesji GM-less (bez Mistrza Gry)
 
 ### 👥 Gracze
 - Baza danych graczy

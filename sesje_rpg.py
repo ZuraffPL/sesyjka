@@ -13,7 +13,7 @@ from dialog_utils import apply_safe_geometry, create_ctk_toplevel
 from ctk_table import CTkDataTable
 
 # Import funkcji dialogowych z oddzielnego modułu
-from sesje_rpg_dialogs import open_edit_session_dialog, dodaj_sesje_rpg
+from sesje_rpg_dialogs import open_edit_session_dialog, dodaj_sesje_rpg, open_add_notes_dialog, open_view_notes_dialog
 
 _log = logging.getLogger(__name__)
 
@@ -201,6 +201,34 @@ def _migrate_add_tryb_gry() -> None:
         _log.info("Migracja tryb_gry zakończona pomyślnie.")
 
 
+def _migrate_add_sesje_notatki() -> None:
+    """Migracja: tworzy tabelę sesje_notatki (jedna notatka tekstowa na sesję)."""
+    import os
+
+    if not os.path.exists(DB_FILE):
+        return
+
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        c = conn.cursor()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sesje_notatki'")
+        if c.fetchone():
+            return
+        _log.info("Migracja: tworzenie tabeli sesje_notatki…")
+        conn.execute(
+            """
+            CREATE TABLE sesje_notatki (
+                sesja_id INTEGER PRIMARY KEY,
+                tresc TEXT NOT NULL,
+                data_modyfikacji TEXT NOT NULL,
+                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE
+            )
+        """
+        )
+        _log.info("Migracja sesje_notatki zakończona pomyślnie.")
+
+
 # Przechowuj aktywne filtry na poziomie modułu
 active_filters_sesje: Dict[str, Any] = {}
 # Przechowuj stan sortowania na poziomie modułu
@@ -215,10 +243,11 @@ active_visible_cols_sesje: Dict[str, bool] = {
     "Tryb gry": True,
     "Mistrz Gry": True,
     "Gracze": True,
+    "Notatki": True,
 }
 
 # Kolejność kolumn w tabeli sesji (bez "ID" który zawsze jest pierwszy)
-active_col_order_sesje: List[str] = ["Data sesji", "System RPG", "Typ sesji", "Tryb gry", "Mistrz Gry", "Gracze"]
+active_col_order_sesje: List[str] = ["Data sesji", "System RPG", "Typ sesji", "Tryb gry", "Mistrz Gry", "Gracze", "Notatki"]
 
 # Kolumny, które zawsze są widoczne (nie można ich ukryć)
 _ALWAYS_VISIBLE_SESJE = {"ID"}
@@ -234,6 +263,8 @@ def init_db() -> None:
     _migrate_remove_cross_db_fks()
     # Migracja dodająca kolumnę tryb_gry (dla istniejących baz bez tej kolumny)
     _migrate_add_tryb_gry()
+    # Migracja tworząca tabelę notatek sesji
+    _migrate_add_sesje_notatki()
 
     with sqlite3.connect(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
@@ -269,6 +300,53 @@ def init_db() -> None:
             )
         """
         )
+
+        # Tabela notatek — jedna notatka tekstowa na sesję (FK wewnątrz tej samej bazy — OK)
+        c.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sesje_notatki (
+                sesja_id INTEGER PRIMARY KEY,
+                tresc TEXT NOT NULL,
+                data_modyfikacji TEXT NOT NULL,
+                FOREIGN KEY (sesja_id) REFERENCES sesje_rpg(id) ON DELETE CASCADE
+            )
+        """
+        )
+        conn.commit()
+
+
+# ── Pomocnicze funkcje do obsługi notatek sesji ───────────────────────────────
+
+def get_notatka_dla_sesji(sesja_id: int) -> Optional[str]:
+    """Zwraca treść notatki dla danej sesji lub None."""
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        c = conn.cursor()
+        c.execute("SELECT tresc FROM sesje_notatki WHERE sesja_id = ?", (sesja_id,))
+        row = c.fetchone()
+        return str(row["tresc"]) if row else None
+
+
+def save_notatka_dla_sesji(sesja_id: int, tresc: str) -> None:
+    """Zapisuje lub aktualizuje notatkę dla danej sesji."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute(
+            "INSERT OR REPLACE INTO sesje_notatki (sesja_id, tresc, data_modyfikacji) VALUES (?, ?, ?)",
+            (sesja_id, tresc, now),
+        )
+        conn.commit()
+
+
+def delete_notatka_dla_sesji(sesja_id: int) -> None:
+    """Usuwa notatkę dla danej sesji."""
+    with sqlite3.connect(DB_FILE) as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("DELETE FROM sesje_notatki WHERE sesja_id = ?", (sesja_id,))
         conn.commit()
 
 
@@ -396,6 +474,13 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
         c.execute("SELECT sesja_id, gracz_id FROM sesje_gracze")
         sesja_gracze_rows = c.fetchall()
 
+        # Pobierz sesje posiadające notatki jednym zapytaniem
+        sesje_z_notatkami: set[int] = set()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sesje_notatki'")
+        if c.fetchone():
+            c.execute("SELECT sesja_id FROM sesje_notatki")
+            sesje_z_notatkami = {row[0] for row in c.fetchall()}
+
     # Słownik: sesja_id -> [gracz_id, ...]
     sesja_gracze_map: Dict[int, List[int]] = {}
     for sesja_id, gracz_id in sesja_gracze_rows:
@@ -458,7 +543,8 @@ def get_all_sessions() -> List[Tuple[Any, ...]]:
             if tytul_przygody:
                 typ_sesji += f": {tytul_przygody}"
 
-        result.append((sid, data_sesji, system_nazwa, typ_sesji, mg_nick, gracze_str, tryb_gry or ""))  # type: ignore
+        notatki_info = "Tak" if sid in sesje_z_notatkami else "\u2013"
+        result.append((sid, data_sesji, system_nazwa, typ_sesji, mg_nick, gracze_str, tryb_gry or "", notatki_info))  # type: ignore
 
     return result  # type: ignore
 
@@ -525,8 +611,8 @@ def fill_sesje_rpg_tab(
     # Mutable holder – closure'y zawsze widzą aktualne dane przez data_ref[0]
     data_ref: List[List[List[Any]]] = [_preloaded_data]
 
-    _HEADERS = ["ID", "Data sesji", "System RPG", "Typ sesji", "Mistrz Gry", "Gracze", "Tryb gry"]
-    _SORTABLE = {"ID": 0, "Data sesji": 1, "System RPG": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5, "Tryb gry": 6}
+    _HEADERS = ["ID", "Data sesji", "System RPG", "Typ sesji", "Mistrz Gry", "Gracze", "Tryb gry", "Notatki"]
+    _SORTABLE = {"ID": 0, "Data sesji": 1, "System RPG": 2, "Typ sesji": 3, "Mistrz Gry": 4, "Gracze": 5, "Tryb gry": 6, "Notatki": 7}
 
     # ── Kolory górnego paska ─────────────────────────────────────────────────
     bg_top = "#1e1e2e" if dark_mode else "#f5f5f5"
@@ -581,6 +667,13 @@ def fill_sesje_rpg_tab(
             )
             + pad
         )
+        w_notatki = (
+            max(
+                [_mf_bold.measure("Notatki")]
+                + ([_mf.measure(str(r[7])) for r in rows if len(r) > 7 and r[7]] or [0])
+            )
+            + pad
+        )
         return [
             44,
             min(max(w_data, 90), 120),
@@ -589,6 +682,7 @@ def fill_sesje_rpg_tab(
             min(max(w_mg, 80), 160),
             min(max(w_gracze, 100), 480),
             min(max(w_tryb_gry, 70), 120),
+            min(max(w_notatki, 60), 80),
         ]
 
     # ── Kolorowanie wierszy według miesiąca daty sesji ───────────────────────
@@ -866,6 +960,34 @@ def fill_sesje_rpg_tab(
             )
 
         is_kampania = str(row_data[3]).startswith("Kampania") if row_data[3] else False
+        has_notatki = len(row_data) > 7 and str(row_data[7]) == "Tak"
+
+        def _add_notatki() -> None:
+            if is_guest_mode():
+                messagebox.showwarning(
+                    "Tryb gościa",
+                    "W trybie gościa dodawanie danych jest wyłączone.",
+                    parent=tab,
+                )
+                return
+            open_add_notes_dialog(
+                tab,
+                row_data[0],
+                str(row_data[1]),
+                refresh_callback=lambda **_kw: fill_sesje_rpg_tab(
+                    tab, dark_mode=get_dark_mode_from_tab(tab)
+                ),
+            )
+
+        def _view_notatki() -> None:
+            open_view_notes_dialog(
+                tab,
+                row_data[0],
+                str(row_data[1]),
+                refresh_callback=lambda **_kw: fill_sesje_rpg_tab(
+                    tab, dark_mode=get_dark_mode_from_tab(tab)
+                ),
+            )
 
         ctx = tk.Menu(tab, tearoff=0)
         ctx.add_command(label="Edytuj", command=_edit)
@@ -875,6 +997,10 @@ def fill_sesje_rpg_tab(
                 label="Dodaj sesję do istniejącej kampanii",
                 command=_add_to_campaign,
             )
+        ctx.add_separator()
+        ctx.add_command(label="Dodaj notatki do sesji", command=_add_notatki)
+        if has_notatki:
+            ctx.add_command(label="Wyświetl notatki do sesji\t[Ctrl+N]", command=_view_notatki)
         ctx.add_separator()
         ctx.add_command(label="Usuń", command=_del)
         ctx.tk_popup(event.x_root, event.y_root)
@@ -894,7 +1020,7 @@ def fill_sesje_rpg_tab(
     _col_w = (
         list(active_col_widths_sesje)
         if len(active_col_widths_sesje) == len(_HEADERS)
-        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260, 90])
+        else (_compute_widths(data_ref[0]) if data_ref[0] else [44, 100, 160, 200, 120, 260, 90, 70])
     )
 
     def _compute_col_order_sesje() -> List[int]:
@@ -975,7 +1101,7 @@ def fill_sesje_rpg_tab(
         edit_callback=_on_edit,
         id_col=0,
         row_color_fn=_row_color,
-        center_cols=[0],
+        center_cols=[0, 7],
         dark_mode=dark_mode,
         sort_callback=_on_sort,
         right_click_callback=_on_right_click,
@@ -992,6 +1118,37 @@ def fill_sesje_rpg_tab(
     tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
     _draw_bar_sesje(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
     tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
+
+    # ── Ctrl+N — wyświetl notatki zaznaczonej sesji ────────────────────────
+    def _on_ctrl_n(event: Any) -> None:  # Tk callback
+        sel = tbl.get_selected()
+        if sel is None:
+            messagebox.showinfo(
+                "Brak zaznaczenia",
+                "Zaznacz sesję w tabeli, aby wyświetlić jej notatki.",
+                parent=tab,
+            )
+            return
+        _, row_data = sel
+        if len(row_data) > 7 and str(row_data[7]) == "Tak":
+            open_view_notes_dialog(
+                tab,
+                row_data[0],
+                str(row_data[1]),
+                refresh_callback=lambda **_kw: fill_sesje_rpg_tab(
+                    tab, dark_mode=get_dark_mode_from_tab(tab)
+                ),
+            )
+        else:
+            messagebox.showinfo(
+                "Brak notatek",
+                "Ta sesja nie ma notatek.\n"
+                "Użyj menu kontekstowego (PPM), aby dodać notatki.",
+                parent=tab,
+            )
+
+    tab.bind("<Control-n>", _on_ctrl_n)
+    tbl.bind("<Control-n>", _on_ctrl_n)
 
     # ── Zapisz cache na widgecie ───────────────────────────────────────────
     tab._sesje_tab_cache = {  # type: ignore[attr-defined]

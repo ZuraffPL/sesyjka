@@ -62,6 +62,27 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.49",
+            "date": "17.06.2026",
+            "changes": [
+                "\u2728 NOWE FUNKCJE:\u00b0",
+                "",
+                "\u2705 NOTATKI DO SESJI RPG:",
+                "  \u2022 nowa kolumna \u201eNotatki\u201d w tabeli sesji \u2014 warto\u015b\u0107 \u201eTak\u201d lub \u201e\u2013\u201d",
+                "  \u2022 opcja \u201eDodaj notatki do sesji\u201d w menu kontekstowym (PPM) \u2014 zawsze dost\u0119pna",
+                "  \u2022 opcja \u201eWy\u015bwietl notatki do sesji\u201d w menu PPM \u2014 dost\u0119pna gdy notatki istniej\u0105",
+                "  \u2022 skr\u00f3t Ctrl+N \u2014 wy\u015bwietla notatki zaznaczonej sesji",
+                "  \u2022 dialog dodawania/edycji notatki z polem tekstowym (Ctrl+Enter = zapisz)",
+                "  \u2022 dialog podgl\u0105du notatki z przyciskami Edytuj, Zapisz zmiany i Usu\u0144",
+                "",
+                "\ud83d\uddc4\ufe0f BAZA DANYCH:\u00b0",
+                "",
+                "\u2705 TABELA SESJE_NOTATKI:",
+                "  \u2022 nowa tabela sesje_notatki w sesje_rpg.db (jedna notatka per sesja)",
+                "  \u2022 automatyczna migracja istniej\u0105cych baz przy starcie aplikacji",
+            ],
+        },
+        {
             "version": "0.4.48",
             "date": "29.05.2026",
             "changes": [

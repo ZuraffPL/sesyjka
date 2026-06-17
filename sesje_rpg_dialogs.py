@@ -1920,3 +1920,233 @@ def open_edit_session_dialog(
 
     # Focus na datę
     dialog.after(100, lambda: date_entry.focus_set() if date_entry.winfo_exists() else None)
+
+
+# ── Dialogi notatek sesji ─────────────────────────────────────────────────────
+
+def open_add_notes_dialog(
+    parent: tk.Widget,
+    sesja_id: int,
+    sesja_data: str,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera okno dodawania/edycji notatki do sesji RPG.
+
+    Jeśli notatka dla danej sesji już istnieje, formularz zostaje wstępnie
+    wypełniony jej treścią, a zapis nadpisuje ją (INSERT OR REPLACE).
+    """
+    from sesje_rpg import get_notatka_dla_sesji, save_notatka_dla_sesji
+
+    dialog = create_ctk_toplevel(parent)
+    dialog.title(f"Notatki \u2014 sesja z dnia {sesja_data}")
+    dialog.transient(parent)
+    dialog.resizable(True, True)
+    apply_safe_geometry(dialog, parent, 560, 420)
+
+    dialog.columnconfigure(0, weight=1)
+    dialog.rowconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        dialog,
+        text=f"Notatki do sesji z dnia {sesja_data}:",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12), weight="bold"),
+        anchor="w",
+    ).grid(row=0, column=0, padx=14, pady=(12, 6), sticky="ew")
+
+    text_box = ctk.CTkTextbox(
+        dialog,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+        wrap="word",
+    )
+    text_box.grid(row=1, column=0, padx=14, pady=(0, 8), sticky="nsew")
+
+    # Wczytaj istniejącą notatkę jeżeli istnieje
+    existing = get_notatka_dla_sesji(sesja_id)
+    if existing:
+        text_box.insert("1.0", existing)
+    text_box.focus_set()
+
+    def _save() -> None:
+        tresc = text_box.get("1.0", "end").strip()
+        if not tresc:
+            messagebox.showerror("B\u0142\u0105d", "Notatka nie mo\u017ce by\u0107 pusta.", parent=dialog)
+            return
+        try:
+            save_notatka_dla_sesji(sesja_id, tresc)
+            if refresh_callback:
+                refresh_callback()
+            dialog.destroy()
+        except Exception as exc:
+            messagebox.showerror(
+                "B\u0142\u0105d bazy danych",
+                f"Nie uda\u0142o si\u0119 zapisa\u0107 notatki:\n{exc}",
+                parent=dialog,
+            )
+
+    bf = ctk.CTkFrame(dialog, fg_color="transparent")
+    bf.grid(row=2, column=0, pady=(0, 12), padx=14, sticky="ew")
+
+    ctk.CTkButton(
+        bf,
+        text="Zapisz",
+        command=_save,
+        width=110,
+        fg_color="#2E7D32",
+        hover_color="#1B5E20",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).pack(side=tk.LEFT, padx=(0, 8))
+    ctk.CTkButton(
+        bf,
+        text="Anuluj",
+        command=dialog.destroy,
+        width=100,
+        fg_color="#666666",
+        hover_color="#555555",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).pack(side=tk.LEFT)
+
+    dialog.bind("<Control-Return>", lambda _e: _save())
+
+
+def open_view_notes_dialog(
+    parent: tk.Widget,
+    sesja_id: int,
+    sesja_data: str,
+    refresh_callback: Optional[Callable[..., None]] = None,
+) -> None:
+    """Otwiera okno wy\u015bwietlania notatki do sesji RPG (tryb tylko do odczytu).
+
+    Zawiera przyciski Edytuj (prze\u0142\u0105cza w tryb edycji) i Usu\u0144 (kasuje notatk\u0119).
+    """
+    from sesje_rpg import get_notatka_dla_sesji, save_notatka_dla_sesji, delete_notatka_dla_sesji
+
+    existing = get_notatka_dla_sesji(sesja_id)
+    if not existing:
+        messagebox.showinfo(
+            "Brak notatek",
+            "Ta sesja nie ma jeszcze notatek.",
+            parent=parent,
+        )
+        return
+
+    dialog = create_ctk_toplevel(parent)
+    dialog.title(f"Notatki \u2014 sesja z dnia {sesja_data}")
+    dialog.transient(parent)
+    dialog.resizable(True, True)
+    apply_safe_geometry(dialog, parent, 560, 420)
+
+    dialog.columnconfigure(0, weight=1)
+    dialog.rowconfigure(1, weight=1)
+
+    ctk.CTkLabel(
+        dialog,
+        text=f"Notatki do sesji z dnia {sesja_data}:",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(12), weight="bold"),
+        anchor="w",
+    ).grid(row=0, column=0, padx=14, pady=(12, 6), sticky="ew")
+
+    text_box = ctk.CTkTextbox(
+        dialog,
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+        wrap="word",
+    )
+    text_box.grid(row=1, column=0, padx=14, pady=(0, 8), sticky="nsew")
+    text_box.insert("1.0", existing)
+    text_box.configure(state="disabled")
+
+    # Stan trybu edycji
+    _editing: list[bool] = [False]
+
+    bf = ctk.CTkFrame(dialog, fg_color="transparent")
+    bf.grid(row=2, column=0, pady=(0, 12), padx=14, sticky="ew")
+
+    edit_btn = ctk.CTkButton(
+        bf,
+        text="Edytuj",
+        width=100,
+        fg_color="#1565C0",
+        hover_color="#0D47A1",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    edit_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+    save_btn = ctk.CTkButton(
+        bf,
+        text="Zapisz zmiany",
+        width=120,
+        fg_color="#2E7D32",
+        hover_color="#1B5E20",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+
+    delete_btn = ctk.CTkButton(
+        bf,
+        text="Usu\u0144",
+        width=90,
+        fg_color="#C62828",
+        hover_color="#B71C1C",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    )
+    delete_btn.pack(side=tk.LEFT, padx=(0, 8))
+
+    ctk.CTkButton(
+        bf,
+        text="Zamknij",
+        command=dialog.destroy,
+        width=90,
+        fg_color="#666666",
+        hover_color="#555555",
+        font=ctk.CTkFont(family="Segoe UI", size=scale_font_size(11)),
+    ).pack(side=tk.LEFT)
+
+    def _enter_edit_mode() -> None:
+        _editing[0] = True
+        text_box.configure(state="normal")
+        text_box.focus_set()
+        edit_btn.pack_forget()
+        save_btn.pack(side=tk.LEFT, before=delete_btn, padx=(0, 8))
+
+    def _save_edits() -> None:
+        tresc = text_box.get("1.0", "end").strip()
+        if not tresc:
+            messagebox.showerror("B\u0142\u0105d", "Notatka nie mo\u017ce by\u0107 pusta.", parent=dialog)
+            return
+        try:
+            save_notatka_dla_sesji(sesja_id, tresc)
+            if refresh_callback:
+                refresh_callback()
+            text_box.configure(state="disabled")
+            _editing[0] = False
+            save_btn.pack_forget()
+            edit_btn.pack(side=tk.LEFT, before=delete_btn, padx=(0, 8))
+        except Exception as exc:
+            messagebox.showerror(
+                "B\u0142\u0105d bazy danych",
+                f"Nie uda\u0142o si\u0119 zapisa\u0107 notatki:\n{exc}",
+                parent=dialog,
+            )
+
+    def _delete_notes() -> None:
+        if not messagebox.askyesno(
+            "Usu\u0144 notatki",
+            f"Czy na pewno chcesz usun\u0105\u0107 notatki do sesji z dnia {sesja_data}?\n\nOperacja jest nieodwracalna.",
+            parent=dialog,
+        ):
+            return
+        try:
+            delete_notatka_dla_sesji(sesja_id)
+            if refresh_callback:
+                refresh_callback()
+            dialog.destroy()
+        except Exception as exc:
+            messagebox.showerror(
+                "B\u0142\u0105d bazy danych",
+                f"Nie uda\u0142o si\u0119 usun\u0105\u0107 notatki:\n{exc}",
+                parent=dialog,
+            )
+
+    edit_btn.configure(command=_enter_edit_mode)
+    save_btn.configure(command=_save_edits)
+    delete_btn.configure(command=_delete_notes)
+
+    dialog.bind("<Control-Return>", lambda _e: _save_edits() if _editing[0] else None)

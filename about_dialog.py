@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.48") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.49") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -147,6 +147,8 @@ SESJE RPG:
 • Sesje GM-less — sesja bez Mistrza Gry (checkbox Gra GM-less, N/A w tabeli)
 • Wybór graczy i Mistrza Gry przez dedykowane okna
 • Panel Zaznacz grupę w dialogach wyboru graczy — szybki wielokrotny wybór po tagu
+• Notatki do sesji — kolumna Notatki (Tak / –), dodawanie/edycja przez menu PPM lub skrót Ctrl+N
+• Podgląd notatki z trybem edycji i opcją usunięcia (dialog Wyświetl notatki)
 • Kolorowanie wierszy według miesięcy
 • Kompleksowe filtrowanie: Rok, System, Typ sesji, Tryb gry, Mistrz Gry
 • Sortowanie i filtrowanie danych

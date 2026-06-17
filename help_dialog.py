@@ -90,7 +90,11 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "w tabeli sesji wyświetlane jako N/A."),
     ("li", "Gracze — lista graczy uczestniczących w sesji (wielokrotny wybór). "
            "Można dodać nowego gracza bezpośrednio z formularza sesji."),
-    ("li", "Notatki — opis sesji, podsumowanie fabuły itp."),
+    ("li", "Notatki do sesji — dowolny tekst powi\u0105zany z dan\u0105 sesj\u0105. "
+           "Dodawanie przez menu kontekstowe PPM (\u201eDodaj notatki do sesji\u201d). "
+           "Kolumna \u201eNotatki\u201d w tabeli wskazuje \u201eTak\u201d gdy notatka istnieje lub \u201e\u2013\u201d gdy jej nie ma. "
+           "Podgl\u0105d przez PPM (\u201eWy\u015bwietl notatki\u201d) lub skr\u00f3t Ctrl+N \u2014 "
+           "w trybie podgl\u0105du dost\u0119pne przyciski Edytuj, Zapisz zmiany i Usu\u0144."),
     ("h2", "Filtrowanie i sortowanie"),
     ("li", "Pasek narzędziowy obsługuje filtrowanie po systemie, MG, roku, typie sesji i trybie gry. "
            "Filtry mają multi-wybór: klikaj kolejne opcje (toggle-buttony), aby zawęzić widok "
@@ -184,8 +188,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
            "zapamiętywane między uruchomieniami (settings.json). Uchwyty resize (kursor ↔) "
            "są widoczne w pasku nazw kolumn tuż pod ribboną. Przeciągnij krawędź kolumny w tym "
            "pasku, aby zmienić szerokość."),
-    ("li", "PPM na wierszu tabeli — menu kontekstowe (edycja, usuń)."),
+    ("li", "PPM na wierszu tabeli — menu kontekstowe (edycja, usuń, notatki do sesji)."),
     ("li", "Podwójne kliknięcie wiersza — szybka edycja rekordu."),
+    ("li", "Ctrl+N (w zakładce Sesje RPG) — wyświetl notatki zaznaczonej sesji; "
+           "je\u015bli sesja nie ma notatek, pojawia si\u0119 komunikat z podpowiedzi\u0105."),
     ("li", "Przycisk ➕ Dodaj wydawcę w formularzu PG — dodaje wydawcę bez zamykania "
            "głównego formularza i automatycznie go zaznacza."),
     ("sep", ""),

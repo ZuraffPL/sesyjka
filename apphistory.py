@@ -62,6 +62,19 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.50",
+            "date": "25.06.2026",
+            "changes": [
+                "\U0001f41b NAPRAWA B\u0141\u0118D\u00d3W:\u00b0",
+                "",
+                "\u2705 SORTOWANIE WG ID W SYSTEMACH RPG:",
+                "  \u2022 suplementy wewn\u0105trz rozwini\u0119tego systemu by\u0142y ignorowane przez sortowanie po ID",
+                "  \u2022 naprawiono: suplementy i PG w obr\u0119bie systemu s\u0105 teraz sortowane po ID pozycji",
+                "  \u2022 naprawiono: widok p\u0142aski (\u201eUkryj systemy\u201d) \u2014 globalne sortowanie po ID dzia\u0142a prawid\u0142owo",
+                "  \u2022 kierunek rosn\u0105co/malej\u0105co uwzgl\u0119dniony dla element\u00f3w podrz\u0119dnych i sierot",
+            ],
+        },
+        {
             "version": "0.4.49",
             "date": "17.06.2026",
             "changes": [

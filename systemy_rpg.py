@@ -1662,7 +1662,16 @@ def fill_systemy_rpg_tab(
                 data_h.append(game_row)
 
             if expanded_state.get(gid):
-                for rec in sorted(items_here, key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower())):
+                _sort_by = sort_var.get()
+                _sort_rev = current_sort_reverse[0]
+                if _sort_by == "ID":
+                    _sorted_items = sorted(items_here, key=lambda x: int(x[0]), reverse=_sort_rev)
+                else:
+                    _sorted_items = sorted(
+                        items_here,
+                        key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower()),
+                    )
+                for rec in _sorted_items:
                     data_h.append([
                         "   ",
                         str(rec[0]),
@@ -1681,7 +1690,13 @@ def fill_systemy_rpg_tab(
                     ])
 
         # Pozycje bez przypisanego systemu gry
-        for rec in sorted(orphaned_supls, key=lambda r: (r[1] or '').lower()):
+        _sort_by_o = sort_var.get()
+        _sort_rev_o = current_sort_reverse[0]
+        if _sort_by_o == "ID":
+            _sorted_orphans = sorted(orphaned_supls, key=lambda r: int(r[0]), reverse=_sort_rev_o)
+        else:
+            _sorted_orphans = sorted(orphaned_supls, key=lambda r: (r[1] or '').lower())
+        for rec in _sorted_orphans:
             mn = rec[12] or ""  # system_glowny_nazwa_custom (legacy)
             data_h.append([
                 "   !",
@@ -1699,6 +1714,15 @@ def fill_systemy_rpg_tab(
                 rec[11] or "",
                 str(rec[14]) if len(rec) > 14 and rec[14] else "",
             ])
+        # Gdy ukryto wiersze systemów (płaski widok) i sortowanie po ID:
+        # wykonaj globalne prze-posortowanie całej listy po ID pozycji
+        if hide_systems_systemy and sort_var.get() == "ID":
+            def _id_key(row: List[Any]) -> int:
+                try:
+                    return int(row[1])
+                except (ValueError, TypeError):
+                    return 0
+            data_h.sort(key=_id_key, reverse=current_sort_reverse[0])
         return data_h
 
     displayed_data: List[List[Any]] = []

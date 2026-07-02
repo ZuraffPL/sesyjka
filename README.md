@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.50-blue)
+![Version](https://img.shields.io/badge/version-0.4.52-blue)
 ![Python](https://img.shields.io/badge/python-3.14.4-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -89,9 +89,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.50-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.52-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.50.exe`
+4. Uruchom `Sesyjka-v0.4.52.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -117,8 +117,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.50.exe` dostepny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.50.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.52.exe` dostepny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.52.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -224,6 +224,10 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.52 (02.07.2026)
+- 🔍 **Wyszukiwanie w comboboxach „Przypisz do systemu” i „Wydawca”**: pola w dialogach dodawania/edycji podręczników i suplementów oraz w szybkich dialogach przypisania do systemu obsługują teraz wpisywanie fragmentu nazwy — lista zawęża się w locie, analogicznie do wyboru systemu RPG w dialogu sesji
+- 🖱️ **Przewijanie kółkiem myszy w zakładce Statystyki**: scrollowanie działa teraz w dowolnym miejscu zawartości zakładki, nie tylko po najechaniu na pasek boczny
 
 ### v0.4.50 (25.06.2026)
 - 🐛 **Naprawa sortowania po ID w widoku Systemów RPG**: suplementy i podręczniki główne wewnątrz rozwiniętego systemu były ignorowane przez sortowanie — porządkowane były tylko wiersze systemów nadrzędnych

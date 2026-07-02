@@ -62,6 +62,26 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.52",
+            "date": "02.07.2026",
+            "changes": [
+                "\u2728 NOWE FUNKCJE:\u00b0",
+                "",
+                "\u2705 WYSZUKIWANIE W COMBOBOXACH \u201ePRZYPISZ DO SYSTEMU\u201d I \u201eWYDAWCA\u201d:",
+                "  \u2022 pola te w dialogach dodawania i edycji podr\u0119cznik\u00f3w/suplement\u00f3w",
+                "    obs\u0142uguj\u0105 teraz wpisywanie fragmentu nazwy z klawiatury",
+                "  \u2022 lista rozwijana zaw\u0119\u017ca si\u0119 w locie do pozycji pasuj\u0105cych do wpisanego tekstu",
+                "  \u2022 dzia\u0142anie analogiczne do wyboru systemu RPG w dialogu dodawania sesji",
+                "  \u2022 dotyczy r\u00f3wnie\u017c szybkich dialog\u00f3w \u201ePrzypisz Suplement/PG do Systemu\u201d",
+                "",
+                "\ud83d\udda5\ufe0f UX:\u00b0",
+                "",
+                "\u2705 PRZEWIJANIE K\u00d3\u0141KIEM MYSZY W ZAK\u0141ADCE STATYSTYKI:",
+                "  \u2022 scrollowanie dzia\u0142a teraz w dowolnym miejscu zawarto\u015bci zak\u0142adki",
+                "  \u2022 wcze\u015bniej trzeba by\u0142o najecha\u0107 dok\u0142adnie na pasek boczny",
+            ],
+        },
+        {
             "version": "0.4.50",
             "date": "25.06.2026",
             "changes": [

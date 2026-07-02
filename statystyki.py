@@ -88,6 +88,22 @@ def fill_statystyki_tab(tab: Any, dark_mode: bool = False) -> None:
     main_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     main_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+    # Przewijanie kółkiem myszy w dowolnym miejscu zakładki (nie tylko nad paskiem bocznym).
+    # Bindowanie/odbindowanie globalne przy wejściu/wyjściu kursora nad obszarem canvas_frame,
+    # aby nie przechwytywać scrolla z innych zakładek/okien.
+    def _on_mousewheel(event: Any) -> None:
+        if main_canvas.winfo_exists():
+            main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _bind_mousewheel(_event: Any = None) -> None:
+        canvas_frame.bind_all("<MouseWheel>", _on_mousewheel)
+
+    def _unbind_mousewheel(_event: Any = None) -> None:
+        canvas_frame.unbind_all("<MouseWheel>")
+
+    canvas_frame.bind("<Enter>", _bind_mousewheel)
+    canvas_frame.bind("<Leave>", _unbind_mousewheel)
+
     # Kontener dla siatki statystyk (3 kolumny)
     grid_container = tk.Frame(scrollable_main, bg=bg_color)  # type: ignore
     grid_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)

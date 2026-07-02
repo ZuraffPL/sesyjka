@@ -12,7 +12,12 @@ import customtkinter as ctk  # type: ignore
 from database_manager import get_db_path, get_app_data_dir, is_guest_mode
 from font_scaling import scale_font_size
 from ctk_table import CTkDataTable
-from dialog_utils import apply_safe_geometry, clamp_geometry, create_ctk_toplevel
+from dialog_utils import (
+    apply_safe_geometry,
+    clamp_geometry,
+    create_ctk_toplevel,
+    enable_combobox_search,
+)
 
 DB_FILE = get_db_path("systemy_rpg.db")
 
@@ -853,27 +858,11 @@ def dodaj_system_rpg(
     przypisz_label = ctk.CTkLabel(main_frame, text="Przypisz do systemu *")
     przypisz_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
     przypisz_var = tk.StringVar()
-    przypisz_combo = ctk.CTkComboBox(main_frame, variable=przypisz_var, state="readonly")
-    if all_games_list:
-        game_values = [f"{g[0]} - {g[1]}" for g in all_games_list]
+    przypisz_combo = ctk.CTkComboBox(main_frame, variable=przypisz_var, state="normal", width=380)
+    game_values: List[str] = [f"{g[0]} - {g[1]}" for g in all_games_list]
+    if game_values:
         przypisz_combo.configure(values=game_values)
-    def _on_przypisz_scroll(event: Any) -> None:
-        vals = przypisz_combo.cget("values")
-        if not vals:
-            return
-        current = przypisz_var.get()
-        try:
-            idx = list(vals).index(current)
-        except ValueError:
-            idx = 0
-        if event.delta > 0:
-            idx = max(0, idx - 1)
-        else:
-            idx = min(len(vals) - 1, idx + 1)
-        przypisz_combo.set(vals[idx])
-
-    przypisz_combo.bind("<MouseWheel>", _on_przypisz_scroll)
-    przypisz_combo._entry.bind("<MouseWheel>", _on_przypisz_scroll)
+    enable_combobox_search(przypisz_combo, przypisz_var, lambda: game_values)
     przypisz_combo.grid(row=3, column=1, pady=8, sticky="w")
     if preset_game_id is not None:
         przypisz_label.grid_remove()
@@ -909,7 +898,7 @@ def dodaj_system_rpg(
         row=6, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     wydawca_var = tk.StringVar()
-    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="normal")
 
     def refresh_publishers_on_click(event: Any = None) -> None:
         """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
@@ -956,24 +945,11 @@ def dodaj_system_rpg(
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
 
-    def _on_wydawca_scroll_dodaj(event: Any) -> None:
-        vals = wydawca_combo.cget("values")
-        if not vals:
-            return
-        current = wydawca_var.get()
-        try:
-            idx = list(vals).index(current)
-        except ValueError:
-            idx = 0
-        if event.delta > 0:
-            idx = max(0, idx - 1)
-        else:
-            idx = min(len(vals) - 1, idx + 1)
-        wydawca_combo.set(vals[idx])
-
-    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox i włącz filtrowanie po tekście
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
-    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_dodaj)
+    enable_combobox_search(
+        wydawca_combo, wydawca_var, lambda: [f"{pub[0]} - {pub[1]}" for pub in publishers]
+    )
     wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
 
     # Przycisk dodania nowego wydawcy inline
@@ -2730,7 +2706,7 @@ def open_edit_system_dialog(
     przypisz_edit_label = ctk.CTkLabel(main_frame, text="Przypisz do systemu *")
     przypisz_edit_label.grid(row=3, column=0, pady=8, padx=(0, 10), sticky="w")
     przypisz_edit_var = tk.StringVar()
-    przypisz_edit_combo = ctk.CTkComboBox(main_frame, variable=przypisz_edit_var, state="readonly")
+    przypisz_edit_combo = ctk.CTkComboBox(main_frame, variable=przypisz_edit_var, state="normal")
     if all_games_edit:
         game_edit_values = [f"{g[0]} - {g[1]}" for g in all_games_edit]
         przypisz_edit_combo.configure(values=game_edit_values)
@@ -2740,24 +2716,10 @@ def open_edit_system_dialog(
                     przypisz_edit_var.set(f"{g[0]} - {g[1]}")
                     break
     przypisz_edit_combo.grid(row=3, column=1, pady=8, sticky="w")
-
-    def _on_przypisz_edit_scroll(event: Any) -> None:
-        vals = przypisz_edit_combo.cget("values")
-        if not vals:
-            return
-        current = przypisz_edit_var.get()
-        try:
-            idx = list(vals).index(current)
-        except ValueError:
-            idx = 0
-        if event.delta > 0:
-            idx = max(0, idx - 1)
-        else:
-            idx = min(len(vals) - 1, idx + 1)
-        przypisz_edit_combo.set(vals[idx])
-
-    przypisz_edit_combo.bind("<MouseWheel>", _on_przypisz_edit_scroll)
-    przypisz_edit_combo._entry.bind("<MouseWheel>", _on_przypisz_edit_scroll)
+    enable_combobox_search(
+        przypisz_edit_combo, przypisz_edit_var,
+        lambda: [f"{g[0]} - {g[1]}" for g in all_games_edit],
+    )
 
     def _after_add_game_edit(**_kw: Any) -> None:
         """Odświeża listę systemów gry po dodaniu nowego."""
@@ -2822,7 +2784,7 @@ def open_edit_system_dialog(
         row=6, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     wydawca_var = tk.StringVar()
-    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="normal")
 
     def refresh_publishers_on_click(event: Any = None) -> None:
         """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
@@ -2875,24 +2837,11 @@ def open_edit_system_dialog(
                     wydawca_var.set(f"{pub[0]} - {pub[1]}")
                     break
 
-    def _on_wydawca_scroll_edytuj(event: Any) -> None:
-        vals = wydawca_combo.cget("values")
-        if not vals:
-            return
-        current = wydawca_var.get()
-        try:
-            idx = list(vals).index(current)
-        except ValueError:
-            idx = 0
-        if event.delta > 0:
-            idx = max(0, idx - 1)
-        else:
-            idx = min(len(vals) - 1, idx + 1)
-        wydawca_combo.set(vals[idx])
-
-    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox i włącz filtrowanie po tekście
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
-    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_edytuj)
+    enable_combobox_search(
+        wydawca_combo, wydawca_var, lambda: [f"{pub[0]} - {pub[1]}" for pub in publishers]
+    )
     wydawca_combo.grid(row=6, column=1, pady=8, sticky="ew")
 
     # Przycisk dodania nowego wydawcy inline
@@ -3684,9 +3633,9 @@ def _open_assign_supl_dialog(
     ctk.CTkLabel(mf, text="Przypisz do Systemu:").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
     game_var = tk.StringVar()
     game_values = [f"{g[0]} — {g[1]}" for g in games_list]
-    ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="readonly", width=300).grid(
-        row=1, column=1, pady=8, sticky="ew"
-    )
+    game_combo = ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="normal", width=300)
+    game_combo.grid(row=1, column=1, pady=8, sticky="ew")
+    enable_combobox_search(game_combo, game_var, lambda: game_values)
 
     # Pobierz aktualny system_gry_id
     try:
@@ -3760,8 +3709,9 @@ def _open_assign_pg_dialog(
     ctk.CTkLabel(mf, text="Przypisz do Systemu:").grid(row=1, column=0, pady=8, padx=(0, 10), sticky="w")
     game_var = tk.StringVar()
     game_values = [f"{g[0]} — {g[1]}" for g in games_list]
-    game_combo = ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="readonly", width=280)
+    game_combo = ctk.CTkComboBox(mf, variable=game_var, values=game_values, state="normal", width=280)
     game_combo.grid(row=1, column=1, pady=8, sticky="ew")
+    enable_combobox_search(game_combo, game_var, lambda: game_values)
 
     # Pobierz aktualny system_gry_id
     try:
@@ -3901,7 +3851,7 @@ def dodaj_suplement_do_systemu(
         row=5, column=0, pady=8, padx=(0, 10), sticky="w"
     )
     wydawca_var = tk.StringVar()
-    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="readonly")
+    wydawca_combo = ctk.CTkComboBox(main_frame, variable=wydawca_var, state="normal")
 
     def refresh_publishers_on_click(event: Any = None) -> None:
         """Odświeża listę wydawców z bazy przy każdym kliknięciu w combobox"""
@@ -3921,24 +3871,11 @@ def dodaj_suplement_do_systemu(
         wydawca_values = [f"{pub[0]} - {pub[1]}" for pub in publishers]
         wydawca_combo.configure(values=wydawca_values)
 
-    def _on_wydawca_scroll_3(event: Any) -> None:
-        vals = wydawca_combo.cget("values")
-        if not vals:
-            return
-        current = wydawca_var.get()
-        try:
-            idx = list(vals).index(current)
-        except ValueError:
-            idx = 0
-        if event.delta > 0:
-            idx = max(0, idx - 1)
-        else:
-            idx = min(len(vals) - 1, idx + 1)
-        wydawca_combo.set(vals[idx])
-
-    # Odśwież listę wydawców przy każdym kliknięciu w combobox
+    # Odśwież listę wydawców przy każdym kliknięciu w combobox i włącz filtrowanie po tekście
     wydawca_combo.bind("<Button-1>", refresh_publishers_on_click)
-    wydawca_combo.bind("<MouseWheel>", _on_wydawca_scroll_3)
+    enable_combobox_search(
+        wydawca_combo, wydawca_var, lambda: [f"{pub[0]} - {pub[1]}" for pub in publishers]
+    )
     wydawca_combo.grid(row=5, column=1, pady=8, sticky="ew")
 
     # Posiadanie

@@ -61,8 +61,10 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Prawym przyciskiem myszy (PPM) na wierszu otwiera menu kontekstowe z opcjami edycji i usunięcia."),
     ("h2", "Pola rekordu PG / Suplementu"),    ("li", "Nazwa/Tytuł * — wymagana nazwa podręcznika lub suplementu."),
     ("li", "Typ — Podręcznik Główny lub Suplement (w tym Starter / Zestaw Startowy)."),
-    ("li", "System główny — dla suplementów: opcjonalny wybór systemu-rodzica z kolekcji."),
-    ("li", "Wydawca — wybór z listy wydawców (można dodać nowego przyciskiem ➕ Dodaj wydawcę)."),
+    ("li", "System główny — dla suplementów: opcjonalny wybór systemu-rodzica z kolekcji; "
+           "pole obsługuje wpisywanie fragmentu nazwy, aby zawęzić listę propozycji."),
+    ("li", "Wydawca — wybór z listy wydawców; można wpisać fragment nazwy, aby zawęzić "
+           "listę (dodanie nowego przyciskiem ➕ Dodaj wydawcę)."),
     ("li", "Fizyczny / PDF / VTT — zaznaczenie formy posiadania."),
     ("li", "Cena Fizyczna / Cena PDF / Cena VTT — osobna cena dla każdej formy posiadania "
            "(wyświetlana dynamicznie po zaznaczeniu odpowiedniej formy)."),
@@ -132,6 +134,8 @@ _HELP_CONTENT: list[tuple[str, str]] = [
     ("li", "Aktywność graczy — liczba sesji per gracz."),
     ("li", "Posiadanie — procent podręczników w formie fizycznej, PDF, VTT."),
     ("li", "Wartość kolekcji — łączna szacowana wartość podręczników."),
+    ("li", "Przewijanie kółkiem myszy działa w dowolnym miejscu zakładki, nie tylko po "
+           "najechaniu na pasek boczny."),
     ("sep", ""),
 
     ("h1", "🔧 Panel kontrolny (prawy górny róg)"),

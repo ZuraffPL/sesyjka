@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.50") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.52") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -140,6 +140,7 @@ SYSTEMY RPG:
 • Automatyczne dopasowanie szerokości okien
 • Rok wydania i ISBN — pola widoczne i sortowalne w tabeli
 • Typ Starter / Zestaw Startowy w katalogu suplementów
+• Wyszukiwanie w polach Przypisz do systemu i Wydawca — wpisywanie fragmentu nazwy zawęża listę
 
 SESJE RPG:
 • Zarządzanie sesjami z datami i uczestnikami
@@ -192,6 +193,7 @@ STATYSTYKI:
 • Sortowanie systemów według liczby sesji (malejąco)
 • 🔄 Przycisk odświeżania statystyk
 • Automatyczne odświeżanie po dodaniu/usunięciu rekordów
+• Przewijanie kółkiem myszy w dowolnym miejscu zakładki
 
 DODATKOWE FUNKCJE:
 • Zaawansowane filtrowanie we wszystkich zakładkach

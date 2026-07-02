@@ -6,7 +6,7 @@ Zabezpiecza przed wychodzeniem dialogów poza ekran przy wysokim skalowaniu DPI.
 import sys
 import ctypes
 import tkinter as tk
-from typing import Tuple, Any, Optional
+from typing import Tuple, Any, Optional, Callable, List
 import customtkinter as ctk  # type: ignore
 import logging
 import os
@@ -394,3 +394,55 @@ def make_scrollable_dialog_frame(
     scroll_frame.pack(fill=tk.BOTH, expand=True, padx=padx, pady=pady)  # type: ignore[no-untyped-call]
     scroll_frame.columnconfigure(1, weight=1)
     return scroll_frame
+
+
+def enable_combobox_search(
+    combo: Any,
+    variable: "tk.StringVar",
+    get_all_values: Callable[[], List[str]],
+) -> None:
+    """Włącza filtrowanie wartości `CTkComboBox` przez wpisywanie tekstu z klawiatury,
+    analogicznie do wyboru systemu RPG w dialogu dodawania sesji.
+
+    Combobox powinien mieć `state="normal"`, aby przyjmował tekst wpisywany ręcznie.
+    Każde naciśnięcie klawisza zawęża listę rozwijaną do pozycji zawierających wpisany
+    fragment tekstu (bez rozróżniania wielkości liter). Kółko myszy nad polem nadal
+    pozwala przewijać aktualnie widoczną (przefiltrowaną) listę pozycji.
+
+    Args:
+        combo: instancja `CTkComboBox` w trybie `state="normal"`.
+        variable: zmienna `StringVar` powiązana z comboboxem.
+        get_all_values: funkcja zwracająca aktualną, pełną listę wartości (wywoływana przy
+            każdym filtrowaniu, aby uwzględnić ewentualne odświeżenie listy z bazy danych).
+    """
+
+    def _filter(*_: Any) -> None:
+        query = variable.get().lower()
+        all_values = get_all_values()
+        if query:
+            filtered = [v for v in all_values if query in v.lower()]
+            combo.configure(values=filtered if filtered else all_values)
+        else:
+            combo.configure(values=all_values)
+
+    def _on_scroll(event: Any) -> None:
+        vals = combo.cget("values")
+        if not vals:
+            return
+        current = variable.get()
+        try:
+            idx = list(vals).index(current)
+        except ValueError:
+            idx = 0
+        if event.delta > 0:
+            idx = max(0, idx - 1)
+        else:
+            idx = min(len(vals) - 1, idx + 1)
+        combo.set(vals[idx])
+
+    combo.bind("<KeyRelease>", _filter)
+    combo.bind("<MouseWheel>", _on_scroll)
+    try:
+        combo._entry.bind("<MouseWheel>", _on_scroll)  # type: ignore[attr-defined]
+    except Exception:
+        pass

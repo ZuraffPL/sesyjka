@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.52") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.55") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -183,10 +183,13 @@ INTERFEJS UŻYTKOWNIKA:
 • Uchwyty resize kolumn — przeciąganie granicy między nagłówkami kolumn
 
 STATYSTYKI:
-• Układ 3-kolumnowy zoptymalizowany dla ekranów 1080p
+• Układ 3-kolumnowy, automatycznie zawijany po 3 statystykach do kolejnych wierszy
 • Statystyka 1: Sesje RPG według roku - wykres kołowy z legendą nad wykresem
 • Statystyka 2: Główny użytkownik MG vs Gracz - wybór roku, wykres kołowy
 • Statystyka 3: Systemy RPG: Ilość sesji - wykres słupkowy poziomy z wyborem roku
+• Kliknięcie LPM na dowolnej karcie otwiera powiększone, maksymalizowalne okno
+  ze szczegółami — pełny wykres bez przycięć nawet przy dużej liczbie danych
+• Wszystkie 3 statystyki pobierają dane w wątku tła — bez blokowania interfejsu
 • Podział sesji po latach z procentami w statystyce MG vs Gracz
 • Profesjonalne wykresy matplotlib z adaptacją do trybu ciemnego
 • Kompaktowy układ z automatycznym scrollem

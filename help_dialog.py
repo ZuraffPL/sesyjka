@@ -128,12 +128,16 @@ _HELP_CONTENT: list[tuple[str, str]] = [
 
     ("h1", "📊 Zakładka: Statystyki"),
     ("p",  "Wykresy i zestawienia danych z całej bazy. Odświeżane automatycznie po "
-           "każdej operacji CRUD."),
-    ("li", "Liczba sesji w czasie — wykres słupkowy liczby sesji per rok."),
-    ("li", "Sesje według systemu — rozkład sesji na systemy RPG."),
-    ("li", "Aktywność graczy — liczba sesji per gracz."),
-    ("li", "Posiadanie — procent podręczników w formie fizycznej, PDF, VTT."),
-    ("li", "Wartość kolekcji — łączna szacowana wartość podręczników."),
+           "każdej operacji CRUD. Pobieranie danych dla każdej statystyki działa w wątku "
+           "tła, więc interfejs nie zawiesza się w trakcie ładowania."),
+    ("li", "Sesje RPG według roku — wykres kołowy z legendą i procentowym udziałem lat."),
+    ("li", "Główny użytkownik: MG vs Gracz — wykres kołowy z wyborem roku z listy."),
+    ("li", "Systemy RPG: Ilość sesji — wykres słupkowy poziomy z wyborem roku z listy."),
+    ("li", "Kliknięcie LPM na dowolnej karcie statystyki otwiera powiększone okno "
+           "szczegółów z pełnym wykresem, bez przycięć — okno można też maksymalizować "
+           "przyciskiem w pasku tytułu."),
+    ("li", "Karty statystyk są ułożone w siatce 3 kolumn i zawijają się automatycznie do "
+           "kolejnych wierszy, gdy w przyszłości przybędzie więcej statystyk."),
     ("li", "Przewijanie kółkiem myszy działa w dowolnym miejscu zakładki, nie tylko po "
            "najechaniu na pasek boczny."),
     ("sep", ""),

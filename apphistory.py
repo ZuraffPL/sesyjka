@@ -62,6 +62,27 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.55",
+            "date": "31.08.2026",
+            "changes": [
+                "\u2728 NOWE FUNKCJE:\u00b0",
+                "",
+                "\u2705 SZCZEG\u00d3\u0141OWY WIDOK STATYSTYK:",
+                "  \u2022 klikni\u0119cie LPM na dowolnej karcie w zak\u0142adce Statystyki otwiera",
+                "    powi\u0119kszone okno z pe\u0142nym wykresem, bez przyci\u0119\u0107 i nak\u0142adania etykiet",
+                "  \u2022 okno szczeg\u00f3\u0142\u00f3w statystyki mo\u017cna maksymalizowa\u0107 (przycisk w pasku tytu\u0142u)",
+                "  \u2022 wykres \u201eSystemy RPG: Ilo\u015b\u0107 sesji\u201d w powi\u0119kszonym oknie skaluje wysoko\u015b\u0107",
+                "    do liczby system\u00f3w \u2014 czytelny nawet przy du\u017cej liczbie zagregowanych danych",
+                "",
+                "\ud83d\udcc8 WYDAJNO\u015a\u0106:\u00b0",
+                "",
+                "\u2705 WSZYSTKIE 3 MODU\u0141Y STATYSTYK W W\u0104TKU T\u0141A:",
+                "  \u2022 pobieranie danych z bazy nie blokuje ju\u017c interfejsu przy \u017cadnej z 3 statystyk",
+                "  \u2022 siatka statystyk zawija si\u0119 automatycznie po 3 kolumnach \u2014 przygotowana",
+                "    pod kolejne statystyki w przysz\u0142o\u015bci bez zmiany uk\u0142adu",
+            ],
+        },
+        {
             "version": "0.4.52",
             "date": "02.07.2026",
             "changes": [

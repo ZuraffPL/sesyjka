@@ -150,6 +150,44 @@ def apply_dark_titlebar(dialog: Any) -> None:  # type: ignore
         _log.error("apply_dark_titlebar: błąd — %s", exc)
 
 
+def enable_maximize_button(dialog: Any) -> None:  # type: ignore
+    """
+    Wymusza obecność przycisku maksymalizacji (i minimalizacji) w pasku tytułu.
+
+    Na Windows samo `dialog.resizable(True, True)` nie wystarcza — jeśli okno
+    zostało utworzone bez tych przycisków, Tk/Win32 nie dodaje ich z powrotem
+    (zmienia się tylko możliwość przeciągania krawędzi). Trzeba bezpośrednio
+    ustawić bity stylu natywnego okna i wymusić przerysowanie ramki.
+    Wywołuj przez dialog.after(50, ...) po pełnym wyrenderowaniu okna.
+    """
+    if not sys.platform.startswith("win"):
+        return
+    if not dialog.winfo_exists():
+        _log.debug("enable_maximize_button: dialog już nie istnieje, skip")
+        return
+    try:
+        GWL_STYLE = -16
+        WS_MINIMIZEBOX = 0x00020000
+        WS_MAXIMIZEBOX = 0x00010000
+        SWP_NOMOVE = 0x0002
+        SWP_NOSIZE = 0x0001
+        SWP_NOZORDER = 0x0004
+        SWP_FRAMECHANGED = 0x0020
+
+        hwnd = ctypes.windll.user32.GetParent(dialog.winfo_id())  # type: ignore
+        style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)  # type: ignore
+        ctypes.windll.user32.SetWindowLongW(  # type: ignore
+            hwnd, GWL_STYLE, style | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+        )
+        ctypes.windll.user32.SetWindowPos(  # type: ignore
+            hwnd, None, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+        )
+        _log.debug("enable_maximize_button: sukces, hwnd=%s", hwnd)
+    except Exception as exc:
+        _log.error("enable_maximize_button: błąd — %s", exc)
+
+
 def get_screen_size(widget: Any) -> Tuple[int, int]:
     """Zwraca dostępny rozmiar ekranu w pikselach (zgodnych z geometry() okna)."""
     return widget.winfo_screenwidth(), widget.winfo_screenheight()

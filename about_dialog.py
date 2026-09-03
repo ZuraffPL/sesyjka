@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.55") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.56") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -181,6 +181,7 @@ INTERFEJS UŻYTKOWNIKA:
 • Bezpieczna geometria dialogów - dopasowanie do rozdzielczości i skalowania DPI
 • Globalne skalowanie fontów (80%-120%) - suwak w ribbonie
 • Uchwyty resize kolumn — przeciąganie granicy między nagłówkami kolumn
+• Wirtualizacja wierszy w tabelach — płynne działanie nawet przy 500+ rekordach
 
 STATYSTYKI:
 • Układ 3-kolumnowy, automatycznie zawijany po 3 statystykach do kolejnych wierszy

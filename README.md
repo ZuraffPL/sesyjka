@@ -1,6 +1,6 @@
 # Sesyjka - TTRPG Base Manager
 
-![Version](https://img.shields.io/badge/version-0.4.55-blue)
+![Version](https://img.shields.io/badge/version-0.4.56-blue)
 ![Python](https://img.shields.io/badge/python-3.14.4-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010-lightgrey)
 
@@ -89,9 +89,9 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 **Najłatwiejszy sposób - nie wymaga instalacji Python!**
 
 1. Przejdź do [Releases](https://github.com/ZuraffPL/sesyjka/releases/latest)
-2. Pobierz `Sesyjka-v0.4.55-Windows.zip`
+2. Pobierz `Sesyjka-v0.4.56-Windows.zip`
 3. Rozpakuj archiwum
-4. Uruchom `Sesyjka-v0.4.55.exe`
+4. Uruchom `Sesyjka-v0.4.56.exe`
 
 #### ⚠️ Fałszywe alarmy antywirusowe
 
@@ -117,8 +117,8 @@ Aplikacja desktopowa do zarządzania danymi związanymi z grami RPG (Tabletop Ro
 3. **Weryfikuj autentyczność**:
    - Zawsze pobieraj z oficjalnego repozytorium GitHub
    - Link: https://github.com/ZuraffPL/sesyjka/releases/latest
-   - **SHA256 checksum** dla `Sesyjka-v0.4.55.exe` dostepny w opisie najnowszego release
-   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.55.exe -Algorithm SHA256`
+   - **SHA256 checksum** dla `Sesyjka-v0.4.56.exe` dostepny w opisie najnowszego release
+   - Weryfikacja w PowerShell: `Get-FileHash Sesyjka-v0.4.56.exe -Algorithm SHA256`
 
 ### 🔧 Opcja 2: Instalacja ze źródeł
 
@@ -224,6 +224,9 @@ Aplikacja automatycznie tworzy i zarządza następującymi bazami SQLite:
 | Budowanie EXE | `PyInstaller` | Budowanie samodzielnego pliku `.exe` dla Windows |
 
 ## 📝 Changelog
+
+### v0.4.56 (03.09.2026)
+- 📈 **Wydajność tabel (Systemy/Sesje/Gracze/Wydawcy)**: wirtualizacja wierszy w `CTkDataTable` — renderowane są tylko wiersze widoczne na ekranie, co eliminuje spowolnienia i wizualne „dziury” przy dużej liczbie rekordów (500+); rozwijanie/zwijanie systemów działa płynnie niezależnie od rozmiaru bazy
 
 ### v0.4.55 (31.08.2026)
 - 🖱️ **Szczegółowy widok statystyk**: kliknięcie LPM na dowolnej karcie w zakładce Statystyki otwiera powiększone, maksymalizowalne okno z pełnym wykresem — bez przycięć i nakładania etykiet nawet przy dużej liczbie zagregowanych danych

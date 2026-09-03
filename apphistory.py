@@ -62,6 +62,22 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.56",
+            "date": "03.09.2026",
+            "changes": [
+                "\ud83d\udcc8 WYDAJNO\u015a\u0106:\u00b0",
+                "",
+                "\u2705 WIRTUALIZACJA WIERSZY W TABELACH (CTkDataTable):",
+                "  \u2022 naprawiono spowolnienia i \u201edziury\u201d w widoku tabel (Systemy/Sesje/",
+                "    Gracze/Wydawcy) przy du\u017cej liczbie rekord\u00f3w (500+)",
+                "  \u2022 wiersze s\u0105 renderowane tylko w widocznym obszarze zamiast wszystkie",
+                "    naraz \u2014 rozwijanie/zwijanie system\u00f3w dzia\u0142a p\u0142ynnie niezale\u017cnie",
+                "    od rozmiaru bazy",
+                "  \u2022 wyeliminowano narastaj\u0105ce op\u00f3\u017anienia silnika Tk przy wielokrotnym",
+                "    rozwijaniu/zwijaniu wierszy w jednej sesji",
+            ],
+        },
+        {
             "version": "0.4.55",
             "date": "31.08.2026",
             "changes": [

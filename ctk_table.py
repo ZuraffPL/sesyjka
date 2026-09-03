@@ -62,6 +62,7 @@ except ImportError:  # pragma: no cover
     _pil_ok = False
 
 import sys as _sys
+from collections import OrderedDict
 from font_scaling import scale_font_size
 
 # ── ikona przycisku edycji (dwa warianty: jasny/ciemny) ──────────────────────────
@@ -165,6 +166,8 @@ _EDIT_W = 36  # szerokość kolumny przycisku edycji (px)
 _ROW_NUM_W = 36  # szerokość kolumny numeru wiersza Lp. (px)
 _ROW_H = 28  # wysokość wiersza danych (px)
 _HDR_H = 30  # wysokość nagłówka (px)
+_VIRT_BUFFER = 8  # liczba dodatkowych wierszy renderowanych poza viewportem
+_POOL_MAX = 300  # maks. liczba nieaktywnych ramek trzymanych w puli (LRU)
 
 
 # ─── tooltip ───────────────────────────────────────────────────────────────
@@ -292,8 +295,15 @@ class CTkDataTable(tk.Frame):
         self._hidden_cols: Set[int] = set(hidden_cols or [])
         self._col_order: List[int] = list(col_order) if col_order is not None else list(range(len(headers)))
         self._theme = t
-        self._row_frames: List[tk.Frame] = []
-        self._row_pool: Dict[Any, tk.Frame] = {}  # ID → ukryta ramka do ponownego użycia
+        # ── Wirtualizacja wierszy ────────────────────────────────────────
+        # Renderowane są WYŁĄCZNIE wiersze widoczne w viewport (+ bufor) –
+        # niezależnie od całkowitej liczby rekordów w tabeli. Bez tego 500+
+        # rekordów (a z hierarchią suplementów nawet 1000+) tworzy tysiące
+        # żywych widgetów Tk jednocześnie, co powoduje wielosekundowe
+        # zamrożenia UI i wizualne artefakty (patrz /memories/repo/ctk_table_perf_bug.md).
+        self._active_frames: Dict[int, tk.Frame] = {}  # indeks wiersza → aktualnie wyrenderowana ramka
+        self._active_items: Dict[int, int] = {}  # indeks wiersza → id itemu na data_canvas
+        self._row_pool: "OrderedDict[Any, tk.Frame]" = OrderedDict()  # ID → nieaktywna ramka (LRU)
         self._selected_idx: Optional[int] = None
         self._selected_data: Optional[List[Any]] = None
 
@@ -313,14 +323,11 @@ class CTkDataTable(tk.Frame):
         # Canvas-based scroll (poziomy + pionowy)
         self._hdr_canvas: Optional[tk.Canvas] = None
         self._data_canvas: Optional[tk.Canvas] = None
-        self._inner: Optional[tk.Frame] = None
-        self._inner_win: int = 0
         self._scroll_companions: List[tk.Canvas] = []  # canvasy scrollowane razem z tabelą
 
         self._build_header()
         self._build_data_area()
-        self._scroll = self._inner  # type: ignore[assignment]  # backward compat
-        self._build_rows()
+        self._reflow()
 
     # ── nagłówek ───────────────────────────────────────────────────────────
     def _build_header(self) -> None:
@@ -454,7 +461,7 @@ class CTkDataTable(tk.Frame):
         self._data_canvas = tk.Canvas(container, bg=t["bg"], highlightthickness=0)
         self._data_canvas.grid(row=0, column=0, sticky="nsew")
 
-        yscroll = _ttk.Scrollbar(container, orient="vertical", command=self._data_canvas.yview)
+        yscroll = _ttk.Scrollbar(container, orient="vertical", command=self._yview)
         yscroll.grid(row=0, column=1, sticky="ns")
 
         xscroll = _ttk.Scrollbar(container, orient="horizontal", command=self._xview_both)
@@ -465,10 +472,6 @@ class CTkDataTable(tk.Frame):
             xscrollcommand=xscroll.set,
         )
 
-        self._inner = tk.Frame(self._data_canvas, bg=t["bg"])
-        self._inner_win = self._data_canvas.create_window((0, 0), window=self._inner, anchor="nw")
-
-        self._inner.bind("<Configure>", self._on_inner_configure)
         self._data_canvas.bind("<Configure>", self._on_canvas_configure)
 
         # Kółko myszy: bind_all aktywny gdy mysz w obszarze danych
@@ -478,6 +481,12 @@ class CTkDataTable(tk.Frame):
         self.bind("<Leave>", lambda _e: self._data_canvas.unbind_all(  # type: ignore[union-attr]
             "<MouseWheel>"
         ))
+
+    def _yview(self, *args: Any) -> None:
+        """Wrapper wokół yview canvasu danych – po przewinięciu przelicza widoczne wiersze."""
+        if self._data_canvas is not None:
+            self._data_canvas.yview(*args)
+        self._reflow()
 
     def _xview_both(self, *args: Any) -> None:
         """Przewija oba kanwasy (nagłówek i dane) synchronicznie w poziomie."""
@@ -491,22 +500,21 @@ class CTkDataTable(tk.Frame):
             except Exception:
                 pass
 
-    def _on_inner_configure(self, event: Any) -> None:
-        """Aktualizuje scrollregion i szerokość inner frame po zmianie zawartości."""
+    def _update_scrollregion(self) -> None:
+        """Ustawia scrollregion na podstawie CAŁKOWITEJ liczby wierszy danych
+        (nie zależy od tego, ile ramek jest aktualnie wyrenderowanych)."""
         if self._data_canvas is None:
             return
-        self._data_canvas.configure(scrollregion=self._data_canvas.bbox("all"))
         total_w = self._get_content_width()
         cw = self._data_canvas.winfo_width() or 1
-        if self._inner_win:
-            self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, cw))
+        total_h = max(len(self._data) * _ROW_H, 1)
+        self._data_canvas.configure(scrollregion=(0, 0, max(total_w, cw), total_h))
 
     def _on_canvas_configure(self, event: Any) -> None:
-        """Dostosowuje szerokość ramki wewnętrznej do zawartości lub kanwasu."""
-        if self._data_canvas is None or not self._inner_win:
-            return
-        total_w = self._get_content_width()
-        self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, event.width))
+        """Po zmianie rozmiaru canvasu: aktualizuje scrollregion i przelicza
+        widoczny zakres wierszy (wirtualizacja)."""
+        self._update_scrollregion()
+        self._reflow()
 
     def _get_content_width(self) -> int:
         """Zwraca sumę szerokości wszystkich widocznych kolumn (px)."""
@@ -525,6 +533,7 @@ class CTkDataTable(tk.Frame):
         """Przewija kanwas danych kółkiem myszy (Windows: event.delta)."""
         if self._data_canvas is not None:
             self._data_canvas.yview_scroll(-int(event.delta / 120), "units")
+            self._reflow()
 
     # ── zmiana szerokości kolumn (przeciąganie) ────────────────────────────
     def _on_resize_press(self, event: Any, col_idx: int) -> None:
@@ -549,12 +558,7 @@ class CTkDataTable(tk.Frame):
             return
         self._drag_col = None
         self._force_rebuild_rows()
-        # Aktualizuj scrollregion po zmianie szerokości kolumny
-        if self._data_canvas is not None:
-            total_w = self._get_content_width()
-            cw = self._data_canvas.winfo_width() or 1
-            self._data_canvas.itemconfigure(self._inner_win, width=max(total_w, cw))
-            self._data_canvas.configure(scrollregion=self._data_canvas.bbox("all"))
+        self._update_scrollregion()
         if self._resize_cb is not None:
             self._resize_cb(list(self.col_widths))
 
@@ -563,8 +567,10 @@ class CTkDataTable(tk.Frame):
 
         Wykonuje tylko place_configure() – bez niszczenia widgetów.
         Wywoływane na każde zdarzenie ruchu myszy podczas zmiany szerokości.
+        Dotyczy tylko aktualnie WIDOCZNYCH ramek (wirtualizacja) – to wystarczy,
+        bo tylko one są renderowane na ekranie w danym momencie.
         """
-        for rf in self._row_frames:
+        for rf in self._active_frames.values():
             x = 0
             if self._show_row_num:
                 x += _ROW_NUM_W
@@ -593,14 +599,13 @@ class CTkDataTable(tk.Frame):
                 filler.place_configure(x=x, width=-x)
 
     def _force_rebuild_rows(self) -> None:
-        """Wymusza pełną przebudowę wierszy (po zmianie szerokości kolumn)."""
-        for rf in self._row_frames:
-            if hasattr(rf, '_cached_row'):
-                rf._cached_row = None  # type: ignore[attr-defined]
+        """Wymusza pełną przebudowę widocznych wierszy (po zmianie szerokości kolumn)."""
+        for idx in list(self._active_frames.keys()):
+            self._deactivate_row(idx, destroy=True)
         for rf in self._row_pool.values():
             rf.destroy()
         self._row_pool.clear()
-        self._build_rows()
+        self._reflow()
 
     # ── wiersze ────────────────────────────────────────────────────────────
     def _pool_key(self, row: Optional[List[Any]]) -> Optional[Any]:
@@ -628,121 +633,147 @@ class CTkDataTable(tk.Frame):
             pass
         self._edit_cb(ri, rd)
 
-    def _build_rows(self) -> None:
+    def _deactivate_row(self, idx: int, *, destroy: bool = False) -> None:
+        """Usuwa wiersz idx z widoku (item na data_canvas).
+
+        Ramkę albo niszczy (destroy=True, np. przy zmianie szerokości kolumn),
+        albo odkłada do puli LRU do ponownego użycia (domyślnie – standardowe
+        wyjście wiersza poza viewport przy scrollu).
+        """
+        item_id = self._active_items.pop(idx, None)
+        if item_id is not None and self._data_canvas is not None:
+            self._data_canvas.delete(item_id)
+        rf = self._active_frames.pop(idx, None)
+        if rf is None:
+            return
+        if destroy:
+            rf.destroy()
+            return
+        key = self._pool_key(getattr(rf, '_cached_row', None))
+        if key is None:
+            rf.destroy()
+            return
+        self._row_pool[key] = rf
+        self._row_pool.move_to_end(key)
+        self._evict_pool_if_needed()
+
+    def _evict_pool_if_needed(self) -> None:
+        """Ogranicza rozmiar puli ramek (LRU) – zapobiega nieograniczonemu
+        wzrostowi liczby żywych widgetów przy przewijaniu bardzo długich tabel."""
+        while len(self._row_pool) > _POOL_MAX:
+            _old_key, old_frame = self._row_pool.popitem(last=False)
+            old_frame.destroy()
+
+    def _get_or_create_frame(self, i: int, row: List[Any]) -> tk.Frame:
+        """Zwraca ramkę dla wiersza i – z puli (reużyta) lub nowo utworzoną."""
+        key = self._pool_key(row)
+        rf: Optional[tk.Frame] = self._row_pool.pop(key, None) if key is not None else None
+        is_sel = i == self._selected_idx
+
+        if rf is not None:
+            cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
+            cached_sel = getattr(rf, '_cached_sel', None)
+            if cached is not None and cached == row and cached_sel == is_sel:
+                # Idealne trafienie: dane i stan selekcji bez zmian – tylko Lp.
+                if self._show_row_num:
+                    new_lp = str(i + 1)
+                    if getattr(rf, '_cached_lp', None) != new_lp:
+                        lbl: Optional[tk.Label] = getattr(rf, '_row_num_lbl', None)
+                        if lbl is not None:
+                            lbl.configure(text=new_lp)
+                        rf._cached_lp = new_lp  # type: ignore[attr-defined]
+                return rf
+            # Reuse ramki, ale odśwież zawartość (zniszcz stare dzieci)
+            for ch in rf.winfo_children():
+                ch.destroy()
+            def_bg, _ = self._resolve_colors(i, row)
+            rf.configure(bg=def_bg)
+        else:
+            def_bg, _ = self._resolve_colors(i, row)
+            rf = tk.Frame(self._data_canvas, bg=def_bg, height=_ROW_H)
+            rf.pack_propagate(False)
+
+        self._populate_row(rf, i, row)
+        rf._cached_row = list(row)  # type: ignore[attr-defined]
+        rf._cached_sel = is_sel  # type: ignore[attr-defined]
+        return rf
+
+    def _visible_range(self) -> Tuple[int, int]:
+        """Zwraca (first, last) – zakres indeksów wierszy do wyrenderowania,
+        z buforem _VIRT_BUFFER ponad faktyczny viewport."""
+        total = len(self._data)
+        if total == 0 or self._data_canvas is None:
+            return (0, 0)
+        canvas_h = self._data_canvas.winfo_height()
+        if canvas_h <= 1:
+            canvas_h = 600  # rozsądny fallback, zanim canvas dostanie realny rozmiar
+        y0 = self._data_canvas.canvasy(0)
+        y1 = y0 + canvas_h
+        first = max(0, int(y0 // _ROW_H) - _VIRT_BUFFER)
+        last = min(total, int(y1 // _ROW_H) + 1 + _VIRT_BUFFER)
+        return (first, last)
+
+    def _reflow(self) -> None:
+        """Renderuje WYŁĄCZNIE wiersze widoczne w viewport (+ bufor) – wirtualizacja.
+
+        Koszt jest O(liczba widocznych wierszy), niezależnie od całkowitego
+        rozmiaru tabeli — dzięki temu 500+ rekordów (nawet z rozwiniętą
+        hierarchią suplementów) nie powoduje zamrożeń UI ani zaległości w
+        kolejce zdarzeń Tk (patrz /memories/repo/ctk_table_perf_bug.md).
+        """
         _t0 = _time.perf_counter()
-        new_count = len(self._data)
+        if self._data_canvas is None:
+            return
+        self._update_scrollregion()
+        first, last = self._visible_range()
 
-        # ── Krok 1: Przenieś WSZYSTKIE istniejące ramki (_row_frames + _row_pool) ──
-        # do tymczasowej mapy ID→ramka. Dopasowanie oparte na ID wiersza (nie pozycji)
-        # eliminuje O(n) cache-miss przy wstawieniu rekordu na początku posortowanej
-        # listy (np. sort malejący po ID). Przy dodaniu 1 sesji do 484-elementowej
-        # listy: 484×pack() + Label.configure(Lp) zamiast 484×(destroy+recreate widgetów).
-        available: Dict[Any, tk.Frame] = {}
-        unkeyed: List[tk.Frame] = []
+        # Usuń z widoku wiersze, które wypadły poza aktualny zakres
+        for idx in list(self._active_frames.keys()):
+            if idx < first or idx >= last:
+                self._deactivate_row(idx)
 
-        for f in self._row_frames:
-            f.pack_forget()
-            cached_r: Optional[List[Any]] = getattr(f, '_cached_row', None)
-            key = self._pool_key(cached_r)
-            if key is not None:
-                available[key] = f
-            else:
-                unkeyed.append(f)
+        total_w = self._get_content_width()
+        cw = self._data_canvas.winfo_width() or 1
+        item_w = max(total_w, cw)
 
-        # Scal z istniejącą pulą (pool może mieć ramki z expand/collapse)
-        for k, f in self._row_pool.items():
-            if k not in available:
-                available[k] = f
+        added = 0
+        for i in range(first, last):
+            if i in self._active_frames:
+                continue
+            row = self._data[i]
+            rf = self._get_or_create_frame(i, row)
+            item_id = self._data_canvas.create_window(
+                0, i * _ROW_H, window=rf, anchor="nw", width=item_w, height=_ROW_H
+            )
+            self._active_frames[i] = rf
+            self._active_items[i] = item_id
+            added += 1
 
-        self._row_frames = []
-        self._row_pool = {}
-
-        # ── Krok 2: Zbuduj wiersze w nowej kolejności ──────────────────────────
-        pooled = destroyed = refreshed = skipped = added = 0
-
-        for i, row in enumerate(self._data):
-            key = self._pool_key(row)
-            rf: Optional[tk.Frame] = None
-
-            if key is not None:
-                rf = available.pop(key, None)
-            if rf is None and unkeyed:
-                rf = unkeyed.pop(0)
-
-            if rf is not None:
-                cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
-                if cached is not None and cached == row:
-                    # Idealne trafienie: dane bez zmian – tylko pack() + ewentualnie Lp.
-                    rf.pack(fill=tk.X)
-                    self._row_frames.append(rf)
-                    if self._show_row_num:
-                        new_lp = str(i + 1)
-                        if getattr(rf, '_cached_lp', None) != new_lp:
-                            lbl: Optional[tk.Label] = getattr(rf, '_row_num_lbl', None)
-                            if lbl is not None:
-                                lbl.configure(text=new_lp)
-                            rf._cached_lp = new_lp  # type: ignore[attr-defined]
-                    skipped += 1
-                else:
-                    # Reuse ramki, ale odśwież zawartość (zniszcz stare dzieci)
-                    for ch in rf.winfo_children():
-                        ch.destroy()
-                    def_bg, _ = self._resolve_colors(i, row)
-                    rf.configure(bg=def_bg)
-                    rf.pack(fill=tk.X)
-                    self._row_frames.append(rf)
-                    self._populate_row(rf, i, row)
-                    rf._cached_row = list(row)  # type: ignore[attr-defined]
-                    refreshed += 1
-            else:
-                # Brak istniejącej ramki – utwórz nową
-                def_bg, _ = self._resolve_colors(i, row)
-                rf = tk.Frame(self._scroll, bg=def_bg, height=_ROW_H)
-                rf.pack(fill=tk.X)
-                rf.pack_propagate(False)
-                self._row_frames.append(rf)
-                self._populate_row(rf, i, row)
-                rf._cached_row = list(row)  # type: ignore[attr-defined]
-                added += 1
-
-        # ── Krok 3: Nieużyte ramki → pula lub zniszcz ──────────────────────────
-        for k, f in available.items():
-            self._row_pool[k] = f
-            pooled += 1
-        for f in unkeyed:
-            f.destroy()
-            destroyed += 1
-
-        # Resetuj selekcję jeśli wypadła poza zakres
-        if self._selected_idx is not None and self._selected_idx >= new_count:
+        # Resetuj selekcję jeśli wypadła poza zakres danych
+        if self._selected_idx is not None and self._selected_idx >= len(self._data):
             self._selected_idx = None
             self._selected_data = None
 
         _t1 = _time.perf_counter()
         _log.debug(
-            "CTkDataTable._build_rows: rows=%d  pooled=%d  destroyed=%d  "
-            "refreshed=%d  skipped=%d  added=%d  elapsed=%.1f ms",
-            new_count,
-            pooled,
-            destroyed,
-            refreshed,
-            skipped,
-            added,
-            (_t1 - _t0) * 1000,
+            "CTkDataTable._reflow: total=%d widoczne=[%d,%d) nowe=%d aktywne=%d "
+            "pula=%d elapsed=%.1fms",
+            len(self._data), first, last, added, len(self._active_frames),
+            len(self._row_pool), (_t1 - _t0) * 1000,
         )
 
     def _refresh_row(self, i: int, row: List[Any]) -> None:
-        """Aktualizuje istniejącą ramkę wiersza in-place (bez destroy Frame).
-
-        Jeśli dane wiersza są identyczne jak przy ostatnim renders, pomija
-        kosztowne destroy/recreate dzieci – kluczowa optymalizacja dla
-        expand/collapse w hierarchicznej tabeli (systemy RPG).
+        """Aktualizuje istniejącą (widoczną) ramkę wiersza in-place, jeśli
+        wiersz i jest aktualnie renderowany. Wiersze poza viewportem odświeżą
+        się automatycznie przy najbliższym _reflow(), gdy wjadą w widok.
         """
-        rf = self._row_frames[i]
-        # ── szybka ścieżka: dane bez zmian → nic nie rób ─────────────────
+        rf = self._active_frames.get(i)
+        if rf is None:
+            return
+        is_sel = i == self._selected_idx
+        # ── szybka ścieżka: dane i selekcja bez zmian → nic nie rób ──────
         cached: Optional[List[Any]] = getattr(rf, '_cached_row', None)
-        if cached is not None and cached == row:
-            # Lp.: aktualizuj tylko gdy wartość faktycznie się zmieniła (optymalizacja)
+        if cached is not None and cached == row and getattr(rf, '_cached_sel', None) == is_sel:
             if self._show_row_num:
                 new_lp = str(i + 1)
                 if getattr(rf, '_cached_lp', None) != new_lp:
@@ -752,6 +783,7 @@ class CTkDataTable(tk.Frame):
                     rf._cached_lp = new_lp  # type: ignore[attr-defined]
             return
         rf._cached_row = list(row)  # type: ignore[attr-defined]
+        rf._cached_sel = is_sel  # type: ignore[attr-defined]
         # Zniszcz tylko dzieci (Label/Button) – Frame zostaje
         for ch in rf.winfo_children():
             ch.destroy()
@@ -775,37 +807,12 @@ class CTkDataTable(tk.Frame):
                 elif isinstance(result, str):
                     def_bg = result
 
-        return def_bg, fg_ov
+        if i == self._selected_idx:
+            # Selekcja zawsze wygrywa z kolorem niestandardowym (spójne z
+            # dotychczasowym zachowaniem _on_click / _repaint).
+            def_bg = t["sel"]
 
-    def _add_row(self, i: int, row: List[Any]) -> None:
-        key = self._pool_key(row)
-        rf: Optional[tk.Frame] = self._row_pool.pop(key, None) if key is not None else None
-        if rf is not None:
-            cached = getattr(rf, '_cached_row', None)
-            if cached == row:
-                # Idealne trafienie: dane bez zmian → tylko pack(), zero tworzenia widgetów
-                rf.pack(fill=tk.X)
-                self._row_frames.append(rf)
-                # Lp.: zawsze bezwzględna numeracja – aktualizuj nawet przy cache-hit
-                if self._show_row_num:
-                    lbl = getattr(rf, '_row_num_lbl', None)
-                    if lbl is not None:
-                        lbl.configure(text=str(i + 1))
-                return
-            # Reuse ramki, ale odśwież zawartość (zniszcz stare dzieci)
-            for ch in rf.winfo_children():
-                ch.destroy()
-            def_bg, _ = self._resolve_colors(i, row)
-            rf.configure(bg=def_bg)
-            rf.pack(fill=tk.X)
-        else:
-            def_bg, _ = self._resolve_colors(i, row)
-            rf = tk.Frame(self._scroll, bg=def_bg, height=_ROW_H)
-            rf.pack(fill=tk.X)
-            rf.pack_propagate(False)
-        self._row_frames.append(rf)
-        self._populate_row(rf, i, row)
-        rf._cached_row = list(row)  # type: ignore[attr-defined]
+        return def_bg, fg_ov
 
     def _populate_row(self, rf: tk.Frame, i: int, row: List[Any]) -> None:
         """Tworzy dzieci (Label/Button) wewnątrz ramki rf dla wiersza i."""
@@ -834,19 +841,18 @@ class CTkDataTable(tk.Frame):
             f: tk.Frame = rf,
             orig: str = def_bg,
         ) -> None:
-            # Odznacz poprzedni wiersz
-            if (
-                self._selected_idx is not None
-                and self._selected_idx != row_i
-                and self._selected_idx < len(self._row_frames)
-            ):
-                old_f = self._row_frames[self._selected_idx]
-                old_bg, _ = self._resolve_colors(
-                    self._selected_idx, self._data[self._selected_idx]
-                )
-                _repaint(old_f, old_bg)
+            # Odznacz poprzedni wiersz (jeśli aktualnie widoczny) – kolejność
+            # ma znaczenie: najpierw ustaw nowy _selected_idx, dopiero potem
+            # policz kolor starego wiersza, aby _resolve_colors poprawnie
+            # uznał go za odznaczony.
+            old_idx = self._selected_idx
             self._selected_idx = row_i
             self._selected_data = row_d
+            if old_idx is not None and old_idx != row_i:
+                old_f = self._active_frames.get(old_idx)
+                if old_f is not None and old_idx < len(self._data):
+                    old_bg, _ = self._resolve_colors(old_idx, self._data[old_idx])
+                    _repaint(old_f, old_bg)
             _repaint(f, t["sel"])
 
         rf.bind("<Enter>", _on_enter)
@@ -1045,9 +1051,11 @@ class CTkDataTable(tk.Frame):
 
     # ── publiczne API ──────────────────────────────────────────────────────
     def set_data(self, data: List[List[Any]]) -> None:
-        """Odświeża dane tabeli i przebudowuje wszystkie wiersze."""
+        """Odświeża dane tabeli i przelicza widoczny fragment (wirtualizacja)."""
         self._data = list(data)
-        self._build_rows()
+        for idx in list(self._active_frames.keys()):
+            self._deactivate_row(idx)
+        self._reflow()
 
     def toggle_expand(
         self,
@@ -1056,11 +1064,11 @@ class CTkDataTable(tk.Frame):
         child_rows: Optional[List[List[Any]]] = None,
         is_child_fn: Optional[Callable[[List[Any]], bool]] = None,
     ) -> None:
-        """Rozwija/zwija wiersze potomne bez pełnego _build_rows.
+        """Rozwija/zwija wiersze potomne (mutuje self._data), po czym przelicza
+        tylko widoczny fragment tabeli.
 
-        Zamiast przebudowywać całą tabelę, wykonuje tylko pack_forget/pack(after=...)
-        na ramkach suplementu oraz aktualizuje symbol w wierszu nadrzędnym in-place.
-        TOTAL cost: O(k) gdzie k = liczba dzieci; niezależne od rozmiaru tabeli.
+        Dzięki wirtualizacji koszt jest O(liczba widocznych wierszy),
+        niezależnie od całkowitego rozmiaru tabeli i liczby dzieci.
 
         is_child_fn: opcjonalny predykat identyfikujący wiersze-dzieci przy collapse.
         Domyślnie (None) używa starego kryterium symbol == "   →".
@@ -1076,108 +1084,56 @@ class CTkDataTable(tk.Frame):
             _log.debug("toggle_expand: parent_id=%s not found", parent_id)
             return
 
-        parent_frame = self._row_frames[parent_idx]
         new_symbol = "[-]" if expand else "[+]"
+        row_copy = list(self._data[parent_idx])
+        if row_copy:
+            row_copy[0] = new_symbol
+        self._data[parent_idx] = row_copy
 
-        # Zaktualizuj symbol nadrzędnego wiersza in-place (1 Label.configure call)
-        labels: Optional[List[tk.Label]] = getattr(parent_frame, '_cell_labels', None)
-        if labels:
-            labels[0].configure(text=new_symbol)
-        # Uaktualnij też _cached_row i _data dla spójności
-        if parent_idx < len(self._data):
-            row_copy = list(self._data[parent_idx])
-            if row_copy:
-                row_copy[0] = new_symbol
-            self._data[parent_idx] = row_copy
-        if hasattr(parent_frame, '_cached_row') and parent_frame._cached_row:  # type: ignore[attr-defined]
-            parent_frame._cached_row[0] = new_symbol  # type: ignore[attr-defined]
-
+        n_children = 0
         if expand:
-            # ── EXPAND: wstaw ramki suplementów po wierszu nadrzędnym ────
             if not child_rows:
                 _log.debug("toggle_expand: expand=True but no child_rows")
-                return
-            insert_after = parent_frame
-            new_frames: List[tk.Frame] = []
-            new_data_rows: List[List[Any]] = []
-            for j, child_row in enumerate(child_rows):
-                child_idx = parent_idx + 1 + j
-                key = self._pool_key(child_row)
-                rf: Optional[tk.Frame] = self._row_pool.pop(key, None) if key is not None else None
-                if rf is not None:
-                    cached = getattr(rf, '_cached_row', None)
-                    if cached != child_row:
-                        for ch in rf.winfo_children():
-                            ch.destroy()
-                        def_bg, _ = self._resolve_colors(child_idx, child_row)
-                        rf.configure(bg=def_bg)
-                        self._populate_row(rf, child_idx, child_row)
-                        rf._cached_row = list(child_row)  # type: ignore[attr-defined]
-                else:
-                    def_bg, _ = self._resolve_colors(child_idx, child_row)
-                    rf = tk.Frame(self._scroll, bg=def_bg, height=_ROW_H)
-                    rf.pack_propagate(False)
-                    self._populate_row(rf, child_idx, child_row)
-                    rf._cached_row = list(child_row)  # type: ignore[attr-defined]
-                rf.pack(fill=tk.X, after=insert_after)
-                insert_after = rf
-                new_frames.append(rf)
-                new_data_rows.append(child_row)
-            # Wstaw do wewnętrznych list
-            ins = parent_idx + 1
-            self._row_frames[ins:ins] = new_frames
-            self._data[ins:ins] = new_data_rows
+            else:
+                ins = parent_idx + 1
+                self._data[ins:ins] = [list(r) for r in child_rows]
+                n_children = len(child_rows)
         else:
-            # ── COLLAPSE: schowaj bezpośrednich potomków do puli ─────────
             end = parent_idx + 1
-            while end < len(self._row_frames):
-                cd = getattr(self._row_frames[end], '_cached_row', None)
-                if cd:
-                    if is_child_fn is not None:
-                        if is_child_fn(cd):
-                            end += 1
-                        else:
-                            break
-                    elif len(cd) > 0 and str(cd[0]) == "   \u2192":
+            while end < len(self._data):
+                cd = self._data[end]
+                if is_child_fn is not None:
+                    if is_child_fn(cd):
                         end += 1
                     else:
                         break
+                elif len(cd) > 0 and str(cd[0]) == "   \u2192":
+                    end += 1
                 else:
                     break
-            for rf_child in self._row_frames[parent_idx + 1 : end]:
-                rf_child.pack_forget()
-                key = self._pool_key(getattr(rf_child, '_cached_row', None))
-                if key is not None:
-                    self._row_pool[key] = rf_child
-            del self._row_frames[parent_idx + 1 : end]
+            n_children = end - parent_idx - 1
             del self._data[parent_idx + 1 : end]
 
-        # Lp.: przenumeruj ramki od parent_idx wzwyż, pomijaj niezmienione
-        if self._show_row_num:
-            for seq, rf in enumerate(self._row_frames[parent_idx:], start=parent_idx + 1):
-                new_lp = str(seq)
-                if getattr(rf, '_cached_lp', None) != new_lp:
-                    lbl = getattr(rf, '_row_num_lbl', None)
-                    if lbl is not None:
-                        lbl.configure(text=new_lp)
-                    rf._cached_lp = new_lp  # type: ignore[attr-defined]
+        # Liczba wierszy poniżej parent_idx mogła się zmienić (przesunięcie
+        # indeksów) – zwolnij wszystkie aktywne ramki do puli (tanie, bo
+        # ograniczone do viewportu) i przelicz widoczny fragment na nowo.
+        # Ramki trafiają do puli po kluczu ID, więc te same rekordy zostaną
+        # odzyskane bez ponownego tworzenia widgetów, jeśli nadal są widoczne.
+        for idx in list(self._active_frames.keys()):
+            self._deactivate_row(idx)
+        self._reflow()
 
         _t1 = _time.perf_counter()
         _log.debug(
             "toggle_expand: parent_id=%s  expand=%s  children=%d  elapsed=%.1f ms",
-            parent_id,
-            expand,
-            len(child_rows) if child_rows else (end - parent_idx - 1 if not expand else 0),  # type: ignore[possibly-undefined]
-            (_t1 - _t0) * 1000,
+            parent_id, expand, n_children, (_t1 - _t0) * 1000,
         )
 
     def set_data_patch(self, data: List[List[Any]], id_col: Optional[int] = None) -> None:
-        """Szybka aktualizacja: patchuje tylko zmienione/dodane/usunięte wiersze.
+        """Szybka aktualizacja: patchuje tylko zmienione wiersze (bez zmiany
+        liczby/kolejności), albo przelicza widoczny fragment od nowa.
 
         Porównuje nowe dane z bieżącymi po kluczu (id_col lub cały wiersz).
-        Idealne do expand/collapse w hierarchicznej tabeli – zmienia się tylko
-        kilka wierszy (symbol rozwinięcia + dodane/usunięte suplementy),
-        a reszta tabeli nie jest przerysowywana.
         """
         ic = id_col if id_col is not None else self._id_col
         new_data = list(data)
@@ -1192,15 +1148,18 @@ class CTkDataTable(tk.Frame):
         new_keys = [_key(r) for r in new_data]
 
         if old_keys == new_keys:
-            # Tylko zmiany wartości w istniejących wierszach
+            # Tylko zmiany wartości w istniejących wierszach – odśwież jedynie
+            # aktualnie widoczne ramki; reszta doczyta się leniwie z _reflow().
             self._data = new_data
-            for i, row in enumerate(new_data):
-                self._refresh_row(i, row)
+            for i in list(self._active_frames.keys()):
+                self._refresh_row(i, new_data[i])
             return
 
-        # Liczba wierszy się zmieniła lub kolejność – użyj _build_rows z cache'em
+        # Liczba wierszy lub kolejność się zmieniły – pełne przeliczenie widoku.
         self._data = new_data
-        self._build_rows()
+        for idx in list(self._active_frames.keys()):
+            self._deactivate_row(idx)
+        self._reflow()
 
     def get_selected(self) -> Optional[Tuple[int, List[Any]]]:
         """Zwraca (row_idx, row_data) ostatnio klikniętego wiersza lub None."""

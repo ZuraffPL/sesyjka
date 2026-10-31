@@ -17,6 +17,7 @@ from dialog_utils import (
     clamp_geometry,
     create_ctk_toplevel,
     enable_combobox_search,
+    pl_sort_key,
 )
 
 DB_FILE = get_db_path("systemy_rpg.db")
@@ -558,9 +559,9 @@ def get_main_systems() -> list[tuple[int, str]]:
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
         c.execute(
-            "SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny' ORDER BY nazwa"
+            "SELECT id, nazwa FROM systemy_rpg WHERE typ = 'Podręcznik Główny'"
         )
-        return c.fetchall()
+        return sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
 
 
 def get_all_publishers() -> list[tuple[int, str]]:
@@ -570,8 +571,8 @@ def get_all_publishers() -> list[tuple[int, str]]:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute("SELECT id, nazwa FROM wydawcy ORDER BY nazwa")
-            return c.fetchall()
+            c.execute("SELECT id, nazwa FROM wydawcy")
+            return sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
     except sqlite3.Error:
         return []
 
@@ -1607,15 +1608,17 @@ def fill_systemy_rpg_tab(
             agg_fiz = any(r[6] for r in items_here)
             agg_pdf = any(r[7] for r in items_here)
             vtt_set = {r[8] for r in items_here if r[8]}
-            agg_vtt = ", ".join(sorted(vtt_set))
+            agg_vtt = ", ".join(sorted(vtt_set, key=pl_sort_key))
             cnt = len(items_here)
             cnt_label = f"{cnt} poz." if cnt else ""
 
             # Agreguj Wydawcę i Język (unikalne wartości)
             wydawca_set = {r[5] for r in items_here if r[5]}
-            agg_wydawca = ", ".join(sorted(wydawca_set)) if wydawca_set else (game[2] or "")
+            agg_wydawca = (
+                ", ".join(sorted(wydawca_set, key=pl_sort_key)) if wydawca_set else (game[2] or "")
+            )
             jezyk_set = {r[9] for r in items_here if r[9]}
-            agg_jezyk = ", ".join(sorted(jezyk_set)) if jezyk_set else (game[3] or "")
+            agg_jezyk = ", ".join(sorted(jezyk_set, key=pl_sort_key)) if jezyk_set else (game[3] or "")
 
             game_name = (game[1] or "") + (f" ({cnt_label})" if cnt_label else "")
             game_row: List[Any] = [
@@ -1645,7 +1648,7 @@ def fill_systemy_rpg_tab(
                 else:
                     _sorted_items = sorted(
                         items_here,
-                        key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower()),
+                        key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, pl_sort_key(x[1])),
                     )
                 for rec in _sorted_items:
                     data_h.append([
@@ -1671,7 +1674,7 @@ def fill_systemy_rpg_tab(
         if _sort_by_o == "ID":
             _sorted_orphans = sorted(orphaned_supls, key=lambda r: int(r[0]), reverse=_sort_rev_o)
         else:
-            _sorted_orphans = sorted(orphaned_supls, key=lambda r: (r[1] or '').lower())
+            _sorted_orphans = sorted(orphaned_supls, key=lambda r: pl_sort_key(r[1]))
         for rec in _sorted_orphans:
             mn = rec[12] or ""  # system_glowny_nazwa_custom (legacy)
             data_h.append([
@@ -1709,21 +1712,21 @@ def fill_systemy_rpg_tab(
         def _key(x: Any) -> Any:
             g = games.get(x)
             if g is None:
-                return ""
+                return []
             items_here = supl_direct_by_game.get(x, [])
             if sort_by == "Nazwa systemu":
-                return (g[1] or '').lower()
+                return pl_sort_key(g[1])
             elif sort_by == "Wydawca":
                 wydawca_set = {r[5] for r in items_here if r[5]}
-                agg = ", ".join(sorted(wydawca_set)) if wydawca_set else (g[2] or "")
-                return agg.lower()
+                agg = ", ".join(sorted(wydawca_set, key=pl_sort_key)) if wydawca_set else (g[2] or "")
+                return pl_sort_key(agg)
             elif sort_by == "Język":
                 jezyk_set = {r[9] for r in items_here if r[9]}
-                agg = ", ".join(sorted(jezyk_set)) if jezyk_set else (g[3] or "")
-                return agg.lower()
+                agg = ", ".join(sorted(jezyk_set, key=pl_sort_key)) if jezyk_set else (g[3] or "")
+                return pl_sort_key(agg)
             elif sort_by == "Status":
                 status_set = {r[10] for r in items_here if r[10]}
-                return ", ".join(sorted(status_set)).lower()
+                return pl_sort_key(", ".join(sorted(status_set, key=pl_sort_key)))
             elif sort_by == "Posiadanie":
                 agg_fiz = any(r[6] for r in items_here)
                 agg_pdf = any(r[7] for r in items_here)
@@ -1870,7 +1873,7 @@ def fill_systemy_rpg_tab(
                     game_name_loc: str = game_data[1] if game_data else ""
 
                     child_rows: List[List[Any]] = []
-                    for rec in sorted(items_here_loc, key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, (x[1] or "").lower())):
+                    for rec in sorted(items_here_loc, key=lambda x: (0 if x[2] == "Podręcznik Główny" else 1, pl_sort_key(x[1]))):
                         child_rows.append([
                             "   ", str(rec[0]), "  " + (rec[1] or ""),
                             rec[2] or "", game_name_loc, rec[4] or "",
@@ -2303,7 +2306,8 @@ def fill_systemy_rpg_tab(
     tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
-    tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
+    if tbl._hdr_canvas is not None:
+        tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
     _draw_bar_systemy(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
     tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
@@ -2328,9 +2332,9 @@ def fill_systemy_rpg_tab(
         cur = records_ref[0]
         rows_cfg = [
             ("Typ:", 'typ', ['Podręcznik Główny', 'Suplement']),
-            ("Wydawca:", 'wydawca', sorted({str(r[5]) for r in cur if r[5]})),
+            ("Wydawca:", 'wydawca', sorted({str(r[5]) for r in cur if r[5]}, key=pl_sort_key)),
             ("Posiadanie:", 'posiadanie', ['Fizyczny', 'PDF', 'Fizyczny i PDF', 'Żadne']),
-            ("Język:", 'jezyk', sorted({str(r[9]) for r in cur if r[9]})),
+            ("Język:", 'jezyk', sorted({str(r[9]) for r in cur if r[9]}, key=pl_sort_key)),
             ("Status:", 'status', ['Grane', 'Nie grane', 'W kolekcji', 'Na sprzedaż', 'Sprzedane', 'Nieposiadane', 'Do kupienia']),
             ("Waluta:", 'waluta', ['PLN', 'USD', 'EUR', 'GBP']),
         ]
@@ -3363,7 +3367,7 @@ def show_supplements_window(parent: tk.Widget, system_id: str, system_name: str)
         """,
             (system_id,),
         )
-        supplements_base = c.fetchall()
+        supplements_base = sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
 
     # Pobierz nazwy wydawców z oddzielnej bazy
     supplements = []

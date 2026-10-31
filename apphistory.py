@@ -62,6 +62,27 @@ def show_version_history_dialog(parent: Any, app_name: str = "Sesyjka") -> None:
     # Historia wersji
     version_history = [  # type: ignore
         {
+            "version": "0.4.57",
+            "date": "31.10.2026",
+            "changes": [
+                "\ud83d\udd24 SORTOWANIE:\u00b0",
+                "",
+                "\u2705 POLSKI ALFABET W CA\u0141EJ APLIKACJI:",
+                "  \u2022 sortowanie zgodne z polskim alfabetem (\u0105, \u0107, \u0119, \u0142, \u0144, \u00f3, \u015b, \u017a, \u017c)",
+                "    w tabelach System\u00f3w, Sesji, Gracz\u00f3w i Wydawc\u00f3w po klikni\u0119ciu w nag\u0142\u00f3wek kolumny",
+                "  \u2022 listy rozwijane (systemy, gracze, wydawcy, MG, podr\u0119czniki g\u0142\u00f3wne) oraz",
+                "    warto\u015bci filtr\u00f3w s\u0105 sortowane w ten sam spos\u00f3b",
+                "  \u2022 jedna wsp\u00f3lna funkcja pl_sort_key() w dialog_utils.py zast\u0119puje",
+                "    lokalne, niesp\u00f3jne implementacje sortowania",
+                "",
+                "\ud83d\udd27 STABILNO\u015a\u0106:\u00b0",
+                "",
+                "\u2705 POPRAWKI TECHNICZNE:",
+                "  \u2022 zabezpieczenie przed brakiem wewn\u0119trznego nag\u0142\u00f3wka tabeli przy jego ukrywaniu",
+                "  \u2022 poprawki typowania (Pyright) w stylowaniu p\u00f3l tekstowych w trybie ciemnym",
+            ],
+        },
+        {
             "version": "0.4.56",
             "date": "03.09.2026",
             "changes": [

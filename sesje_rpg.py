@@ -9,7 +9,7 @@ import customtkinter as ctk  # type: ignore
 import logging
 from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry, create_ctk_toplevel
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, pl_sort_key
 from ctk_table import CTkDataTable
 
 # Import funkcji dialogowych z oddzielnego modułu
@@ -428,8 +428,8 @@ def get_all_systems() -> List[Tuple[int, str]]:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute("SELECT id, nazwa FROM systemy_gry ORDER BY nazwa")
-            return c.fetchall()
+            c.execute("SELECT id, nazwa FROM systemy_gry")
+            return sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
     except sqlite3.Error:
         return []
 
@@ -441,8 +441,8 @@ def get_all_players() -> List[Tuple[int, str]]:
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             c = conn.cursor()
-            c.execute("SELECT id, nick FROM gracze ORDER BY nick")
-            return c.fetchall()
+            c.execute("SELECT id, nick FROM gracze")
+            return sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
     except sqlite3.Error:
         return []
 
@@ -780,7 +780,7 @@ def fill_sesje_rpg_tab(
         if col_i == 0:
             filtered.sort(key=lambda x: int(x[0]) if x[0] != "" else 0, reverse=rev)
         else:
-            filtered.sort(key=lambda x: (str(x[col_i]) or '').lower(), reverse=rev)
+            filtered.sort(key=lambda x: pl_sort_key(str(x[col_i])), reverse=rev)
 
         displayed_data = filtered
         if _table[0] is not None:
@@ -952,7 +952,7 @@ def fill_sesje_rpg_tab(
                 "tytul_kampanii": src["tytul_kampanii"],
             }
             dodaj_sesje_rpg(
-                tab,
+                tab.winfo_toplevel(),  # type: ignore[arg-type]
                 refresh_callback=lambda **_kw: fill_sesje_rpg_tab(
                     tab, dark_mode=get_dark_mode_from_tab(tab)
                 ),
@@ -1115,7 +1115,8 @@ def fill_sesje_rpg_tab(
     tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
-    tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
+    if tbl._hdr_canvas is not None:
+        tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
     _draw_bar_sesje(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
     tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
@@ -1175,8 +1176,8 @@ def fill_sesje_rpg_tab(
         years_vals: List[str] = sorted(
             {str(r[1]).split('-')[0] for r in cur if r[1]}, reverse=True
         )
-        systems_vals: List[str] = sorted({str(r[2]) for r in cur if r[2]})
-        mgs_vals: List[str] = sorted({str(r[4]) for r in cur if r[4]})
+        systems_vals: List[str] = sorted({str(r[2]) for r in cur if r[2]}, key=pl_sort_key)
+        mgs_vals: List[str] = sorted({str(r[4]) for r in cur if r[4]}, key=pl_sort_key)
 
         rows_cfg = [
             ("Rok:", 'year', years_vals),

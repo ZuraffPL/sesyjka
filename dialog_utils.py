@@ -5,6 +5,7 @@ Zabezpiecza przed wychodzeniem dialogów poza ekran przy wysokim skalowaniu DPI.
 
 import sys
 import ctypes
+import unicodedata
 import tkinter as tk
 from typing import Tuple, Any, Optional, Callable, List
 import customtkinter as ctk  # type: ignore
@@ -26,6 +27,28 @@ if not _root_logger.handlers:
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
 _log = logging.getLogger("dialog_utils")
+
+_PL_ALPHABET = "aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźż"
+
+
+def pl_sort_key(text: Optional[str]) -> List[int]:
+    """Klucz sortowania zgodny z polskim alfabetem (np. „Świat” po „Sz…”, przed „T…”).
+
+    Litery spoza polskiego alfabetu są sprowadzane do litery bazowej (é → e),
+    cyfry i znaki specjalne sortują się przed literami.
+    """
+    key: List[int] = []
+    for ch in (text or "").casefold():
+        idx = _PL_ALPHABET.find(ch)
+        if idx >= 0:
+            key.append(1000 + idx)
+            continue
+        for part in unicodedata.normalize("NFKD", ch):
+            if unicodedata.combining(part):
+                continue
+            idx = _PL_ALPHABET.find(part)
+            key.append(1000 + idx if idx >= 0 else ord(part))
+    return key
 
 
 # --- Monkey-patch: przechwytuj KAŻDĄ zmianę trybu wyglądu z pełnym stacktrace ---

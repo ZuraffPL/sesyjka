@@ -10,7 +10,7 @@ import logging
 _log = logging.getLogger("about_dialog")
 
 
-def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.56") -> None:
+def show_about_dialog(parent: Any, app_name: str = "Sesyjka", app_version: str = "0.4.57") -> None:
     """
     Wyświetla okno dialogowe "O programie" z informacjami o aplikacji.
 
@@ -108,7 +108,7 @@ PODZIĘKOWANIA DLA TESTERÓW:
 TECHNOLOGIE:
 • Język: Python 3.14.4
 • GUI: CustomTkinter + tkinter/ttk
-• Tabele: CTkDataTable (własny widget) — ikony, sortowanie, hierarchia, tooltipy
+• Tabele: CTkDataTable (własny widget) — ikony, sortowanie (polski alfabet), hierarchia, tooltipy
 • Kalendarz: tkcalendar — graficzny picker dat w dialogach sesji
 • Ikony: Pillow (PIL) — tintowanie PNG dla trybu jasnego i ciemnego
 • Wykresy: matplotlib — wykresy kołowe i słupkowe w statystykach

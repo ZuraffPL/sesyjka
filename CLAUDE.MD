@@ -367,6 +367,22 @@ Projekt nie posiada automatycznych testów jednostkowych. Obowiązuje następuj�
 - **Agent nie powinien generować testów automatycznie** chyba że użytkownik wprost o to prosi. Jeśli prosi — użyć `pytest` i umieszczać testy w katalogu `tests/` (który nie istnieje jeszcze w projekcie).
 - **Manualne weryfikowanie** zmian: po każdej modyfikacji logiki domenowej agent powinien wskazać, jakie scenariusze warto sprawdzić ręcznie w aplikacji.
 
+### Debugowanie wydajności / trudnych bugów — reprodukcja i profilowanie
+
+Diagnozowanie problemów typu „dziury w tabeli”, freeze UI, powolne zapytania itp. często
+wymaga pisania jednorazowych skryptów repro/profilujących (`_repro_*.py`, `_profile_*.py`)
+i wielokrotnego ich uruchamiania w terminalu. Każde takie uruchomienie wciąga pełny output
+terminala z powrotem do kontekstu bieżącej sesji, co szybko rozdmuchuje ją bez potrzeby.
+
+- Pętlę „napisz skrypt repro → uruchom → przeanalizuj wynik → popraw skrypt” delegować
+  do subagenta (np. `Explore` albo dedykowany subagent), gdy przewidywana liczba iteracji
+  jest większa niż 2-3 — subagent zwraca tylko wnioski, nie całe stdouty.
+- Po zakończeniu diagnozy zapisać ustalenia (przyczyna, zweryfikowane fakty, zastosowana
+  naprawa) do pamięci repo (`/memories/repo/`), a jednorazowe skrypty repro/profilujące
+  usunąć z workspace — nie zostawiać ich jako trwałych plików projektu.
+- Jeśli diagnoza jednak toczy się w głównej sesji, rozważyć kompakcję kontekstu (`/compact`)
+  po zakończeniu fazy reprodukcji, przed przejściem do implementacji poprawki.
+
 ## Obsługa błędów i logowanie
 
     Logowanie:

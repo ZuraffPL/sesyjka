@@ -9,24 +9,17 @@ import customtkinter as ctk
 import logging
 from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry, create_ctk_toplevel, open_calendar_picker, make_scrollable_dialog_frame
+from dialog_utils import (
+    apply_safe_geometry,
+    create_ctk_toplevel,
+    open_calendar_picker,
+    make_scrollable_dialog_frame,
+    pl_sort_key,
+)
 
 _log = logging.getLogger(__name__)
 # Stałe i podstawowe funkcje (duplikowane aby uniknąć cyklicznego importu)
 DB_FILE = get_db_path("sesje_rpg.db")
-
-# ── Polska kolejność alfabetyczna ─────────────────────────────────────────────
-# Mapuje polskie litery na sekwencje sortujące zgodnie z kolejnością polskiego alfabetu:
-# a ą b c ć d e ę f g h i j k l ł m n ń o ó p q r s ś t u v w x y z ź ż
-_PL_SORT_MAP: Dict[str, str] = {
-    'ą': 'a\x01', 'ć': 'c\x01', 'ę': 'e\x01', 'ł': 'l\x01', 'ń': 'n\x01',
-    'ó': 'o\x01', 'ś': 's\x01', 'ź': 'z\x01', 'ż': 'z\x02',
-}
-
-
-def _pl_sort_key(s: str) -> str:
-    """Zwraca klucz sortowania uwzględniający polską kolejność alfabetyczną."""
-    return ''.join(_PL_SORT_MAP.get(c, c) for c in s.lower())
 
 
 def init_db() -> None:
@@ -91,7 +84,7 @@ def get_all_systems() -> List[Tuple[int, str]]:
             c.execute("SELECT id, nazwa FROM systemy_gry")
             rows = c.fetchall()
         # Sortuj po polsku (SQLite sortuje bajtowo – Ą/Ć/... trafiają na koniec)
-        return sorted(rows, key=lambda r: _pl_sort_key(r[1] or ""))
+        return sorted(rows, key=lambda r: pl_sort_key(r[1]))
     except sqlite3.Error:
         return []
 
@@ -102,8 +95,8 @@ def get_all_players() -> List[Tuple[int, str, Any]]:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         c = conn.cursor()
-        c.execute("SELECT id, nick, grupa FROM gracze ORDER BY nick")
-        return c.fetchall()
+        c.execute("SELECT id, nick, grupa FROM gracze")
+        return sorted(c.fetchall(), key=lambda r: pl_sort_key(r[1]))
 
 
 def apply_dark_theme_to_dialog(dialog: tk.Toplevel) -> None:

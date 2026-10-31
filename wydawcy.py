@@ -9,7 +9,7 @@ import customtkinter as ctk  # type: ignore
 import logging
 from database_manager import get_db_path, is_guest_mode
 from font_scaling import scale_font_size
-from dialog_utils import apply_safe_geometry, create_ctk_toplevel
+from dialog_utils import apply_safe_geometry, create_ctk_toplevel, pl_sort_key
 from ctk_table import CTkDataTable
 
 _log = logging.getLogger(__name__)
@@ -56,12 +56,13 @@ def _apply_dark_theme_to_widget(
             if widget_class in ('Checkbutton', 'Radiobutton'):
                 widget.configure(selectcolor=dark_entry_bg, activebackground=dark_bg, activeforeground=dark_fg)  # type: ignore
         elif widget_class in ('Entry', 'Text'):
-            widget.configure(
-                bg=dark_entry_bg,
-                fg=dark_entry_fg,  # type: ignore
-                insertbackground=dark_entry_fg,
-                selectbackground="#0078d4",
-            )  # type: ignore
+            entry_opts: Dict[str, Any] = {
+                "bg": dark_entry_bg,
+                "fg": dark_entry_fg,
+                "insertbackground": dark_entry_fg,
+                "selectbackground": "#0078d4",
+            }
+            widget.configure(**entry_opts)  # type: ignore
         elif widget_class == 'Frame':
             widget.configure(bg=dark_bg)  # type: ignore
         elif widget_class == 'Combobox':
@@ -348,7 +349,7 @@ def fill_wydawcy_tab(
         if col_i == 0:
             filtered.sort(key=lambda x: int(x[0]) if x[0] != "" else 0, reverse=rev)
         else:
-            filtered.sort(key=lambda x: (str(x[col_i]) or '').lower(), reverse=rev)
+            filtered.sort(key=lambda x: pl_sort_key(str(x[col_i])), reverse=rev)
         displayed_data = filtered
         if _table[0] is not None:
             _table[0].set_data(displayed_data)
@@ -563,7 +564,8 @@ def fill_wydawcy_tab(
     tab.rowconfigure(2, weight=1)
     tab.columnconfigure(0, weight=1)
     _table[0] = tbl
-    tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
+    if tbl._hdr_canvas is not None:
+        tbl._hdr_canvas.pack_forget()  # chowamy wewnętrzny nagłówek — zastępuje go col_names_bar
     _draw_bar_wydawcy(list(tbl.col_widths))  # inicjalne rysowanie paska (tbl już istnieje)
     tbl._scroll_companions.append(col_names_bar)  # bar scrolluje razem z tabelą
 
@@ -586,7 +588,7 @@ def fill_wydawcy_tab(
         outer.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         cur = data_ref[0]
-        kraje_vals: List[str] = sorted({str(r[3]) for r in cur if r[3]})
+        kraje_vals: List[str] = sorted({str(r[3]) for r in cur if r[3]}, key=pl_sort_key)
 
         rows_cfg_w = [
             ("Kraj:", 'kraj', kraje_vals),
